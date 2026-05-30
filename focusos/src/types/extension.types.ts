@@ -1,0 +1,145 @@
+// ═══════════════════════════════════════════════════════════════
+// Extension Types — FocusOS (Browser Extension Bridge)
+// ═══════════════════════════════════════════════════════════════
+
+import type { FocusStateLabel, SessionMode, WarningLevel } from "./session.types";
+
+// ── Extension Status ──────────────────────────────────────────
+
+export type ExtensionConnectionStatus =
+  | "connected"
+  | "disconnected"
+  | "tracking"
+  | "syncing";
+
+export type ExtensionSyncStatus = "synced" | "syncing" | "error" | "idle";
+
+export interface ExtensionHeartbeat {
+  installed: boolean;
+  connected: boolean;
+  version: string;
+  timestamp: number;
+}
+
+// ── Extension Messages (Web App → Extension) ──────────────────
+
+export type ExtensionMessageType =
+  | "PING"
+  | "SESSION_START"
+  | "SESSION_PAUSE"
+  | "SESSION_RESUME"
+  | "SESSION_END"
+  | "SESSION_CANCEL"
+  | "BLACKLIST_SYNC"
+  | "GET_STATUS";
+
+export interface ExtensionMessage {
+  type: ExtensionMessageType;
+  payload?: ExtensionMessagePayload;
+}
+
+export interface ExtensionSessionStartPayload {
+  sessionId: string;
+  goal?: string;
+  mode: SessionMode;
+  blacklist: BlacklistPayload[];
+}
+
+export interface BlacklistPayload {
+  domain: string;
+  severity: "high" | "medium";
+}
+
+export type ExtensionMessagePayload =
+  | ExtensionSessionStartPayload
+  | { sessionId: string }
+  | { entries: BlacklistPayload[] }
+  | Record<string, never>;
+
+// ── Extension Events (Extension → Web App) ────────────────────
+
+export type ExtensionEventType =
+  | "PONG"
+  | "SCORE_UPDATE"
+  | "WARNING"
+  | "AUTO_PAUSE"
+  | "TAB_SWITCH"
+  | "CONTENT_CHANGED"
+  | "DISCONNECTED"
+  | "SYNC_COMPLETE";
+
+export interface ExtensionEvent {
+  type: ExtensionEventType;
+  payload?: ExtensionEventPayload;
+}
+
+export interface ScoreUpdatePayload {
+  score: number;
+  state: FocusStateLabel;
+  sessionId: string;
+}
+
+export interface WarningEventPayload {
+  level: WarningLevel;
+  domain?: string;
+  sessionId: string;
+  reason: "blacklist" | "off-topic" | "idle" | "tab-switching";
+}
+
+export interface TabSwitchPayload {
+  count: number;
+  sessionId: string;
+}
+
+export interface ContentChangedPayload {
+  url: string;
+  domain: string;
+  title: string;
+  sessionId: string;
+  relevanceScore?: number;
+}
+
+export type ExtensionEventPayload =
+  | ExtensionHeartbeat
+  | ScoreUpdatePayload
+  | WarningEventPayload
+  | TabSwitchPayload
+  | ContentChangedPayload
+  | { sessionId: string }
+  | Record<string, never>;
+
+// ── Browser Event Data (collected by extension) ───────────────
+
+export interface BrowserEvent {
+  id: string;
+  sessionId: string;
+  type:
+    | "page_visit"
+    | "tab_switch"
+    | "idle_start"
+    | "idle_end"
+    | "content_change"
+    | "warning_triggered"
+    | "warning_dismissed";
+  url?: string;
+  domain?: string;
+  pageTitle?: string;
+  durationSeconds?: number;
+  metadata?: Record<string, unknown>;
+  timestamp: number;
+}
+
+// ── Content Extraction ────────────────────────────────────────
+
+export interface ContentSnapshot {
+  url: string;
+  domain: string;
+  title: string;
+  metaDescription?: string;
+  bodyExcerpt?: string; // max 500 chars
+  capturedAt: number;
+}
+
+// ── Privacy boundary — these fields NEVER exist in any payload
+// url, domain, title, metaDescription, bodyExcerpt (max 500 chars) — YES
+// passwords, form content, keyboard input, private messages      — NEVER

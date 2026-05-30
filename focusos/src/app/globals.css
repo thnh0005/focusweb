@@ -1,0 +1,383 @@
+@import "tailwindcss";
+
+/* ═══════════════════════════════════════════════════════════════
+   FocusOS Design System — Global CSS
+   Design Philosophy: Digital Sanctuary (Calm Technology)
+   Inspired by: design1.md specification
+   ═══════════════════════════════════════════════════════════════ */
+
+/* ── Google Fonts ─────────────────────────────────────────────── */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap");
+
+/* ── CSS Custom Properties (Design Tokens) ───────────────────── */
+:root {
+  /* Neutrals & Backgrounds */
+  --background: 240 10% 4%;           /* #09090B — Ambient Background */
+  --surface-deep: 222 47% 11%;        /* #111827 — Surface Deep */
+  --card-container: 240 6% 10%;       /* #18181B — Card Container */
+  --subtle-border: 240 4% 16%;        /* #27272A — Subtle Border */
+
+  /* Text */
+  --text-primary: 0 0% 98%;           /* #FAFAFA */
+  --text-secondary: 240 5% 64%;       /* #A1A1AA */
+  --text-muted: 240 4% 46%;           /* #71717A */
+
+  /* Brand / Accent */
+  --focus-purple: 263 70% 50%;        /* #7C3AED */
+  --focus-purple-muted: 263 70% 50% / 0.2;
+  --focus-green: 172 73% 42%;         /* #14B8A6 */
+  --focus-green-muted: 172 73% 42% / 0.2;
+  --ambient-cyan: 192 91% 43%;        /* #06B6D4 */
+
+  /* Urgency */
+  --urgency-amber: 28 96% 73%;        /* #FB923C */
+  --urgency-coral: 0 100% 71%;        /* #FF6B6B */
+
+  /* Shadcn compatibility */
+  --foreground: 0 0% 98%;
+  --card: 240 6% 10%;
+  --card-foreground: 0 0% 98%;
+  --popover: 240 6% 10%;
+  --popover-foreground: 0 0% 98%;
+  --primary: 263 70% 50%;
+  --primary-foreground: 0 0% 98%;
+  --secondary: 240 4% 16%;
+  --secondary-foreground: 0 0% 98%;
+  --muted: 240 4% 16%;
+  --muted-foreground: 240 5% 64%;
+  --accent: 263 70% 50%;
+  --accent-foreground: 0 0% 98%;
+  --destructive: 0 100% 71%;
+  --destructive-foreground: 0 0% 98%;
+  --border: 240 4% 16%;
+  --input: 240 6% 10%;
+  --ring: 263 70% 50%;
+  --radius: 0.75rem;
+}
+
+/* ── Base Reset ──────────────────────────────────────────────── */
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  background-color: #09090B;
+  color: #FAFAFA;
+  font-family: var(--font-geist-sans, 'Inter', system-ui, sans-serif);
+  min-height: 100dvh;
+  overflow-x: hidden;
+}
+
+/* ── Typography ─────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+  font-weight: 300;
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+/* ── 4-Layer Ambient Background System ──────────────────────── */
+
+/* Layer 1 — Solid Base (always #09090B — controlled by body) */
+
+/* Layer 2 — Animated Gradient Orbs */
+.ambient-orbs {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.ambient-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(80px);
+  opacity: 0.15;
+  animation: orb-float 20s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite;
+}
+
+.ambient-orb-1 {
+  width: 600px;
+  height: 600px;
+  top: -200px;
+  right: -100px;
+  background: radial-gradient(circle, #7C3AED 0%, #1E1B4B 60%, transparent 100%);
+  animation-delay: 0s;
+}
+
+.ambient-orb-2 {
+  width: 500px;
+  height: 500px;
+  bottom: -150px;
+  left: -100px;
+  background: radial-gradient(circle, #0F172A 0%, #1E1B4B 50%, transparent 100%);
+  animation-delay: -7s;
+}
+
+.ambient-orb-3 {
+  width: 400px;
+  height: 400px;
+  top: 40%;
+  left: 30%;
+  background: radial-gradient(circle, #06B6D4 0%, transparent 70%);
+  opacity: 0.08;
+  animation-delay: -14s;
+}
+
+/* Phase-specific orb colors */
+.ambient-orbs[data-phase="focus"] .ambient-orb-1 {
+  background: radial-gradient(circle, #7C3AED 0%, #1E1B4B 60%, transparent 100%);
+}
+.ambient-orbs[data-phase="short-break"] .ambient-orb-1 {
+  background: radial-gradient(circle, #06B6D4 0%, #0F172A 60%, transparent 100%);
+}
+.ambient-orbs[data-phase="long-break"] .ambient-orb-1 {
+  background: radial-gradient(circle, #14B8A6 0%, #0F172A 60%, transparent 100%);
+}
+
+/* Layer 3 — Grain Texture Overlay */
+.grain-overlay {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  opacity: 0.04;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 128px 128px;
+}
+
+/* ── High-Contrast Glassmorphism ────────────────────────────── */
+.glass-widget {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.10);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.10),
+    0 8px 32px rgba(0, 0, 0, 0.48);
+}
+
+.glass-action {
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.glass-nav {
+  background: rgba(9, 9, 11, 0.85);
+  backdrop-filter: blur(24px) saturate(200%);
+  -webkit-backdrop-filter: blur(24px) saturate(200%);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.glass-card {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 1.5rem;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 4px 24px rgba(0, 0, 0, 0.32);
+}
+
+/* ── Scrollbar ───────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ── Focus Ring ──────────────────────────────────────────────── */
+:focus-visible {
+  outline: 2px solid rgba(124, 58, 237, 0.8);
+  outline-offset: 2px;
+}
+
+/* ── Selection ───────────────────────────────────────────────── */
+::selection {
+  background: rgba(124, 58, 237, 0.3);
+  color: #FAFAFA;
+}
+
+/* ── Timer Typography ────────────────────────────────────────── */
+.timer-display {
+  font-size: clamp(48px, 10vw, 72px);
+  font-weight: 300;
+  line-height: 1;
+  letter-spacing: -0.04em;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Shimmer Skeleton ────────────────────────────────────────── */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.05) 25%,
+    rgba(255, 255, 255, 0.1) 50%,
+    rgba(255, 255, 255, 0.05) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 2s linear infinite;
+  border-radius: 0.5rem;
+}
+
+/* ── Sidebar ─────────────────────────────────────────────────── */
+.sidebar-rail {
+  width: 64px;
+  min-width: 64px;
+  height: 100dvh;
+  position: fixed;
+  left: 0;
+  top: 0;
+  z-index: 40;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(9, 9, 11, 0.95);
+  backdrop-filter: blur(24px);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1rem 0;
+}
+
+.sidebar-expanded {
+  width: 240px;
+  height: 100dvh;
+  position: fixed;
+  left: 64px;
+  top: 0;
+  z-index: 39;
+  border-right: 1px solid rgba(255, 255, 255, 0.06);
+  background: rgba(15, 15, 20, 0.97);
+  backdrop-filter: blur(24px);
+}
+
+/* ── Floating Control Dock (design1.md spec) ─────────────────── */
+.control-dock {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 100;
+  border-radius: 1000px;
+  height: 56px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* ── Habit Grid (design1.md spec) ────────────────────────────── */
+.habit-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 12px);
+  grid-template-rows: repeat(7, 12px);
+  gap: 3px;
+}
+
+.habit-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  transition: transform 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.habit-cell:hover {
+  transform: scale(1.15);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+}
+
+/* Habit level colors */
+.habit-level-0 { background: rgba(255, 255, 255, 0.04); }
+.habit-level-1 { background: rgba(20, 184, 166, 0.25); }
+.habit-level-2 { background: rgba(20, 184, 166, 0.50); }
+.habit-level-3 { background: rgba(20, 184, 166, 0.75); }
+.habit-level-4 { background: #14B8A6; }
+
+/* ── Session Phase Transitions (800ms) ───────────────────────── */
+.phase-transition {
+  transition: all 800ms cubic-bezier(0.45, 0.05, 0.55, 0.95);
+}
+
+/* ── Quote System ────────────────────────────────────────────── */
+.quote-ambient {
+  font-family: var(--font-geist-sans, system-ui);
+  font-size: 14px;
+  font-style: italic;
+  color: #A1A1AA;
+  line-height: 1.6;
+}
+
+/* ── Utility: Content hidden from sighted but available to screen readers */
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Animations ──────────────────────────────────────────────── */
+@keyframes orb-float {
+  0%, 100% { transform: translate(0, 0); }
+  25%       { transform: translate(30px, -20px); }
+  50%       { transform: translate(-20px, 30px); }
+  75%       { transform: translate(20px, 20px); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { opacity: 0.6; }
+  50%       { opacity: 1; }
+}
+
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position:  200% 0; }
+}
+
+/* ── Reduced Motion ──────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  .ambient-orb {
+    animation: none;
+  }
+}
