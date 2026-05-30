@@ -37,7 +37,7 @@ export function FocusLayout({
 
   return (
     <TooltipProvider>
-      <div className="min-h-[100dvh] bg-[#09090B] text-text-primary overflow-hidden relative flex flex-col justify-between p-6 select-none">
+      <div className="min-h-[100dvh] bg-background text-text-primary overflow-hidden relative flex flex-col justify-between p-6 select-none">
         
         {/* Layer 2: Animated Ambient Background Orbs */}
         <div className="ambient-orbs phase-transition" data-phase={phase}>

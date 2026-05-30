@@ -102,7 +102,7 @@ export function Topbar({
       className={cn(
         "sticky top-0 z-20 h-14 flex items-center justify-between",
         "px-4 md:px-6 lg:px-8",
-        "bg-[#09090B]/90 border-b border-white/[0.05]",
+        "bg-background/90 border-b border-white/[0.05]",
         "backdrop-blur-[24px] backdrop-saturate-[200%]",
         "select-none",
         className

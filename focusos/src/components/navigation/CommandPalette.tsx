@@ -260,7 +260,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.16 }}
-            className="fixed inset-0 z-[80] bg-[#09090B]/70 backdrop-blur-sm"
+            className="fixed inset-0 z-[80] bg-background/70 backdrop-blur-sm"
             aria-hidden="true"
             onClick={onClose}
           />
@@ -279,7 +279,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
               "fixed left-1/2 top-[12vh] -translate-x-1/2 z-[90]",
               "w-full max-w-[580px] mx-4",
               "rounded-2xl overflow-hidden",
-              "bg-[#0f0f16]/[0.98] border border-white/[0.09]",
+              "bg-surface-deep/95 border border-white/[0.09]",
               "shadow-[0_24px_80px_rgba(0,0,0,0.7),inset_0_1px_0_rgba(255,255,255,0.07)]",
               "backdrop-blur-[32px] backdrop-saturate-[200%]",
               className

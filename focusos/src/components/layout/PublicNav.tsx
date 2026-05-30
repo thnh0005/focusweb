@@ -116,7 +116,7 @@ export function PublicNav() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="fixed inset-0 bg-[#09090B]/95 backdrop-blur-2xl z-30 flex flex-col pt-32 px-8 pb-12 justify-between md:hidden"
+            className="fixed inset-0 bg-background/95 backdrop-blur-2xl z-30 flex flex-col pt-32 px-8 pb-12 justify-between md:hidden"
           >
             {/* Links Stack */}
             <nav className="flex flex-col space-y-6" aria-label="Mobile Navigation">

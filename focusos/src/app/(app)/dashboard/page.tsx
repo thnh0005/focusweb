@@ -65,13 +65,15 @@ export default function DashboardPage() {
   return (
     <div className="space-y-8 w-full">
       {/* Welcome Header */}
-      <header className="space-y-1 select-none">
-        <h2 className="text-3xl font-extralight tracking-tight text-text-primary">
-          {greeting}, <span className="font-light text-focus-purple">{displayName}</span>
-        </h2>
-        <p className="text-xs text-text-muted font-light">
-          Welcome back to your digital sanctuary. Let's make today a masterpiece of deep work.
-        </p>
+      <header className="space-y-3 select-none pt-2">
+        <div className="space-y-1">
+          <h2 className="text-4xl sm:text-5xl font-extralight tracking-tight text-text-primary leading-tight">
+            {greeting}, <span className="font-light text-transparent bg-clip-text bg-gradient-to-r from-focus-purple to-ambient-cyan">{displayName}</span>
+          </h2>
+          <p className="text-sm text-text-secondary font-light">
+            Welcome to your sanctuary. Let's build something meaningful today.
+          </p>
+        </div>
       </header>
 
       {/* Stats Strip Widget */}

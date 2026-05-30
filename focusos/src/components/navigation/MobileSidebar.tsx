@@ -95,7 +95,7 @@ export function MobileSidebar({
       <div
         className={cn(
           "fixed top-0 left-0 right-0 h-14 z-50 flex items-center justify-between px-4",
-          "bg-[#09090B]/95 border-b border-white/[0.05]",
+          "bg-background/95 border-b border-white/[0.05]",
           "backdrop-blur-[24px] backdrop-saturate-[200%]"
         )}
       >
@@ -173,7 +173,7 @@ export function MobileSidebar({
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
               transition={{ duration: 0.24 }}
-              className="fixed inset-0 z-40 bg-[#09090B]/80 backdrop-blur-sm"
+              className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm"
               aria-hidden="true"
               onClick={() => setIsOpen(false)}
             />
@@ -191,7 +191,7 @@ export function MobileSidebar({
               transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
               className={cn(
                 "fixed left-0 top-0 h-[100dvh] w-[280px] z-50 flex flex-col",
-                "bg-[#0c0c12]/[0.98] border-r border-white/[0.07]",
+                "bg-surface-deep/95 border-r border-white/[0.07]",
                 "backdrop-blur-[32px] backdrop-saturate-[200%]",
                 "shadow-[8px_0_40px_rgba(0,0,0,0.5)]",
                 "pt-20 pb-8 px-4"

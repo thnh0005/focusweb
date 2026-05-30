@@ -20,7 +20,7 @@ export function RecentActivity({ sessions, isLoading = false }: RecentActivityPr
   return (
     <Card 
       variant="glass-card" 
-      className="border border-white/[0.04] bg-[#09090B]/60 backdrop-blur-md flex flex-col h-full hover:border-white/[0.06] transition-colors"
+      className="border border-white/[0.04] bg-surface-deep/40 backdrop-blur-md flex flex-col h-full hover:border-white/[0.06] transition-colors"
     >
       <CardHeader className="p-5 pb-3">
         <CardTitle className="text-base font-light tracking-wide text-text-primary">

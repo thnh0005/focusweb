@@ -49,7 +49,7 @@ export function AutoPauseModal({
         <>
           {/* Backdrop */}
           <motion.div
-            className="fixed inset-0 z-[95] bg-[#09090B]/80 backdrop-blur-sm"
+            className="fixed inset-0 z-[95] bg-background/80 backdrop-blur-sm"
             initial={prefersReduced ? {} : { opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={prefersReduced ? {} : { opacity: 0 }}

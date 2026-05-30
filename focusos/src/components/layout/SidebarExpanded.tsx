@@ -33,7 +33,7 @@ export function SidebarExpanded({ isOpen, onHoverEnd }: SidebarExpandedProps) {
             animate={{ opacity: 0.5 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.24 }}
-            className="fixed inset-0 bg-[#09090B] z-20 md:hidden"
+            className="fixed inset-0 bg-background z-20 md:hidden"
             onClick={onHoverEnd}
           />
 
@@ -46,7 +46,7 @@ export function SidebarExpanded({ isOpen, onHoverEnd }: SidebarExpandedProps) {
               duration: 0.4,
               ease: [0.16, 1, 0.3, 1], // --ease-reveal
             }}
-            className="fixed left-16 top-0 h-full w-48 bg-[#0b0b10]/98 backdrop-blur-2xl border-r border-white/5 z-30 flex flex-col py-24 px-4 space-y-6 shadow-glass select-none"
+            className="fixed left-16 top-0 h-full w-48 bg-surface-deep/95 backdrop-blur-2xl border-r border-white/5 z-30 flex flex-col py-24 px-4 space-y-6 shadow-glass select-none"
             onMouseLeave={onHoverEnd}
             aria-label="Expanded Navigation"
           >

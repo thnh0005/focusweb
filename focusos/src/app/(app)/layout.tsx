@@ -41,7 +41,7 @@ export default function AuthenticatedLayout({
       <div 
         role="status"
         aria-live="polite"
-        className="min-h-[100dvh] flex flex-col items-center justify-center relative bg-[#09090B] text-text-primary overflow-hidden"
+        className="min-h-[100dvh] flex flex-col items-center justify-center relative bg-background text-text-primary overflow-hidden"
       >
         {/* Sanctuary loader glow background orbs */}
         <div className="ambient-orbs" aria-hidden="true">

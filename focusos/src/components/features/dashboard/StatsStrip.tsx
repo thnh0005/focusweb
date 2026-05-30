@@ -73,7 +73,7 @@ export function StatsStrip({ stats, streakCount = 0 }: StatsStripProps) {
           >
             <Card 
               variant="glass-card" 
-              className="border border-white/[0.04] bg-[#09090B]/60 backdrop-blur-md relative overflow-hidden group select-none hover:border-white/[0.08] transition-all duration-300"
+              className="border border-white/[0.04] bg-surface-deep/40 backdrop-blur-md relative overflow-hidden group select-none hover:border-white/[0.08] transition-all duration-300"
             >
               {/* Subtle ambient glow matching the color scheme on card hover */}
               <div 

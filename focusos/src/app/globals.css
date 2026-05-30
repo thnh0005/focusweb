@@ -1,13 +1,13 @@
+/* All @import statements must come first */
+@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap");
 @import "tailwindcss";
+@config "../../tailwind.config.ts";
 
 /* ═══════════════════════════════════════════════════════════════
    FocusOS Design System — Global CSS
    Design Philosophy: Digital Sanctuary (Calm Technology)
    Inspired by: design1.md specification
    ═══════════════════════════════════════════════════════════════ */
-
-/* ── Google Fonts ─────────────────────────────────────────────── */
-@import url("https://fonts.googleapis.com/css2?family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&display=swap");
 
 /* ── CSS Custom Properties (Design Tokens) ───────────────────── */
 :root {
@@ -58,8 +58,6 @@
 /* ── Base Reset ──────────────────────────────────────────────── */
 *, *::before, *::after {
   box-sizing: border-box;
-  margin: 0;
-  padding: 0;
 }
 
 html {
@@ -78,10 +76,19 @@ body {
 }
 
 /* ── Typography ─────────────────────────────────────────────── */
-h1, h2, h3, h4, h5, h6 {
+:where(h1, h2, h3, h4, h5, h6):not([class]) {
   font-weight: 300;
   letter-spacing: -0.02em;
-  line-height: 1.2;
+  line-height: 1.15;
+}
+
+:where(p):not([class]) {
+  line-height: 1.6;
+}
+
+/* Better link styling */
+a {
+  transition: color 120ms ease-in-out;
 }
 
 /* ── 4-Layer Ambient Background System ──────────────────────── */

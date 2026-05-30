@@ -271,7 +271,7 @@ export function NotificationCenter({
           className={cn(
             "absolute top-full right-0 mt-2 z-50 w-[340px]",
             "rounded-2xl overflow-hidden",
-            "bg-[#111117]/[0.98] border border-white/[0.09]",
+            "bg-card-container/95 border border-white/[0.09]",
             "shadow-[0_16px_60px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.07)]",
             "backdrop-blur-[32px] backdrop-saturate-[200%]",
             className

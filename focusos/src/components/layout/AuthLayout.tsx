@@ -10,7 +10,7 @@ export interface AuthLayoutProps {
 
 export function AuthLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-[100dvh] flex flex-col relative bg-[#09090B] overflow-x-hidden">
+    <div className="min-h-[100dvh] flex flex-col relative bg-background overflow-x-hidden">
       {/* Glow background orbs for Public/Auth pages */}
       <div className="ambient-orbs" aria-hidden="true">
         <div className="ambient-orb ambient-orb-1" />

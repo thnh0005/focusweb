@@ -108,7 +108,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   useCommandPaletteShortcut(openCommandPalette);
 
   return (
-    <div className="min-h-[100dvh] flex bg-[#09090B] text-text-primary overflow-x-hidden relative">
+    <div className="min-h-[100dvh] flex bg-background text-text-primary overflow-x-hidden relative">
       {/* ── 4-Layer Ambient Background System (design1.md) ─────────── */}
       <div className="ambient-orbs" aria-hidden="true">
         <div className="ambient-orb ambient-orb-1" />

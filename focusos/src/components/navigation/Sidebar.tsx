@@ -239,7 +239,7 @@ export function Sidebar({
         className={cn(
           "hidden md:flex fixed left-0 top-0 h-[100dvh] w-16 z-40 flex-col",
           "items-center py-5 justify-between select-none",
-          "bg-[#09090B]/95 border-r border-white/[0.05]",
+          "bg-background/95 border-r border-white/[0.05]",
           "backdrop-blur-[24px] backdrop-saturate-[200%]",
           className
         )}
@@ -366,7 +366,7 @@ export function Sidebar({
             className={cn(
               "hidden md:flex fixed left-16 top-0 h-[100dvh] w-48 z-30 flex-col",
               "pt-[72px] pb-6 px-3",
-              "bg-[#0c0c12]/[0.97] border-r border-white/[0.05]",
+              "bg-surface-deep/95 border-r border-white/[0.05]",
               "backdrop-blur-[24px] backdrop-saturate-[180%]",
               "shadow-[4px_0_32px_rgba(0,0,0,0.4)]",
               "select-none"
