@@ -71,10 +71,13 @@ export default function AuthenticatedLayout({
     return null;
   }
 
-  // If we are in the focus session pages, bypass the main sidebar and topbar layout
+  // Session, dashboard, settings, and AI documents are immersive routes that own their full viewport.
   const isSessionRoute = pathname.startsWith("/session");
+  const isDashboardRoute = pathname === "/dashboard";
+  const isSettingsRoute = pathname.startsWith("/settings");
+  const isStudyToolsRoute = pathname.startsWith("/study-tools");
 
-  if (isSessionRoute) {
+  if (isSessionRoute || isDashboardRoute || isSettingsRoute || isStudyToolsRoute) {
     return <>{children}</>;
   }
 

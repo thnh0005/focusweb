@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Card } from "@/components/ui/Card";
+import { Music2, Timer, Volume2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 type PreferencesState = {
   defaultDuration: string;
@@ -28,7 +29,6 @@ export default function PreferencesSettingsPage() {
     setSaveSuccess(false);
 
     try {
-      // TODO: Call API to save preferences
       await new Promise((resolve) => setTimeout(resolve, 800));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -38,164 +38,131 @@ export default function PreferencesSettingsPage() {
   };
 
   const togglePreference = (key: keyof PreferencesState) => {
-    setPreferences((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setPreferences((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const updateDuration = (value: string) => {
-    setPreferences((prev) => ({
-      ...prev,
-      defaultDuration: value,
-    }));
+    setPreferences((prev) => ({ ...prev, defaultDuration: value }));
   };
 
-  const ToggleSwitch = ({ checked }: { checked: boolean }) => (
-    <div
-      className={`relative inline-flex h-6 w-10 items-center rounded-full transition-colors ${
-        checked ? "bg-focus-purple" : "bg-subtle-border"
-      }`}
-    >
-      <span
-        className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${
-          checked ? "translate-x-4" : "translate-x-0.5"
-        }`}
-      />
-    </div>
-  );
-
   return (
-    <div className="space-y-8 max-w-2xl">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-2xl font-extralight text-text-primary">
-          Preferences
-        </h1>
-        <p className="text-sm text-text-secondary font-light">
-          Customize your FocusOS experience to match your workflow.
+    <div className="max-w-3xl space-y-6">
+      <header>
+        <p className="text-sm text-text-muted">Preferences</p>
+        <h1 className="mt-2 text-4xl font-light text-text-primary">Focus defaults</h1>
+        <p className="mt-3 text-sm font-light leading-relaxed text-text-secondary">
+          Tune the defaults that shape new sessions and ambient feedback.
         </p>
-      </div>
+      </header>
 
-      {/* Session Preferences */}
-      <Card className="p-6 space-y-6">
-        <h2 className="text-lg font-medium text-text-primary">Session Settings</h2>
-
-        {/* Default Duration */}
-        <div>
-          <label className="text-sm font-medium text-text-primary">
-            Default Session Duration
-          </label>
-          <p className="text-xs text-text-muted mt-1 mb-3">
-            Default time for new focus sessions
-          </p>
-          <div className="flex gap-3">
-            {["25", "50", "90"].map((duration) => (
-              <button
-                key={duration}
-                onClick={() => updateDuration(duration)}
-                className={`px-4 py-2 rounded-lg font-light transition-all ${
-                  preferences.defaultDuration === duration
-                    ? "bg-focus-purple/20 border border-focus-purple/50 text-focus-purple"
-                    : "bg-surface-deep border border-subtle-border text-text-secondary hover:text-text-primary"
-                }`}
-              >
-                {duration}m
-              </button>
-            ))}
-          </div>
+      <Card className="rounded-[2rem] p-6 sm:p-7">
+        <div className="mb-5 flex items-center gap-3">
+          <Timer className="h-5 w-5 text-primary" aria-hidden="true" />
+          <h2 className="text-xl font-light text-text-primary">Session defaults</h2>
+        </div>
+        <p className="text-sm text-text-muted">Default time for new focus sessions</p>
+        <div className="mt-4 grid grid-cols-3 gap-3">
+          {["25", "50", "90"].map((duration) => (
+            <button
+              key={duration}
+              type="button"
+              onClick={() => updateDuration(duration)}
+              className={`rounded-2xl border p-4 text-left transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                preferences.defaultDuration === duration
+                  ? "border-primary/45 bg-primary/[0.12] text-text-primary"
+                  : "border-white/10 bg-white/[0.035] text-text-secondary hover:bg-white/[0.06]"
+              }`}
+              aria-pressed={preferences.defaultDuration === duration}
+            >
+              <span className="block text-2xl font-light">{duration}m</span>
+              <span className="mt-1 block text-xs text-text-muted">
+                {duration === "25" ? "Reset" : duration === "50" ? "Default" : "Deep block"}
+              </span>
+            </button>
+          ))}
         </div>
       </Card>
 
-      {/* Notification Preferences */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Notifications</h2>
-
-        {[
-          {
-            key: "notificationsEnabled" as const,
-            title: "Session Alerts",
-            description: "Get notified when your session ends or pauses",
-          },
-          {
-            key: "soundEnabled" as const,
-            title: "Sound Effects",
-            description: "Play audio feedback during sessions and alerts",
-          },
-        ].map((setting) => (
-          <div
-            key={setting.key}
-            className="flex items-center justify-between py-4 border-b border-subtle-border last:border-0"
-          >
-            <div>
-              <p className="font-medium text-text-primary">{setting.title}</p>
-              <p className="text-sm text-text-secondary font-light mt-1">
-                {setting.description}
-              </p>
-            </div>
-            <button
-              onClick={() => togglePreference(setting.key)}
-              className="ml-4 flex-shrink-0 focus:outline-none"
-            >
-              <ToggleSwitch checked={preferences[setting.key] as boolean} />
-            </button>
-          </div>
-        ))}
+      <Card className="rounded-[2rem] p-6 sm:p-7">
+        <div className="mb-2 flex items-center gap-3">
+          <Volume2 className="h-5 w-5 text-primary" aria-hidden="true" />
+          <h2 className="text-xl font-light text-text-primary">Session feedback</h2>
+        </div>
+        <SettingRow
+          label="Session alerts"
+          description="Notify when a session ends or pauses."
+          checked={preferences.notificationsEnabled}
+          onToggle={() => togglePreference("notificationsEnabled")}
+        />
+        <SettingRow
+          label="Sound effects"
+          description="Play audio feedback during sessions and alerts."
+          checked={preferences.soundEnabled}
+          onToggle={() => togglePreference("soundEnabled")}
+        />
       </Card>
 
-      {/* Experience Preferences */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Experience</h2>
-
-        {[
-          {
-            key: "ambientMusicEnabled" as const,
-            title: "Ambient Music",
-            description: "Play background music during focus sessions",
-          },
-          {
-            key: "autoResumeSession" as const,
-            title: "Auto-Resume Sessions",
-            description: "Automatically resume paused sessions after 5 minutes",
-          },
-        ].map((setting) => (
-          <div
-            key={setting.key}
-            className="flex items-center justify-between py-4 border-b border-subtle-border last:border-0"
-          >
-            <div>
-              <p className="font-medium text-text-primary">{setting.title}</p>
-              <p className="text-sm text-text-secondary font-light mt-1">
-                {setting.description}
-              </p>
-            </div>
-            <button
-              onClick={() => togglePreference(setting.key)}
-              className="ml-4 flex-shrink-0 focus:outline-none"
-            >
-              <ToggleSwitch checked={preferences[setting.key] as boolean} />
-            </button>
-          </div>
-        ))}
+      <Card className="rounded-[2rem] p-6 sm:p-7">
+        <div className="mb-2 flex items-center gap-3">
+          <Music2 className="h-5 w-5 text-primary" aria-hidden="true" />
+          <h2 className="text-xl font-light text-text-primary">Room behavior</h2>
+        </div>
+        <SettingRow
+          label="Ambient music"
+          description="Play background music during focus sessions."
+          checked={preferences.ambientMusicEnabled}
+          onToggle={() => togglePreference("ambientMusicEnabled")}
+        />
+        <SettingRow
+          label="Auto-resume sessions"
+          description="Automatically resume paused sessions after 5 minutes."
+          checked={preferences.autoResumeSession}
+          onToggle={() => togglePreference("autoResumeSession")}
+        />
       </Card>
 
-      {/* Success Message */}
       {saveSuccess && (
-        <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-          <p className="text-sm text-green-300 font-light">
-            Preferences saved successfully
-          </p>
+        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
+          <p className="text-sm font-light text-primary">Preferences saved successfully</p>
         </div>
       )}
 
-      {/* Save Button */}
-      <Button
-        onClick={handleSave}
-        disabled={isSaving}
-        className="bg-focus-purple hover:bg-focus-purple/90 text-white disabled:opacity-50"
-      >
-        {isSaving ? "Saving..." : "Save Preferences"}
+      <Button type="button" onClick={handleSave} disabled={isSaving} variant="session" className="rounded-full px-6">
+        {isSaving ? "Saving" : "Save preferences"}
       </Button>
+    </div>
+  );
+}
+
+function SettingRow({
+  label,
+  description,
+  checked,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/10 py-4 last:border-0">
+      <div>
+        <p className="font-medium text-text-primary">{label}</p>
+        <p className="mt-1 text-sm font-light text-text-secondary">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={onToggle}
+        className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          checked ? "border-primary/30 bg-primary/70" : "border-white/10 bg-white/[0.055]"
+        }`}
+      >
+        <span className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
+      </button>
     </div>
   );
 }

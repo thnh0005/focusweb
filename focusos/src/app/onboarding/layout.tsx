@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
+import { AmbientScene, GlassPanel } from "@/components/ambient";
 
 export const metadata: Metadata = {
-  title: "Onboarding · FocusOS",
-  description: "Personalize your FocusOS experience in less than a minute.",
+  title: "Set up your focus workspace | FocusOS",
+  description: "Personalize your FocusOS workspace in less than a minute.",
 };
 
 export default function OnboardingLayout({
@@ -11,12 +12,12 @@ export default function OnboardingLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="min-h-screen flex flex-col bg-gradient-to-br from-ambient-dark via-surface-deep to-ambient-dark">
-      <div className="flex-1 flex items-center justify-center px-4 py-12">
-        <div className="w-full max-w-md">
+    <AmbientScene variant="forest" intensity="medium" className="min-h-[100dvh]">
+      <div className="flex min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6">
+        <GlassPanel variant="strong" className="w-full max-w-[640px] overflow-hidden p-5 sm:p-7 md:p-8">
           {children}
-        </div>
+        </GlassPanel>
       </div>
-    </div>
+    </AmbientScene>
   );
 }

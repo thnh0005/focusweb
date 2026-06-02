@@ -9,7 +9,14 @@ import { useAuthStore } from "@/stores/auth.store";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/Card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
 
 export function LoginForm() {
   const router = useRouter();
@@ -17,7 +24,7 @@ export function LoginForm() {
 
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
-  
+
   const [emailError, setEmailError] = React.useState("");
   const [passwordError, setPasswordError] = React.useState("");
   const [submitError, setSubmitError] = React.useState("");
@@ -62,71 +69,75 @@ export function LoginForm() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
     >
-      <Card variant="glass-card" className="border border-white/[0.06] shadow-2xl backdrop-blur-xl">
-        <CardHeader className="space-y-2 text-center pb-4">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-focus-purple/10 border border-focus-purple/20 text-focus-purple animate-pulse-glow">
-            <LogIn className="h-6 w-6 stroke-[1.5]" />
+      <Card variant="glass-card" className="overflow-hidden border-white/10 shadow-ambient">
+        <CardHeader className="space-y-3 px-6 pb-5 pt-7 text-center sm:px-8">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.055] text-focus-green">
+            <LogIn className="h-5 w-5 stroke-[1.7]" aria-hidden="true" />
           </div>
-          <CardTitle className="text-2xl font-light tracking-wide text-text-primary mt-2">
-            Welcome Back
-          </CardTitle>
-          <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-            Enter your credentials to enter your sanctuary
-          </CardDescription>
+          <div className="space-y-2">
+            <CardTitle className="text-2xl font-light text-text-primary">
+              Welcome back to your focus space
+            </CardTitle>
+            <CardDescription className="mx-auto max-w-[30ch] text-sm leading-6 text-text-secondary">
+              Pick up where you left off and settle into your next session.
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
+
+        <CardContent className="px-6 sm:px-8">
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {submitError && (
-              <div 
+              <div
                 role="alert"
-                className="p-3.5 rounded-lg border border-red-500/10 bg-red-500/5 text-xs text-urgency-coral font-light tracking-wide leading-relaxed animate-fade-in"
+                className="rounded-2xl border border-urgency-coral/20 bg-urgency-coral/10 p-3.5 text-sm leading-6 text-urgency-coral animate-fade-in"
               >
                 {submitError}
               </div>
             )}
-            
+
             <Input
               type="email"
-              label="Email Address"
-              placeholder="e.g. minh@example.com"
+              label="Email address"
+              placeholder="minh@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={emailError}
               disabled={isLoading}
               autoComplete="email"
+              className="h-11 rounded-2xl bg-white/[0.055] focus-visible:border-ring"
               required
             />
 
-            <div className="space-y-1">
-              <div className="flex justify-between items-center">
-                <label className="text-xs font-medium text-text-secondary select-none tracking-wide">
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between gap-3">
+                <label className="text-xs font-medium text-text-secondary">
                   Password
                 </label>
                 <Link
                   href="/forgot-password"
-                  className="text-xs text-focus-purple hover:text-focus-purple/80 transition-colors font-light"
+                  className="rounded-lg text-xs text-focus-green transition-colors hover:text-focus-green/80 focus-ring-soft"
                 >
                   Forgot password?
                 </Link>
               </div>
               <input
                 type="password"
-                placeholder="••••••••"
+                placeholder="Enter your password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
                 autoComplete="current-password"
                 required
-                className={`flex h-10 w-full rounded-lg bg-white/[0.03] border border-white/10 px-3 py-2 text-sm text-text-primary placeholder:text-text-muted transition-all duration-120 ease-reveal focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:border-transparent disabled:cursor-not-allowed disabled:opacity-40 ${
+                className={`flex h-11 w-full rounded-2xl border border-white/10 bg-white/[0.055] px-3.5 py-2 text-sm text-text-primary placeholder:text-text-muted transition-all duration-150 focus-visible:border-ring focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-40 ${
                   passwordError ? "border-destructive focus-visible:ring-destructive" : ""
                 }`}
               />
               {passwordError && (
-                <span className="text-xs text-urgency-coral font-light animate-fade-in block mt-1">
+                <span className="block text-xs text-urgency-coral animate-fade-in">
                   {passwordError}
                 </span>
               )}
@@ -137,27 +148,28 @@ export function LoginForm() {
               variant="primary"
               size="lg"
               disabled={isLoading}
-              className="w-full mt-2 font-light tracking-wide flex items-center justify-center gap-2 h-11"
+              className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-2xl"
             >
               {isLoading ? (
                 <>
                   <Spinner className="h-4 w-4 text-primary-foreground" />
-                  <span>Entering Sanctuary...</span>
+                  <span>Opening your space...</span>
                 </>
               ) : (
-                <span>Sign In</span>
+                <span>Enter focus space</span>
               )}
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center border-t border-white/[0.05] pt-4 mt-2">
-          <p className="text-xs text-text-muted font-light">
-            Don't have an account?{" "}
+
+        <CardFooter className="justify-center border-t border-white/[0.06] px-6 pb-6 pt-5 sm:px-8">
+          <p className="text-sm text-text-muted">
+            New to FocusOS?{" "}
             <Link
               href="/register"
-              className="text-focus-purple hover:text-focus-purple/80 transition-colors font-medium ml-0.5"
+              className="font-medium text-focus-green transition-colors hover:text-focus-green/80 focus-ring-soft"
             >
-              Sign up
+              Create your space
             </Link>
           </p>
         </CardFooter>

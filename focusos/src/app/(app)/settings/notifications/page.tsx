@@ -1,8 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Card } from "@/components/ui/Card";
+import { Bell, Mail, Timer } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
 
 type NotificationSettings = {
   sessionReminders: boolean;
@@ -26,10 +27,7 @@ export default function NotificationsSettingsPage() {
   const [saveSuccess, setSaveSuccess] = React.useState(false);
 
   const toggleNotification = (key: keyof NotificationSettings) => {
-    setNotifications((prev) => ({
-      ...prev,
-      [key]: !prev[key],
-    }));
+    setNotifications((prev) => ({ ...prev, [key]: !prev[key] }));
   };
 
   const handleSave = async () => {
@@ -37,7 +35,6 @@ export default function NotificationsSettingsPage() {
     setSaveSuccess(false);
 
     try {
-      // TODO: Call API to save notification preferences
       await new Promise((resolve) => setTimeout(resolve, 800));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -47,152 +44,94 @@ export default function NotificationsSettingsPage() {
   };
 
   return (
-    <div className="space-y-8 max-w-2xl">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-2xl font-extralight text-text-primary">
-          Notifications
-        </h1>
-        <p className="text-sm text-text-secondary font-light">
-          Control when and how you receive notifications.
+    <div className="max-w-3xl space-y-6">
+      <header>
+        <p className="text-sm text-text-muted">Notifications</p>
+        <h1 className="mt-2 text-4xl font-light text-text-primary">Calm reminders</h1>
+        <p className="mt-3 text-sm font-light leading-relaxed text-text-secondary">
+          Choose which cues should interrupt you and which can wait.
         </p>
-      </div>
+      </header>
 
-      {/* Session Notifications */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Session</h2>
-        {[
-          {
-            key: "sessionReminders" as const,
-            title: "Session Reminders",
-            description: "Reminders to start your daily focus session",
-          },
-          {
-            key: "distractionWarnings" as const,
-            title: "Distraction Warnings",
-            description: "Alerts when you start browsing distracting sites",
-          },
-        ].map((setting) => (
-          <div
-            key={setting.key}
-            className="flex items-center justify-between py-4 border-b border-subtle-border last:border-0"
-          >
-            <div>
-              <p className="font-medium text-text-primary">{setting.title}</p>
-              <p className="text-sm text-text-secondary font-light mt-1">
-                {setting.description}
-              </p>
-            </div>
-            <button
-              onClick={() => toggleNotification(setting.key)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${
-                notifications[setting.key]
-                  ? "bg-focus-purple"
-                  : "bg-surface-deep border border-subtle-border"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  notifications[setting.key] ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
-        ))}
-      </Card>
+      <NotificationPanel icon={Timer} title="Session">
+        <SettingRow label="Session reminders" description="Reminders to start your daily focus session." checked={notifications.sessionReminders} onToggle={() => toggleNotification("sessionReminders")} />
+        <SettingRow label="Distraction warnings" description="Alerts when you start browsing distracting sites." checked={notifications.distractionWarnings} onToggle={() => toggleNotification("distractionWarnings")} />
+      </NotificationPanel>
 
-      {/* Analytics & Reports */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Analytics</h2>
-        {[
-          {
-            key: "dailyDigest" as const,
-            title: "Daily Digest",
-            description: "Summary of your daily focus statistics",
-          },
-          {
-            key: "weeklyReport" as const,
-            title: "Weekly Report",
-            description: "In-depth analysis of your weekly focus patterns",
-          },
-          {
-            key: "achievements" as const,
-            title: "Achievements",
-            description: "Notifications when you unlock new milestones",
-          },
-        ].map((setting) => (
-          <div
-            key={setting.key}
-            className="flex items-center justify-between py-4 border-b border-subtle-border last:border-0"
-          >
-            <div>
-              <p className="font-medium text-text-primary">{setting.title}</p>
-              <p className="text-sm text-text-secondary font-light mt-1">
-                {setting.description}
-              </p>
-            </div>
-            <button
-              onClick={() => toggleNotification(setting.key)}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${
-                notifications[setting.key]
-                  ? "bg-focus-purple"
-                  : "bg-surface-deep border border-subtle-border"
-              }`}
-            >
-              <span
-                className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                  notifications[setting.key] ? "translate-x-6" : "translate-x-1"
-                }`}
-              />
-            </button>
-          </div>
-        ))}
-      </Card>
+      <NotificationPanel icon={Bell} title="Reflection">
+        <SettingRow label="Daily digest" description="Summary of your daily focus statistics." checked={notifications.dailyDigest} onToggle={() => toggleNotification("dailyDigest")} />
+        <SettingRow label="Weekly report" description="Analysis of your weekly focus patterns." checked={notifications.weeklyReport} onToggle={() => toggleNotification("weeklyReport")} />
+        <SettingRow label="Achievements" description="Notifications when you unlock milestones." checked={notifications.achievements} onToggle={() => toggleNotification("achievements")} />
+      </NotificationPanel>
 
-      {/* Marketing */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Communication</h2>
-        <div className="flex items-center justify-between py-4">
-          <div>
-            <p className="font-medium text-text-primary">Product Updates</p>
-            <p className="text-sm text-text-secondary font-light mt-1">
-              Emails about new features and improvements
-            </p>
-          </div>
-          <button
-            onClick={() => toggleNotification("productUpdates")}
-            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors flex-shrink-0 ml-4 ${
-              notifications.productUpdates
-                ? "bg-focus-purple"
-                : "bg-surface-deep border border-subtle-border"
-            }`}
-          >
-            <span
-              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                notifications.productUpdates ? "translate-x-6" : "translate-x-1"
-              }`}
-            />
-          </button>
-        </div>
-      </Card>
+      <NotificationPanel icon={Mail} title="Communication">
+        <SettingRow label="Product updates" description="Emails about new features and improvements." checked={notifications.productUpdates} onToggle={() => toggleNotification("productUpdates")} />
+      </NotificationPanel>
 
-      {/* Success Message */}
       {saveSuccess && (
-        <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-          <p className="text-sm text-green-300 font-light">
-            Notification settings saved successfully
-          </p>
+        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
+          <p className="text-sm font-light text-primary">Notification settings saved successfully</p>
         </div>
       )}
 
-      {/* Save Button */}
-      <Button
-        onClick={handleSave}
-        disabled={isSaving}
-        className="bg-focus-purple hover:bg-focus-purple/90 text-white disabled:opacity-50"
-      >
-        {isSaving ? "Saving..." : "Save Notifications"}
+      <Button type="button" onClick={handleSave} disabled={isSaving} variant="session" className="rounded-full px-6">
+        {isSaving ? "Saving" : "Save notifications"}
       </Button>
+    </div>
+  );
+}
+
+type PanelIcon = React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
+
+function NotificationPanel({
+  icon: Icon,
+  title,
+  children,
+}: {
+  icon: PanelIcon;
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <Card className="rounded-[2rem] p-6 sm:p-7">
+      <div className="mb-2 flex items-center gap-3">
+        <Icon className="h-5 w-5 text-primary" aria-hidden />
+        <h2 className="text-xl font-light text-text-primary">{title}</h2>
+      </div>
+      {children}
+    </Card>
+  );
+}
+
+function SettingRow({
+  label,
+  description,
+  checked,
+  onToggle,
+}: {
+  label: string;
+  description: string;
+  checked: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/10 py-4 last:border-0">
+      <div>
+        <p className="font-medium text-text-primary">{label}</p>
+        <p className="mt-1 text-sm font-light text-text-secondary">{description}</p>
+      </div>
+      <button
+        type="button"
+        role="switch"
+        aria-checked={checked}
+        aria-label={label}
+        onClick={onToggle}
+        className={`relative inline-flex h-7 w-12 shrink-0 items-center rounded-full border transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+          checked ? "border-primary/30 bg-primary/70" : "border-white/10 bg-white/[0.055]"
+        }`}
+      >
+        <span className={`inline-block h-5 w-5 rounded-full bg-white transition-transform ${checked ? "translate-x-6" : "translate-x-1"}`} />
+      </button>
     </div>
   );
 }

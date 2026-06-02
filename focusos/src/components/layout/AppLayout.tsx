@@ -10,6 +10,12 @@ import {
   type Notification,
 } from "@/components/navigation";
 
+const demoNotificationDates = {
+  recent: new Date("2026-01-01T11:55:00.000Z"),
+  earlier: new Date("2026-01-01T10:00:00.000Z"),
+  yesterday: new Date("2025-12-31T12:00:00.000Z"),
+};
+
 // ─── Types ───────────────────────────────────────────────────────────────────
 
 export interface AppLayoutProps {
@@ -48,7 +54,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       body: "You typically focus best between 20:00–22:00. Now's a great time to start a Deep Work session.",
       href: "/session",
       isRead: false,
-      createdAt: new Date(Date.now() - 5 * 60_000),
+      createdAt: demoNotificationDates.recent,
     },
     {
       id: "n2",
@@ -57,7 +63,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       body: "Your Focus Score improved 12% this week. View your full breakdown.",
       href: "/analytics",
       isRead: false,
-      createdAt: new Date(Date.now() - 2 * 60 * 60_000),
+      createdAt: demoNotificationDates.earlier,
     },
     {
       id: "n3",
@@ -65,7 +71,7 @@ export function AppLayout({ children }: AppLayoutProps) {
       title: "AI Coach Observation",
       body: "You've been starting sessions after 9 PM three days in a row. Consider an earlier slot for deeper focus.",
       isRead: true,
-      createdAt: new Date(Date.now() - 24 * 60 * 60_000),
+      createdAt: demoNotificationDates.yesterday,
     },
   ]);
 
@@ -108,14 +114,7 @@ export function AppLayout({ children }: AppLayoutProps) {
   useCommandPaletteShortcut(openCommandPalette);
 
   return (
-    <div className="min-h-[100dvh] flex bg-background text-text-primary overflow-x-hidden relative">
-      {/* ── 4-Layer Ambient Background System (design1.md) ─────────── */}
-      <div className="ambient-orbs" aria-hidden="true">
-        <div className="ambient-orb ambient-orb-1" />
-        <div className="ambient-orb ambient-orb-2" />
-        <div className="ambient-orb ambient-orb-3" />
-      </div>
-      <div className="grain-overlay" aria-hidden="true" />
+    <div className="min-h-[100dvh] flex bg-bg-void text-text-primary overflow-x-hidden relative">
 
       {/* ── Desktop Sidebar ─────────────────────────────────────────── */}
       <Sidebar

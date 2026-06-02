@@ -31,7 +31,7 @@ export function SidebarRail({
 
   return (
     <aside
-      className="fixed left-0 top-0 h-full w-16 bg-background border-r border-white/5 flex flex-col items-center py-6 justify-between z-40 select-none"
+      className="fixed left-0 top-0 h-full w-16 bg-bg-void border-r border-white/[0.06] flex flex-col items-center py-6 justify-between z-40 select-none"
       onMouseEnter={onHoverStart}
       aria-label="Sidebar Rail"
     >

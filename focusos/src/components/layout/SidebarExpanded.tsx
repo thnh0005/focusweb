@@ -46,7 +46,7 @@ export function SidebarExpanded({ isOpen, onHoverEnd }: SidebarExpandedProps) {
               duration: 0.4,
               ease: [0.16, 1, 0.3, 1], // --ease-reveal
             }}
-            className="fixed left-16 top-0 h-full w-48 bg-surface-deep/95 backdrop-blur-2xl border-r border-white/5 z-30 flex flex-col py-24 px-4 space-y-6 shadow-glass select-none"
+            className="fixed left-16 top-0 h-full w-48 bg-bg-surface backdrop-blur-2xl border-r border-white/[0.06] z-30 flex flex-col py-24 px-4 space-y-6 shadow-glass select-none"
             onMouseLeave={onHoverEnd}
             aria-label="Expanded Navigation"
           >

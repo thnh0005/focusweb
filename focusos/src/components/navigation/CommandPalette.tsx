@@ -65,12 +65,12 @@ function useCommandItems(router: ReturnType<typeof useRouter>, onClose: () => vo
     },
     {
       id: "nav-study-tools",
-      label: "Study Tools",
-      description: "AI summaries and flashcards",
+      label: "AI Docs",
+      description: "AI document summaries and flashcards",
       icon: <BookOpen className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/study-tools"); onClose(); },
       group: "Navigation",
-      keywords: ["study", "flashcards", "documents", "pdf"],
+      keywords: ["study", "flashcards", "documents", "document", "ai document", "pdf"],
     },
     {
       id: "nav-settings",
@@ -94,12 +94,12 @@ function useCommandItems(router: ReturnType<typeof useRouter>, onClose: () => vo
     },
     {
       id: "action-upload-doc",
-      label: "Upload Document",
+      label: "Upload AI Document",
       description: "Add a PDF or DOCX for AI analysis",
       icon: <FileText className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/study-tools/upload"); onClose(); },
       group: "Actions",
-      keywords: ["upload", "document", "pdf", "notes"],
+      keywords: ["upload", "document", "ai document", "pdf", "notes"],
     },
     {
       id: "action-add-blacklist",
@@ -197,9 +197,12 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
   // Reset on open
   React.useEffect(() => {
     if (isOpen) {
-      setQuery("");
-      setActiveIdx(0);
-      setTimeout(() => inputRef.current?.focus(), 32);
+      const timer = window.setTimeout(() => {
+        setQuery("");
+        setActiveIdx(0);
+        inputRef.current?.focus();
+      }, 32);
+      return () => window.clearTimeout(timer);
     }
   }, [isOpen]);
 
@@ -233,7 +236,8 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
 
   // Reset active when query changes
   React.useEffect(() => {
-    setActiveIdx(0);
+    const timer = window.setTimeout(() => setActiveIdx(0), 0);
+    return () => window.clearTimeout(timer);
   }, [query]);
 
   // Global ⌘K / Ctrl+K trigger (passive listener — actual open is handled by parent)
@@ -321,7 +325,9 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
               {filteredItems.length === 0 ? (
                 <div className="flex flex-col items-center gap-2 py-10 text-center">
                   <Hash aria-hidden="true" className="h-6 w-6 text-text-muted/50 stroke-[1.5]" />
-                  <p className="text-sm text-text-muted font-light">No results for "{query}"</p>
+                  <p className="text-sm text-text-muted font-light">
+                    No results for &quot;{query}&quot;
+                  </p>
                 </div>
               ) : (
                 Array.from(groups.entries()).map(([groupName, items]) => (

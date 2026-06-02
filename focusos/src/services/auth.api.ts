@@ -9,8 +9,8 @@ import type {
 
 const MOCK_AUTH_ENABLED = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
 const MOCK_STORAGE_KEY = "focusos.mock.auth";
-const DEFAULT_MOCK_EMAIL = "demo@focusos.dev";
-const DEFAULT_MOCK_PASSWORD = "FocusOS123!";
+const DEFAULT_MOCK_EMAIL = "thnh@gmail.com";
+const DEFAULT_MOCK_PASSWORD = "123456";
 
 interface MockAuthRecord {
   user: User;
@@ -59,7 +59,7 @@ function createMockUser(email: string, overrides?: Partial<User>): User {
 
 function seedDefaultRecord(): MockAuthRecord {
   const user = createMockUser(DEFAULT_MOCK_EMAIL, {
-    displayName: "Demo User",
+    displayName: "thnh",
     onboardingComplete: true,
   });
   const record = { user, password: DEFAULT_MOCK_PASSWORD };
@@ -74,14 +74,15 @@ export const authApi = {
    */
   login(credentials: LoginCredentials): Promise<AuthResponse> {
     if (MOCK_AUTH_ENABLED) {
+      if (
+        credentials.email === DEFAULT_MOCK_EMAIL &&
+        credentials.password === DEFAULT_MOCK_PASSWORD
+      ) {
+        return Promise.resolve({ user: seedDefaultRecord().user });
+      }
+
       const record = readMockRecord();
       if (!record) {
-        if (
-          credentials.email === DEFAULT_MOCK_EMAIL &&
-          credentials.password === DEFAULT_MOCK_PASSWORD
-        ) {
-          return Promise.resolve({ user: seedDefaultRecord().user });
-        }
         return Promise.reject(new Error("Invalid email or password"));
       }
 

@@ -27,93 +27,83 @@ export function WeeklyProgressSnapshot({
   const deltaDeepWork = data.thisWeekDeepWork - data.lastWeekDeepWork;
 
   const getDeltaColor = (delta: number) => {
-    if (delta > 0) return "text-green-400";
-    if (delta < 0) return "text-red-400";
+    if (delta > 0) return "text-primary";
+    if (delta < 0) return "text-urgency-amber";
     return "text-text-muted";
   };
 
-  const getDeltaArrow = (delta: number) => {
-    if (delta > 0) return "↑";
-    if (delta < 0) return "↓";
-    return "→";
+  const getDeltaPrefix = (delta: number) => {
+    if (delta > 0) return "+";
+    if (delta < 0) return "-";
+    return "";
   };
 
   if (isLoading) {
     return (
-      <Card className="p-6 space-y-4">
-        <div className="h-40 bg-white/5 rounded-lg animate-pulse" />
+      <Card className="rounded-3xl p-6 space-y-4">
+        <div className="h-40 rounded-2xl bg-white/[0.045] animate-pulse" />
       </Card>
     );
   }
 
   return (
-    <Card className="p-6 space-y-6 bg-gradient-to-br from-focus-purple/10 to-transparent border-focus-purple/30">
+    <Card className="rounded-3xl p-6 space-y-6 bg-white/[0.035]">
       <div>
-        <h3 className="text-lg font-medium text-text-primary">
-          Weekly Progress
-        </h3>
-        <p className="text-xs text-text-muted mt-1">This week vs. last week</p>
+        <h3 className="text-lg font-light text-text-primary">Weekly progress</h3>
+        <p className="mt-1 text-xs text-text-muted">This week compared with last week</p>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        {/* Focus Hours */}
-        <div className="space-y-2">
-          <p className="text-xs text-text-muted font-mono uppercase">
-            Total Hours
-          </p>
-          <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-light text-text-primary">
-              {data.thisWeekHours.toFixed(1)}h
-            </p>
-            <p className={`text-sm font-medium ${getDeltaColor(deltaHours)}`}>
-              {getDeltaArrow(deltaHours)}{" "}
-              {Math.abs(deltaHours).toFixed(1)}h
-            </p>
-          </div>
-        </div>
-
-        {/* Avg Score */}
-        <div className="space-y-2">
-          <p className="text-xs text-text-muted font-mono uppercase">
-            Avg Score
-          </p>
-          <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-light text-text-primary">
-              {Math.round(data.thisWeekScore)}%
-            </p>
-            <p className={`text-sm font-medium ${getDeltaColor(deltaScore)}`}>
-              {getDeltaArrow(deltaScore)} {Math.abs(Math.round(deltaScore))}%
-            </p>
-          </div>
-        </div>
-
-        {/* Deep Work */}
-        <div className="space-y-2">
-          <p className="text-xs text-text-muted font-mono uppercase">
-            Deep Work
-          </p>
-          <div className="flex items-baseline gap-2">
-            <p className="text-2xl font-light text-text-primary">
-              {data.thisWeekDeepWork}
-            </p>
-            <p className={`text-sm font-medium ${getDeltaColor(deltaDeepWork)}`}>
-              {getDeltaArrow(deltaDeepWork)} {Math.abs(deltaDeepWork)}
-            </p>
-          </div>
-        </div>
+      <div className="grid gap-4 sm:grid-cols-3">
+        <SnapshotMetric
+          label="Total Hours"
+          value={`${data.thisWeekHours.toFixed(1)}h`}
+          delta={`${getDeltaPrefix(deltaHours)}${Math.abs(deltaHours).toFixed(1)}h`}
+          deltaClassName={getDeltaColor(deltaHours)}
+        />
+        <SnapshotMetric
+          label="Avg Score"
+          value={`${Math.round(data.thisWeekScore)}%`}
+          delta={`${getDeltaPrefix(deltaScore)}${Math.abs(Math.round(deltaScore))}%`}
+          deltaClassName={getDeltaColor(deltaScore)}
+        />
+        <SnapshotMetric
+          label="Deep Work"
+          value={data.thisWeekDeepWork}
+          delta={`${getDeltaPrefix(deltaDeepWork)}${Math.abs(deltaDeepWork)}`}
+          deltaClassName={getDeltaColor(deltaDeepWork)}
+        />
       </div>
 
-      {/* AI Recommendation */}
       {data.aiRecommendation && (
-        <div className="pt-4 border-t border-focus-purple/30">
-          <p className="text-xs text-text-muted font-mono uppercase mb-2">
-            This Week&apos;s Focus
-          </p>
-          <p className="text-sm text-text-secondary font-light leading-relaxed">
+        <div className="border-t border-white/10 pt-4">
+          <p className="mb-2 text-xs font-mono text-text-muted">This week&apos;s focus</p>
+          <p className="text-sm font-light leading-relaxed text-text-secondary">
             {data.aiRecommendation}
           </p>
         </div>
       )}
     </Card>
+  );
+}
+
+function SnapshotMetric({
+  label,
+  value,
+  delta,
+  deltaClassName,
+}: {
+  label: string;
+  value: string | number;
+  delta: string;
+  deltaClassName: string;
+}) {
+  return (
+    <div className="rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+      <p className="text-xs font-mono text-text-muted">{label}</p>
+      <div className="mt-2 flex items-baseline gap-2">
+        <p className="text-2xl font-light text-text-primary">{value}</p>
+        <p className={`text-sm font-medium ${deltaClassName}`}>{delta}</p>
+      </div>
+    </div>
   );
 }

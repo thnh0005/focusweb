@@ -54,7 +54,7 @@ const NAV_ITEMS = [
     matchPrefix: true,
   },
   {
-    label: "Study Tools",
+    label: "AI Docs",
     href: "/study-tools",
     icon: BookOpen,
     matchPrefix: true,
@@ -239,8 +239,8 @@ export function Sidebar({
         className={cn(
           "hidden md:flex fixed left-0 top-0 h-[100dvh] w-16 z-40 flex-col",
           "items-center py-5 justify-between select-none",
-          "bg-background/95 border-r border-white/[0.05]",
-          "backdrop-blur-[24px] backdrop-saturate-[200%]",
+          "bg-bg-void border-r border-white/[0.06]",
+          "backdrop-blur-[18px] backdrop-saturate-[180%]",
           className
         )}
         onMouseEnter={() => setExpanded(true)}
@@ -294,8 +294,8 @@ export function Sidebar({
                   aria-label={`${streakCount} day focus streak`}
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-xl cursor-default",
-                    "bg-white/[0.03] border border-white/[0.05]",
-                    "hover:border-white/[0.10] transition-colors duration-[120ms]"
+                    "bg-white/[0.03] border border-white/[0.06]",
+                    "hover:border-white/[0.12] transition-colors duration-[120ms]"
                   )}
                 >
                   <Flame
@@ -305,7 +305,7 @@ export function Sidebar({
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={14}>
-                🔥 {streakCount} Day Streak
+                {streakCount} Day Streak
               </TooltipContent>
             </Tooltip>
           )}
@@ -366,8 +366,8 @@ export function Sidebar({
             className={cn(
               "hidden md:flex fixed left-16 top-0 h-[100dvh] w-48 z-30 flex-col",
               "pt-[72px] pb-6 px-3",
-              "bg-surface-deep/95 border-r border-white/[0.05]",
-              "backdrop-blur-[24px] backdrop-saturate-[180%]",
+              "bg-bg-surface border-r border-white/[0.06]",
+              "backdrop-blur-[18px] backdrop-saturate-[180%]",
               "shadow-[4px_0_32px_rgba(0,0,0,0.4)]",
               "select-none"
             )}

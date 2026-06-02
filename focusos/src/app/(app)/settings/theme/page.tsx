@@ -1,21 +1,104 @@
 "use client";
 
 import * as React from "react";
-import { Card } from "@/components/ui/Card";
+import { ImagePlus, Moon, Palette, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+import { Card } from "@/components/ui/Card";
+import {
+  clearWorkspaceBackground,
+  MAX_WORKSPACE_BACKGROUND_BYTES,
+  readWorkspaceBackground,
+  saveWorkspaceBackground,
+} from "@/lib/preferences/background";
+
+const THEME_OPTIONS = [
+  {
+    id: "minimal-dark",
+    label: "Minimal Dark",
+    description: "Quiet charcoal workspace.",
+    swatches: ["#070806", "#171b15", "#f3efe5"],
+  },
+  {
+    id: "aurora-night",
+    label: "Aurora Night",
+    description: "Muted aurora atmosphere.",
+    swatches: ["#070806", "#718f74", "#8f5866"],
+  },
+  {
+    id: "forest-calm",
+    label: "Forest Calm",
+    description: "Green-tinted focus room.",
+    swatches: ["#0b0d0b", "#557a5d", "#8fa974"],
+  },
+  {
+    id: "rain-room",
+    label: "Rain Room",
+    description: "Cooler reading surface.",
+    swatches: ["#0b1010", "#6f9b99", "#7d8896"],
+  },
+];
+
+const ACCENT_COLORS = [
+  { id: "moss", name: "Moss", bg: "bg-primary" },
+  { id: "rain", name: "Rain", bg: "bg-ambient-cyan" },
+  { id: "ember", name: "Ember", bg: "bg-urgency-amber" },
+];
 
 export default function ThemeSettingsPage() {
-  const [theme, setTheme] = React.useState("dark");
-  const [accentColor, setAccentColor] = React.useState("purple");
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  const [theme, setTheme] = React.useState("forest-calm");
+  const [accentColor, setAccentColor] = React.useState("moss");
+  const [backgroundImage, setBackgroundImage] = React.useState(() => readWorkspaceBackground());
+  const [backgroundError, setBackgroundError] = React.useState("");
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
+
+  const handleBackgroundUpload = (file: File | undefined) => {
+    setBackgroundError("");
+    if (!file) return;
+
+    if (!file.type.startsWith("image/")) {
+      setBackgroundError("Upload an image file.");
+      return;
+    }
+
+    if (file.size > MAX_WORKSPACE_BACKGROUND_BYTES) {
+      setBackgroundError("Image must be 2.5 MB or smaller.");
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = typeof reader.result === "string" ? reader.result : "";
+      if (!result) {
+        setBackgroundError("Could not read this image.");
+        return;
+      }
+      try {
+        saveWorkspaceBackground(result);
+        setBackgroundImage(result);
+      } catch {
+        setBackgroundError("This image is too large for browser storage.");
+      }
+    };
+    reader.onerror = () => setBackgroundError("Could not read this image.");
+    reader.readAsDataURL(file);
+  };
+
+  const handleClearBackground = () => {
+    clearWorkspaceBackground();
+    setBackgroundImage("");
+    setBackgroundError("");
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
 
   const handleSave = async () => {
     setIsSaving(true);
     setSaveSuccess(false);
 
     try {
-      // TODO: Call API to save theme preferences
       await new Promise((resolve) => setTimeout(resolve, 800));
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
@@ -24,118 +107,168 @@ export default function ThemeSettingsPage() {
     }
   };
 
-  const THEME_OPTIONS = [
-    { id: "dark", label: "Dark Mode", description: "Easy on the eyes with dark backgrounds" },
-    { id: "light", label: "Light Mode", description: "Bright and minimalist design" },
-    { id: "auto", label: "System", description: "Follows your device settings" },
-  ];
-
-  const ACCENT_COLORS = [
-    { id: "purple", name: "Purple", bg: "bg-focus-purple" },
-    { id: "blue", name: "Blue", bg: "bg-blue-500" },
-    { id: "emerald", name: "Emerald", bg: "bg-emerald-500" },
-    { id: "cyan", name: "Cyan", bg: "bg-cyan-500" },
-    { id: "rose", name: "Rose", bg: "bg-rose-500" },
-    { id: "amber", name: "Amber", bg: "bg-amber-500" },
-  ];
-
   return (
-    <div className="space-y-8 max-w-2xl">
-      {/* Header */}
-      <div className="space-y-2">
-        <h1 className="text-2xl font-extralight text-text-primary">Theme</h1>
-        <p className="text-sm text-text-secondary font-light">
-          Customize the appearance of FocusOS to your liking.
+    <div className="max-w-4xl space-y-6">
+      <header>
+        <p className="text-sm text-text-muted">Theme</p>
+        <h1 className="mt-2 text-4xl font-light text-text-primary">Ambient appearance</h1>
+        <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-text-secondary">
+          Preview the visual language used across FocusOS. Saving keeps the existing local preference flow.
         </p>
-      </div>
+      </header>
 
-      {/* Theme Selection */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Color Scheme</h2>
-        <div className="space-y-3">
-          {THEME_OPTIONS.map((t) => (
+      <Card className="rounded-[2rem] p-6 sm:p-7">
+        <div className="mb-5 flex items-center gap-3">
+          <Moon className="h-5 w-5 text-primary" aria-hidden="true" />
+          <h2 className="text-xl font-light text-text-primary">Theme previews</h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          {THEME_OPTIONS.map((option) => (
             <button
-              key={t.id}
-              onClick={() => setTheme(t.id)}
-              className={`w-full p-4 rounded-lg text-left transition-all border ${
-                theme === t.id
-                  ? "border-focus-purple/50 bg-focus-purple/10"
-                  : "border-subtle-border hover:border-text-muted/30"
+              key={option.id}
+              type="button"
+              onClick={() => setTheme(option.id)}
+              className={`rounded-3xl border p-4 text-left transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                theme === option.id
+                  ? "border-primary/45 bg-primary/10"
+                  : "border-white/10 bg-white/[0.035] hover:bg-white/[0.06]"
               }`}
+              aria-pressed={theme === option.id}
             >
-              <p className="font-medium text-text-primary">{t.label}</p>
-              <p className="text-sm text-text-secondary font-light mt-1">
-                {t.description}
-              </p>
+              <div className="mb-4 flex h-24 overflow-hidden rounded-2xl border border-white/10">
+                {option.swatches.map((swatch) => (
+                  <span key={swatch} className="flex-1" style={{ backgroundColor: swatch }} />
+                ))}
+              </div>
+              <p className="font-medium text-text-primary">{option.label}</p>
+              <p className="mt-1 text-sm font-light text-text-secondary">{option.description}</p>
             </button>
           ))}
         </div>
       </Card>
 
-      {/* Accent Color */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Accent Color</h2>
-        <p className="text-sm text-text-secondary font-light mb-4">
-          Choose your preferred accent color used throughout the interface.
-        </p>
+      <Card className="rounded-[2rem] p-6 sm:p-7">
+        <div className="mb-5 flex items-center gap-3">
+          <Palette className="h-5 w-5 text-primary" aria-hidden="true" />
+          <h2 className="text-xl font-light text-text-primary">Accent tone</h2>
+        </div>
         <div className="grid grid-cols-3 gap-3">
           {ACCENT_COLORS.map((accent) => (
             <button
               key={accent.id}
+              type="button"
               onClick={() => setAccentColor(accent.id)}
-              className={`group relative p-4 rounded-lg border-2 transition-all ${
+              className={`rounded-2xl border p-4 transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 accentColor === accent.id
-                  ? "border-text-primary bg-surface-deep"
-                  : "border-transparent hover:border-subtle-border"
+                  ? "border-text-primary bg-white/[0.06]"
+                  : "border-white/10 bg-white/[0.03] hover:bg-white/[0.055]"
               }`}
+              aria-pressed={accentColor === accent.id}
             >
-              <div
-                className={`h-8 w-full rounded-md ${accent.bg} transition-transform group-hover:scale-105`}
-              />
-              <p className="text-xs text-text-secondary font-light mt-2 text-center">
-                {accent.name}
-              </p>
+              <div className={`h-9 w-full rounded-xl ${accent.bg}`} />
+              <p className="mt-2 text-center text-xs font-light text-text-secondary">{accent.name}</p>
             </button>
           ))}
         </div>
       </Card>
 
-      {/* Display Preferences */}
-      <Card className="p-6 space-y-4">
-        <h2 className="text-lg font-medium text-text-primary">Display</h2>
-        <div className="space-y-3 text-sm">
-          <div className="flex items-center justify-between py-3 border-b border-subtle-border">
-            <span className="text-text-secondary">Reduce Motion</span>
-            <span className="inline-flex h-6 w-10 items-center rounded-full bg-subtle-border">
-              <span className="inline-block h-5 w-5 transform rounded-full bg-white translate-x-0.5" />
-            </span>
+      <Card className="rounded-[2rem] p-6 sm:p-7">
+        <div className="mb-5 flex items-center gap-3">
+          <ImagePlus className="h-5 w-5 text-primary" aria-hidden="true" />
+          <div>
+            <h2 className="text-xl font-light text-text-primary">Workspace background</h2>
+            <p className="mt-1 text-sm font-light text-text-secondary">
+              Upload a local image for the focus room background.
+            </p>
           </div>
-          <div className="flex items-center justify-between py-3">
-            <span className="text-text-secondary">Compact Mode</span>
-            <span className="inline-flex h-6 w-10 items-center rounded-full bg-subtle-border">
-              <span className="inline-block h-5 w-5 transform rounded-full bg-white translate-x-0.5" />
-            </span>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_220px] md:items-stretch">
+          <button
+            type="button"
+            onClick={() => fileInputRef.current?.click()}
+            className="flex min-h-40 flex-col items-center justify-center rounded-3xl border border-dashed border-white/14 bg-white/[0.035] p-6 text-center transition-all duration-fast hover:border-primary/40 hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          >
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="sr-only"
+              onChange={(event) => handleBackgroundUpload(event.target.files?.[0])}
+            />
+            <ImagePlus className="h-9 w-9 text-primary" aria-hidden="true" />
+            <p className="mt-4 text-sm font-medium text-text-primary">Choose background image</p>
+            <p className="mt-1 text-xs font-light text-text-muted">JPG, PNG, or WebP up to 2.5 MB</p>
+          </button>
+
+          <div className="relative min-h-40 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035]">
+            {backgroundImage ? (
+              <div
+                className="absolute inset-0 bg-cover bg-center"
+                style={{ backgroundImage: `url(${backgroundImage})` }}
+              />
+            ) : (
+              <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_25%,rgba(168,192,146,0.22),transparent_8rem),linear-gradient(180deg,#0d110d,#050605)]" />
+            )}
+            <div className="absolute inset-0 bg-black/30" />
+            <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2">
+              <span className="rounded-full bg-black/35 px-3 py-1 text-xs text-text-secondary backdrop-blur-md">
+                {backgroundImage ? "Custom image" : "Default ambient"}
+              </span>
+              {backgroundImage && (
+                <button
+                  type="button"
+                  onClick={handleClearBackground}
+                  className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/35 text-text-secondary backdrop-blur-md transition-colors hover:bg-white/[0.1] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  aria-label="Remove custom background"
+                >
+                  <Trash2 className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </div>
+        </div>
+
+        {backgroundError && (
+          <div role="alert" className="mt-4 rounded-2xl border border-urgency-amber/25 bg-urgency-amber/10 p-3">
+            <p className="text-sm text-urgency-amber">{backgroundError}</p>
+          </div>
+        )}
+      </Card>
+
+      <Card className="rounded-[2rem] p-6 sm:p-7">
+        <h2 className="text-xl font-light text-text-primary">Display</h2>
+        <div className="mt-4 space-y-3 text-sm">
+          <StaticToggle label="Reduce motion" />
+          <StaticToggle label="Compact mode" />
         </div>
       </Card>
 
-      {/* Success Message */}
       {saveSuccess && (
-        <div className="p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
-          <p className="text-sm text-green-300 font-light">
-            Theme settings saved successfully
-          </p>
+        <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
+          <p className="text-sm font-light text-primary">Theme settings saved successfully</p>
         </div>
       )}
 
-      {/* Save Button */}
-      <Button
-        onClick={handleSave}
-        disabled={isSaving}
-        className="bg-focus-purple hover:bg-focus-purple/90 text-white disabled:opacity-50"
-      >
-        {isSaving ? "Saving..." : "Save Theme"}
+      <Button type="button" onClick={handleSave} disabled={isSaving} variant="session" className="rounded-full px-6">
+        {isSaving ? "Saving" : "Save theme"}
       </Button>
+    </div>
+  );
+}
+
+function StaticToggle({ label }: { label: string }) {
+  return (
+    <div className="flex items-center justify-between border-b border-white/10 py-3 last:border-0">
+      <span className="text-text-secondary">{label}</span>
+      <span
+        role="switch"
+        aria-checked={false}
+        aria-label={label}
+        className="inline-flex h-7 w-12 items-center rounded-full border border-white/10 bg-white/[0.055]"
+      >
+        <span className="ml-1 inline-block h-5 w-5 rounded-full bg-white" />
+      </span>
     </div>
   );
 }

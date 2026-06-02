@@ -65,7 +65,7 @@ export function ForgotPasswordForm() {
               Recovery Link Sent
             </CardTitle>
             <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-              We've dispatched password reset instructions to
+              We&apos;ve dispatched password reset instructions to
             </CardDescription>
             <div className="text-xs font-mono bg-white/[0.02] border border-white/[0.05] rounded-lg py-1 px-3 inline-block mx-auto text-text-secondary">
               {email}

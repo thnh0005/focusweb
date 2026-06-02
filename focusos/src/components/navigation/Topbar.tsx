@@ -82,9 +82,9 @@ export function Topbar({
   const [quote] = React.useState(() => getSessionQuote());
 
   // Detect modifier key for command hint (⌘ on Mac, Ctrl on Windows/Linux)
-  const [isMac, setIsMac] = React.useState(true);
-  React.useEffect(() => {
-    setIsMac(/(Mac|iPhone|iPod|iPad)/i.test(navigator.platform));
+  const isMac = React.useMemo(() => {
+    if (typeof navigator === "undefined") return true;
+    return /(Mac|iPhone|iPod|iPad)/i.test(navigator.platform);
   }, []);
 
   const initials = userName
@@ -102,8 +102,8 @@ export function Topbar({
       className={cn(
         "sticky top-0 z-20 h-14 flex items-center justify-between",
         "px-4 md:px-6 lg:px-8",
-        "bg-background/90 border-b border-white/[0.05]",
-        "backdrop-blur-[24px] backdrop-saturate-[200%]",
+        "bg-bg-void border-b border-white/[0.06]",
+        "backdrop-blur-[18px] backdrop-saturate-[180%]",
         "select-none",
         className
       )}

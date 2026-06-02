@@ -2,78 +2,112 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { motion, useReducedMotion } from "framer-motion";
+import { Bell, EyeOff, ShieldCheck, Waves } from "lucide-react";
 import { Button } from "@/components/ui/Button";
+
+const extensionNotes = [
+  {
+    title: "Notices drift early",
+    description: "Detects when browsing moves away from your session goal.",
+    icon: Bell,
+  },
+  {
+    title: "Protects sensitive fields",
+    description: "Focus tracking is designed around attention signals, not private text.",
+    icon: EyeOff,
+  },
+  {
+    title: "Keeps recovery gentle",
+    description: "Warnings are calm and timed to help you return without stress.",
+    icon: Waves,
+  },
+];
 
 export default function OnboardingExtensionPage() {
   const router = useRouter();
+  const reduceMotion = useReducedMotion();
 
   const handleContinue = () => {
     router.push("/dashboard");
   };
 
   return (
-    <div className="space-y-8">
-      {/* Step Indicator */}
-      <div className="space-y-2">
-        <p className="text-xs text-text-muted font-light">Step 3 of 3</p>
-        <div className="h-1 bg-surface-deep rounded-full overflow-hidden">
-          <div className="h-full w-full bg-focus-purple transition-all duration-300" />
+    <motion.div
+      initial={reduceMotion ? false : { opacity: 0, y: 12 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: reduceMotion ? 0 : 0.28, ease: [0.16, 1, 0.3, 1] }}
+      className="space-y-8"
+    >
+      <div className="space-y-3">
+        <div className="flex items-center justify-between gap-4 text-xs text-text-muted">
+          <span>Step 3 of 3</span>
+          <span>Focus tracking</span>
+        </div>
+        <div className="h-1 overflow-hidden rounded-full bg-white/10">
+          <div className="h-full w-full rounded-full bg-focus-green transition-all duration-300" />
         </div>
       </div>
 
-      {/* Content */}
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-extralight text-text-primary mb-2">
-            Install our browser extension
-          </h1>
-          <p className="text-sm text-text-secondary font-light">
-            To track your focus sessions and provide real-time distraction detection, we need a lightweight browser extension.
-          </p>
+      <div className="space-y-3">
+        <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.055] text-focus-green">
+          <ShieldCheck className="h-5 w-5" aria-hidden="true" />
         </div>
-
-        {/* Extension Info */}
-        <div className="p-4 rounded-lg bg-surface-deep border border-subtle-border space-y-3">
-          <p className="text-sm font-medium text-text-primary">What it does:</p>
-          <ul className="text-sm text-text-secondary font-light space-y-2">
-            <li>✓ Tracks which websites you visit during focus sessions</li>
-            <li>✓ Analyzes content relevance to your session goal</li>
-            <li>✓ Sends real-time warnings for distracted browsing</li>
-            <li>✓ Never stores sensitive data or passwords</li>
-          </ul>
-        </div>
-
-        {/* CTA */}
-        <a
-          href="https://chromewebstore.google.com/detail/focusos-browser-extension"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="block"
-        >
-          <Button
-            className="w-full bg-focus-purple hover:bg-focus-purple/90 text-white"
-          >
-            Install from Chrome Web Store
-          </Button>
-        </a>
+        <h1 className="font-display text-3xl font-light leading-tight text-text-primary sm:text-4xl">
+          Enable the browser layer for calmer sessions.
+        </h1>
+        <p className="max-w-[56ch] text-sm leading-6 text-text-secondary sm:text-base">
+          The extension helps FocusOS understand when attention drifts so it can support recovery during a session.
+        </p>
       </div>
 
-      {/* Navigation */}
-      <div className="flex gap-3 pt-4">
+      <div className="grid gap-3">
+        {extensionNotes.map((note) => {
+          const Icon = note.icon;
+          return (
+            <div
+              key={note.title}
+              className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
+            >
+              <div className="flex gap-3">
+                <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl border border-white/10 bg-bg-void/40 text-focus-green">
+                  <Icon className="h-5 w-5" aria-hidden="true" />
+                </span>
+                <span>
+                  <span className="block text-sm font-medium text-text-primary">{note.title}</span>
+                  <span className="mt-1 block text-sm leading-6 text-text-secondary">
+                    {note.description}
+                  </span>
+                </span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <a
+        href="https://chromewebstore.google.com/detail/focusos-browser-extension"
+        target="_blank"
+        rel="noopener noreferrer"
+        className="block"
+      >
+        <Button className="h-12 w-full rounded-2xl">
+          Install from Chrome Web Store
+        </Button>
+      </a>
+
+      <div className="grid gap-3 pt-2 sm:grid-cols-2">
         <Button
-          variant="outline"
-          className="flex-1 border-subtle-border"
+          variant="secondary"
+          className="h-12 rounded-2xl"
           onClick={handleContinue}
         >
-          Skip for Now
+          Set up later
         </Button>
-        <Button
-          onClick={handleContinue}
-          className="flex-1 bg-focus-purple hover:bg-focus-purple/90 text-white"
-        >
-          Continue
+        <Button onClick={handleContinue} className="h-12 rounded-2xl">
+          Enter dashboard
         </Button>
       </div>
-    </div>
+    </motion.div>
   );
 }

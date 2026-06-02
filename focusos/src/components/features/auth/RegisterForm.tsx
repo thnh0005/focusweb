@@ -10,7 +10,14 @@ import { useAuthStore } from "@/stores/auth.store";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Spinner } from "@/components/ui/Spinner";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/Card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/Card";
 
 export function RegisterForm() {
   const router = useRouter();
@@ -65,7 +72,7 @@ export function RegisterForm() {
     setIsLoading(true);
     try {
       const response = await authApi.register({ email, password, passwordConfirm });
-      
+
       // Update global auth store state
       useAuthStore.setState({
         user: response.user,
@@ -83,66 +90,72 @@ export function RegisterForm() {
 
   return (
     <motion.div
-      initial={{ opacity: 0, y: 15 }}
+      initial={{ opacity: 0, y: 14 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
+      transition={{ duration: 0.36, ease: [0.16, 1, 0.3, 1] }}
     >
-      <Card variant="glass-card" className="border border-white/[0.06] shadow-2xl backdrop-blur-xl">
-        <CardHeader className="space-y-2 text-center pb-4">
-          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-focus-purple/10 border border-focus-purple/20 text-focus-purple animate-pulse-glow">
-            <UserPlus className="h-6 w-6 stroke-[1.5]" />
+      <Card variant="glass-card" className="overflow-hidden border-white/10 shadow-ambient">
+        <CardHeader className="space-y-3 px-6 pb-5 pt-7 text-center sm:px-8">
+          <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.055] text-focus-green">
+            <UserPlus className="h-5 w-5 stroke-[1.7]" aria-hidden="true" />
           </div>
-          <CardTitle className="text-2xl font-light tracking-wide text-text-primary mt-2">
-            Create Account
-          </CardTitle>
-          <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-            Begin your journey towards mindful productivity
-          </CardDescription>
+          <div className="space-y-2">
+            <CardTitle className="text-2xl font-light text-text-primary">
+              Create your focus space
+            </CardTitle>
+            <CardDescription className="mx-auto max-w-[31ch] text-sm leading-6 text-text-secondary">
+              Set up a calm place for sessions, reflection, and gentle attention tracking.
+            </CardDescription>
+          </div>
         </CardHeader>
-        <CardContent>
+
+        <CardContent className="px-6 sm:px-8">
           <form onSubmit={handleSubmit} className="space-y-4" noValidate>
             {submitError && (
-              <div 
+              <div
                 role="alert"
-                className="p-3.5 rounded-lg border border-red-500/10 bg-red-500/5 text-xs text-urgency-coral font-light tracking-wide leading-relaxed animate-fade-in"
+                className="rounded-2xl border border-urgency-coral/20 bg-urgency-coral/10 p-3.5 text-sm leading-6 text-urgency-coral animate-fade-in"
               >
                 {submitError}
               </div>
             )}
-            
+
             <Input
               type="email"
-              label="Email Address"
-              placeholder="e.g. minh@example.com"
+              label="Email address"
+              placeholder="minh@example.com"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={emailError}
               disabled={isLoading}
               autoComplete="email"
+              className="h-11 rounded-2xl bg-white/[0.055] focus-visible:border-ring"
               required
             />
 
             <Input
               type="password"
               label="Password"
-              placeholder="Min. 6 characters"
+              placeholder="At least 6 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={passwordError}
               disabled={isLoading}
               autoComplete="new-password"
+              className="h-11 rounded-2xl bg-white/[0.055] focus-visible:border-ring"
               required
             />
 
             <Input
               type="password"
-              label="Confirm Password"
+              label="Confirm password"
               placeholder="Re-enter your password"
               value={passwordConfirm}
               onChange={(e) => setPasswordConfirm(e.target.value)}
               error={confirmError}
               disabled={isLoading}
               autoComplete="new-password"
+              className="h-11 rounded-2xl bg-white/[0.055] focus-visible:border-ring"
               required
             />
 
@@ -151,25 +164,26 @@ export function RegisterForm() {
               variant="primary"
               size="lg"
               disabled={isLoading}
-              className="w-full mt-2 font-light tracking-wide flex items-center justify-center gap-2 h-11"
+              className="mt-2 flex h-12 w-full items-center justify-center gap-2 rounded-2xl"
             >
               {isLoading ? (
                 <>
                   <Spinner className="h-4 w-4 text-primary-foreground" />
-                  <span>Creating Account...</span>
+                  <span>Creating your space...</span>
                 </>
               ) : (
-                <span>Register</span>
+                <span>Create focus space</span>
               )}
             </Button>
           </form>
         </CardContent>
-        <CardFooter className="flex justify-center border-t border-white/[0.05] pt-4 mt-2">
-          <p className="text-xs text-text-muted font-light">
-            Already have an account?{" "}
+
+        <CardFooter className="justify-center border-t border-white/[0.06] px-6 pb-6 pt-5 sm:px-8">
+          <p className="text-sm text-text-muted">
+            Already have a space?{" "}
             <Link
               href="/login"
-              className="text-focus-purple hover:text-focus-purple/80 transition-colors font-medium ml-0.5"
+              className="font-medium text-focus-green transition-colors hover:text-focus-green/80 focus-ring-soft"
             >
               Sign in
             </Link>

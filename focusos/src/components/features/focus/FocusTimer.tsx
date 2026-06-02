@@ -1,7 +1,6 @@
 "use client";
 
 import * as React from "react";
-import { motion, useReducedMotion } from "framer-motion";
 import { cn } from "@/lib/utils/cn";
 
 export interface FocusTimerProps {
@@ -15,11 +14,11 @@ export interface FocusTimerProps {
   isActive: boolean;
   /** Whether timer is auto-paused by distraction engine */
   isAutoPaused?: boolean;
-  /** Glow color for the ring (CSS color value) */
+  /** Glow color for the timer backdrop */
   glowColor?: string;
-  /** Ring color for the progress arc */
+  /** Color for the progress line */
   ringColor?: string;
-  /** Callback when ring is double-clicked → Zen mode */
+  /** Callback when timer is double-clicked */
   onDoubleClick?: () => void;
   className?: string;
 }
@@ -28,18 +27,13 @@ function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
+
   if (h > 0) {
     return `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
   }
+
   return `${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
-
-// SVG ring radius / circumference constants
-const RING_SIZE = 280;       // viewBox size
-const STROKE_WIDTH = 6;
-const CENTER = RING_SIZE / 2;
-const RADIUS = CENTER - STROKE_WIDTH * 2;
-const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
 
 export function FocusTimer({
   timeLeft,
@@ -47,122 +41,82 @@ export function FocusTimer({
   progress,
   isActive,
   isAutoPaused = false,
-  glowColor = "rgba(124, 58, 237, 0.35)",
-  ringColor = "#7C3AED",
+  glowColor = "rgba(124, 171, 145, 0.35)",
+  ringColor = "hsl(var(--accent))",
   onDoubleClick,
   className,
 }: FocusTimerProps) {
-  const prefersReduced = useReducedMotion();
-
-  // stroke-dashoffset: full circumference = empty ring, 0 = full ring
-  const strokeDashoffset = CIRCUMFERENCE * (1 - progress / 100);
-
+  const isPaused = !isActive && !isAutoPaused;
   const displayTime = formatTime(timeLeft);
+  const clampedProgress = Math.max(0, Math.min(100, progress));
 
   return (
     <div
-      className={cn("relative flex items-center justify-center select-none", className)}
+      className={cn(
+        "relative mx-auto flex w-full max-w-5xl select-none flex-col items-center justify-center px-2",
+        className
+      )}
       onDoubleClick={onDoubleClick}
       role="timer"
       aria-label={`Focus timer: ${displayTime} remaining`}
       aria-live="polite"
     >
-      {/* Glow halo behind ring */}
       <div
-        className="absolute inset-0 rounded-full transition-all duration-slow"
+        className="pointer-events-none absolute inset-x-[12%] top-1/2 h-32 -translate-y-1/2 rounded-full blur-3xl transition-all duration-slow"
         style={{
-          boxShadow: `0 0 80px 20px ${glowColor}`,
-          opacity: isActive && !isAutoPaused ? 0.6 : 0.2,
+          background: glowColor,
+          opacity: isActive && !isAutoPaused ? 0.34 : isAutoPaused ? 0.22 : 0.14,
         }}
         aria-hidden="true"
       />
 
-      {/* SVG Timer Ring — using stroke-dasharray/offset as per design1.md spec */}
-      <svg
-        width={RING_SIZE}
-        height={RING_SIZE}
-        viewBox={`0 0 ${RING_SIZE} ${RING_SIZE}`}
-        aria-hidden="true"
-        className="relative z-10"
-      >
-        {/* Track (background) circle */}
-        <circle
-          cx={CENTER}
-          cy={CENTER}
-          r={RADIUS}
-          fill="none"
-          stroke="rgba(255, 255, 255, 0.04)"
-          strokeWidth={STROKE_WIDTH}
-        />
-
-        {/* Progress arc — rotated -90deg so it starts at 12 o'clock */}
-        <motion.circle
-          cx={CENTER}
-          cy={CENTER}
-          r={RADIUS}
-          fill="none"
-          stroke={ringColor}
-          strokeWidth={STROKE_WIDTH}
-          strokeLinecap="round"
-          strokeDasharray={CIRCUMFERENCE}
-          strokeDashoffset={prefersReduced ? strokeDashoffset : undefined}
-          style={{
-            transform: "rotate(-90deg)",
-            transformOrigin: "center",
-          }}
-          animate={
-            prefersReduced
-              ? {}
-              : { strokeDashoffset }
-          }
-          transition={{
-            duration: 1,
-            ease: [0.4, 0, 0.6, 1], // --ease-pulse
-          }}
-        />
-      </svg>
-
-      {/* Center time display */}
-      <div
-        className="absolute inset-0 flex flex-col items-center justify-center z-20"
-        aria-hidden="true"
-      >
-        {/* Timer digits — Geist font, weight 300 per design1.md */}
+      <div className="relative z-10 flex w-full flex-col items-center">
         <span
           className={cn(
-            "timer-display tabular-nums transition-all duration-fast",
-            isAutoPaused
-              ? "text-urgency-amber"
-              : "text-text-primary"
+            "font-display tabular-nums leading-none transition-all duration-fast",
+            isActive && !isAutoPaused && "animate-[timer-pulse_1s_ease-in-out_infinite]",
+            isPaused && "opacity-60",
+            isAutoPaused ? "text-urgency-amber" : "text-text-primary"
           )}
-          style={{ fontVariantNumeric: "tabular-nums" }}
+          style={{
+            fontSize: "clamp(4.7rem, 18vw, 13rem)",
+            fontVariantNumeric: "tabular-nums",
+            fontWeight: 300,
+            letterSpacing: "0",
+          }}
+          aria-hidden="true"
         >
           {displayTime}
         </span>
 
-        {/* Auto-paused label */}
         {isAutoPaused && (
-          <motion.span
-            initial={prefersReduced ? {} : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-1 text-[10px] font-mono uppercase tracking-[0.22em] text-urgency-amber"
-          >
-            Auto-Paused
-          </motion.span>
+          <span className="mt-3 rounded-full border border-urgency-amber/30 bg-urgency-amber/10 px-3 py-1 text-[11px] font-mono text-urgency-amber">
+            Auto-paused
+          </span>
         )}
 
-        {/* Paused label */}
         {!isActive && !isAutoPaused && totalDuration > 0 && (
-          <motion.span
-            initial={prefersReduced ? {} : { opacity: 0, y: 6 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ duration: 0.4, ease: [0.16, 1, 0.3, 1] }}
-            className="mt-1 text-[10px] font-mono uppercase tracking-[0.22em] text-text-muted"
-          >
+          <span className="mt-3 rounded-full border border-white/10 bg-white/[0.05] px-3 py-1 text-[11px] font-mono text-text-muted">
             Paused
-          </motion.span>
+          </span>
         )}
+
+        <div
+          className="mt-7 h-1.5 w-full max-w-xl overflow-hidden rounded-full bg-white/[0.08]"
+          role="progressbar"
+          aria-label="Session time remaining"
+          aria-valuemin={0}
+          aria-valuemax={100}
+          aria-valuenow={Math.round(clampedProgress)}
+        >
+          <div
+            className="h-full rounded-full transition-all duration-slow"
+            style={{
+              width: `${clampedProgress}%`,
+              background: isAutoPaused ? "hsl(var(--urgency-amber))" : ringColor,
+            }}
+          />
+        </div>
       </div>
     </div>
   );

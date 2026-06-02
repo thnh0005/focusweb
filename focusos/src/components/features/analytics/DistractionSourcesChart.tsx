@@ -2,13 +2,13 @@
 
 import * as React from "react";
 import {
-  BarChart,
   Bar,
+  BarChart,
+  CartesianGrid,
+  ResponsiveContainer,
+  Tooltip,
   XAxis,
   YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
 } from "recharts";
 import { Card } from "@/components/ui/Card";
 
@@ -29,13 +29,11 @@ export function DistractionSourcesChart({
 }: DistractionSourcesChartProps) {
   if (isLoading) {
     return (
-      <Card className="p-6 space-y-4">
-        <h3 className="text-lg font-medium text-text-primary">
-          Top Distraction Sources
-        </h3>
+      <Card className="rounded-3xl p-6 space-y-4">
+        <h3 className="text-lg font-light text-text-primary">Distraction sources</h3>
         <div className="space-y-2">
           {[1, 2, 3].map((i) => (
-            <div key={i} className="h-8 bg-white/5 rounded-lg animate-pulse" />
+            <div key={i} className="h-8 rounded-2xl bg-white/[0.045] animate-pulse" />
           ))}
         </div>
       </Card>
@@ -44,12 +42,10 @@ export function DistractionSourcesChart({
 
   if (!data || data.length === 0) {
     return (
-      <Card className="p-6 space-y-4">
-        <h3 className="text-lg font-medium text-text-primary">
-          Top Distraction Sources
-        </h3>
-        <div className="h-40 flex items-center justify-center">
-          <p className="text-text-muted">No distraction data yet</p>
+      <Card className="rounded-3xl p-6 space-y-4">
+        <h3 className="text-lg font-light text-text-primary">Distraction sources</h3>
+        <div className="h-40 flex items-center justify-center rounded-2xl border border-white/10 bg-white/[0.03]">
+          <p className="text-sm text-text-muted">No distraction warnings recorded yet.</p>
         </div>
       </Card>
     );
@@ -61,45 +57,34 @@ export function DistractionSourcesChart({
   }));
 
   return (
-    <Card className="p-6 space-y-4">
-      <h3 className="text-lg font-medium text-text-primary">
-        Top Distraction Sources
-      </h3>
+    <Card className="rounded-3xl p-6 space-y-4">
+      <div>
+        <h3 className="text-lg font-light text-text-primary">Distraction sources</h3>
+        <p className="mt-1 text-xs text-text-muted">Warning count by domain</p>
+      </div>
 
       <ResponsiveContainer width="100%" height={250}>
         <BarChart data={chartData} margin={{ top: 5, right: 30, left: 0, bottom: 5 }}>
-          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.1)" />
-          <XAxis
-            dataKey="name"
-            stroke="rgba(255,255,255,0.3)"
-            style={{ fontSize: "12px" }}
-          />
-          <YAxis
-            stroke="rgba(255,255,255,0.3)"
-            style={{ fontSize: "12px" }}
-          />
+          <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.07)" />
+          <XAxis dataKey="name" stroke="rgba(246,241,223,0.34)" style={{ fontSize: "12px" }} />
+          <YAxis stroke="rgba(246,241,223,0.34)" style={{ fontSize: "12px" }} />
           <Tooltip
             contentStyle={{
-              background: "rgba(17, 24, 39, 0.95)",
+              background: "rgba(20, 24, 18, 0.96)",
               border: "1px solid rgba(255,255,255,0.1)",
-              borderRadius: "8px",
+              borderRadius: "16px",
             }}
-            labelStyle={{ color: "rgba(255,255,255,0.7)" }}
+            labelStyle={{ color: "rgba(255,255,255,0.72)" }}
           />
-          <Bar
-            dataKey="warnings"
-            fill="#ef4444"
-            radius={[8, 8, 0, 0]}
-            isAnimationActive={false}
-          />
+          <Bar dataKey="warnings" fill="rgb(200, 138, 101)" radius={[8, 8, 0, 0]} isAnimationActive={false} />
         </BarChart>
       </ResponsiveContainer>
 
-      <div className="space-y-2 mt-6">
+      <div className="space-y-2 pt-2">
         {data.slice(0, 5).map((source, idx) => (
           <div
             key={source.domain}
-            className="flex items-center justify-between p-2 rounded-lg bg-white/5"
+            className="flex items-center justify-between rounded-2xl border border-white/10 bg-white/[0.035] p-3"
           >
             <div>
               <p className="text-sm font-medium text-text-primary">
@@ -109,11 +94,9 @@ export function DistractionSourcesChart({
                 {source.sessionPercentage}% of sessions
               </p>
             </div>
-            <div className="text-right">
-              <p className="text-sm font-medium text-red-400">
-                {source.warningCount}x
-              </p>
-            </div>
+            <p className="text-sm font-medium text-urgency-amber">
+              {source.warningCount}x
+            </p>
           </div>
         ))}
       </div>

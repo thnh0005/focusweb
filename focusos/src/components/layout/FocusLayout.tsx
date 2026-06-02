@@ -2,10 +2,10 @@
 
 import * as React from "react";
 import { Volume2, Play, Pause, SkipForward, Music } from "lucide-react";
-import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "../ui/Button";
-import { Tooltip, TooltipContent, TooltipTrigger, TooltipProvider } from "../ui/Tooltip";
-import { cn } from "@/lib/utils/cn";
+import { Tooltip, TooltipContent, TooltipTrigger } from "../ui/Tooltip";
+import { GradientMeshBackground } from "./GradientMeshBackground";
+import { GlassPanel } from "../ui/GlassPanel";
 
 export interface FocusLayoutProps {
   children: React.ReactNode;
@@ -22,45 +22,11 @@ export function FocusLayout({
   const [volume, setVolume] = React.useState(70);
   const [trackName, setTrackName] = React.useState("Stoic Echoes (Lofi)");
 
-  // Translate phase to micro-copy message (design1.md spec)
-  const getMicroCopy = () => {
-    switch (phase) {
-      case "short-break":
-        return "Rest your eyes";
-      case "long-break":
-        return "Step away, breathe";
-      case "focus":
-      default:
-        return "Stay in the zone";
-    }
-  };
+  const meshMode = phase === "short-break" ? "short-break" : phase === "long-break" ? "long-break" : "focus";
 
   return (
-    <TooltipProvider>
-      <div className="min-h-[100dvh] bg-background text-text-primary overflow-hidden relative flex flex-col justify-between p-6 select-none">
-        
-        {/* Layer 2: Animated Ambient Background Orbs */}
-        <div className="ambient-orbs phase-transition" data-phase={phase}>
-          <div className="ambient-orb ambient-orb-1" />
-          <div className="ambient-orb ambient-orb-2" />
-          <div className="ambient-orb ambient-orb-3" />
-        </div>
-
-        {/* Top Header - Micro Ambient Message (Stoic quote vibe) */}
-        <header className="w-full flex justify-between items-center z-10 p-2">
-          <div className="flex items-center space-x-2">
-            <div className="h-3 w-3 rounded-full bg-focus-purple-muted flex items-center justify-center">
-              <span className="h-1 w-1 rounded-full bg-focus-purple" />
-            </div>
-            <span className="text-[11px] font-mono tracking-[0.22em] text-text-muted uppercase">
-              Sanctuary Mode
-            </span>
-          </div>
-
-          <div className="text-xs italic text-text-secondary transition-all duration-800 tracking-wide font-light">
-            &ldquo;{getMicroCopy()}&rdquo;
-          </div>
-        </header>
+      <div className="min-h-[100dvh] bg-bg-void text-text-primary overflow-hidden relative flex flex-col justify-between p-6 select-none">
+        <GradientMeshBackground mode={meshMode} />
 
         {/* Core Timer Center Stage */}
         <div className="flex-1 flex items-center justify-center z-10 py-12">
@@ -70,12 +36,11 @@ export function FocusLayout({
         </div>
 
         {/* Bottom Panel Wrapper */}
-        <footer className="w-full flex flex-col md:flex-row items-center justify-between gap-6 z-10 p-2">
-          {/* spacer */}
+        <footer className="w-full flex items-center justify-center md:justify-between gap-6 z-10 p-2">
           <div className="hidden md:block w-32" />
 
-          {/* Floating Music HUD Controls (Bottom Center - design1.md spec) */}
-          <div className="control-dock glass-action text-text-primary flex items-center justify-between w-max gap-5">
+          {/* Music HUD */}
+          <GlassPanel className="control-dock text-text-primary flex items-center justify-between w-max gap-5">
             <div className="flex items-center space-x-2">
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -138,7 +103,7 @@ export function FocusLayout({
                 aria-label="Volume slider"
               />
             </div>
-          </div>
+          </GlassPanel>
 
           {/* End Session Pill (Bottom Right - design1.md spec) */}
           <div className="w-full md:w-auto flex justify-center md:justify-end">
@@ -147,11 +112,10 @@ export function FocusLayout({
               className="text-xs text-urgency-coral hover:text-urgency-coral/80 font-mono tracking-wider uppercase border border-transparent hover:border-urgency-coral/10 hover:bg-urgency-coral/5 rounded-full px-4 h-9 active:scale-[0.98]"
               onClick={onEndSession}
             >
-              ⏸ End Session
+              End Session
             </Button>
           </div>
         </footer>
       </div>
-    </TooltipProvider>
   );
 }

@@ -2,163 +2,241 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "@/hooks/useSession";
+import { useFocusScore } from "@/hooks/useFocusScore";
 import { useSessionStore } from "@/stores/session.store";
+import { useMusicStore } from "@/stores/music.store";
+import { FocusTimer } from "@/components/features/focus/FocusTimer";
+import { DistractionWarningOverlay } from "@/components/features/focus/DistractionWarningOverlay";
+import { AutoPauseModal } from "@/components/features/focus/AutoPauseModal";
+import { SessionNotepad } from "@/components/features/focus/SessionNotepad";
+import { ImmersiveSessionShell } from "@/components/session/ImmersiveSessionShell";
+import { SessionGoalHeader } from "@/components/session/SessionGoalHeader";
+import { SessionControlPills } from "@/components/session/SessionControlPills";
+import { FocusStatePill } from "@/components/session/FocusStatePill";
+import { SessionUtilityDock } from "@/components/session/SessionUtilityDock";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) return false;
+  const tagName = target.tagName.toLowerCase();
+  return (
+    tagName === "input" ||
+    tagName === "textarea" ||
+    tagName === "select" ||
+    target.isContentEditable
+  );
+}
 
 export default function ActiveSessionPage() {
   const router = useRouter();
-  const [timeLeft, setTimeLeft] = React.useState<number>(0);
-  const [totalDuration, setTotalDuration] = React.useState<number>(0);
   const {
-    sessionConfig,
+    activeSession,
     sessionStatus,
+    timeLeft,
+    progress,
+    pauseSession,
+    resumeSession,
+    endSession,
+    sessionNote,
+    setSessionNote,
+  } = useSession();
+  const {
     realtimeFocusScore,
     warningLevel,
     isAutoPaused,
+    clearWarning,
+    tabSwitchCount,
+    isLoading,
   } = useSessionStore();
+  const { togglePlay } = useMusicStore();
+  const scoreMetrics = useFocusScore(realtimeFocusScore);
+  const [isNoteOpen, setIsNoteOpen] = React.useState(false);
+  const [confirmEndOpen, setConfirmEndOpen] = React.useState(false);
 
-  // Initialize timer and redirect if no session config
   React.useEffect(() => {
-    if (!sessionConfig) {
+    if (!activeSession) {
       router.push("/session");
+    }
+  }, [activeSession, router]);
+
+  const handleEndSession = React.useCallback(async () => {
+    try {
+      const completed = await endSession();
+      setConfirmEndOpen(false);
+      router.push(`/session/summary/${completed.id}`);
+    } catch (error) {
+      console.error("Failed to end session:", error);
+      router.push("/dashboard");
+    }
+  }, [endSession, router]);
+
+  const handlePauseResume = React.useCallback(() => {
+    if (sessionStatus === "active") {
+      pauseSession().catch((error) => console.error("Failed to pause session:", error));
       return;
     }
 
-    const durationSeconds = sessionConfig.durationMinutes * 60;
-    setTotalDuration(durationSeconds);
-    setTimeLeft(durationSeconds);
+    if (sessionStatus === "paused" || sessionStatus === "auto-paused") {
+      resumeSession().catch((error) => console.error("Failed to resume session:", error));
+    }
+  }, [pauseSession, resumeSession, sessionStatus]);
 
-    // Timer countdown
-    const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          clearInterval(interval);
-          router.push("/dashboard");
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  React.useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (confirmEndOpen) return;
+      if (isEditableTarget(event.target)) return;
 
-    return () => clearInterval(interval);
-  }, [sessionConfig, router]);
+      if (event.key === " ") {
+        event.preventDefault();
+        handlePauseResume();
+      }
 
-  if (!sessionConfig) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        setConfirmEndOpen(true);
+      }
+
+      if (event.key.toLowerCase() === "n") {
+        event.preventDefault();
+        setIsNoteOpen((value) => !value);
+      }
+
+      if (event.key.toLowerCase() === "m") {
+        event.preventDefault();
+        togglePlay();
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, [confirmEndOpen, handlePauseResume, togglePlay]);
+
+  const handleToggleFullscreen = React.useCallback(() => {
+    if (typeof document === "undefined") return;
+
+    if (document.fullscreenElement) {
+      document.exitFullscreen().catch((error) => console.warn("Could not exit fullscreen:", error));
+      return;
+    }
+
+    document.documentElement
+      .requestFullscreen()
+      .catch((error) => console.warn("Could not enter fullscreen:", error));
+  }, []);
+
+  if (!activeSession) {
     return null;
   }
 
-  const progress = ((totalDuration - timeLeft) / totalDuration) * 100;
-  const minutes = Math.floor(timeLeft / 60);
-  const seconds = timeLeft % 60;
-
-  const handleEndSession = () => {
-    router.push("/dashboard");
-  };
+  const totalDuration = activeSession.targetDurationSeconds;
+  const durationMinutes = Math.round(totalDuration / 60);
+  const isActive = sessionStatus === "active";
+  const isPaused = sessionStatus === "paused";
 
   return (
-    <div className="relative w-full h-screen flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-ambient-dark via-surface-deep to-ambient-dark">
-      {/* Ambient Background */}
-      <div className="absolute inset-0 opacity-30 pointer-events-none">
-        <div
-          className="absolute inset-0 transition-colors duration-1000"
-          style={{
-            background: `radial-gradient(circle at 50% 50%, rgba(168, 85, 247, ${0.05 + (realtimeFocusScore ?? 50) / 500}), transparent 70%)`,
-          }}
-        />
-      </div>
-
-      {/* Main Content */}
-      <div className="relative z-10 flex flex-col items-center justify-center gap-12">
-        {/* Timer Display */}
-        <div className="relative w-64 h-64 flex items-center justify-center">
-          {/* SVG Circle */}
-          <svg className="absolute w-full h-full transform -rotate-90" viewBox="0 0 280 280">
-            <circle
-              cx="140"
-              cy="140"
-              r="130"
-              fill="none"
-              stroke="rgba(255,255,255,0.1)"
-              strokeWidth="6"
-            />
-            <circle
-              cx="140"
-              cy="140"
-              r="130"
-              fill="none"
-              stroke="rgba(168, 85, 247, 1)"
-              strokeWidth="6"
-              strokeDasharray={`${2 * Math.PI * 130}`}
-              strokeDashoffset={`${2 * Math.PI * 130 * (1 - progress / 100)}`}
-              strokeLinecap="round"
-              className="transition-all duration-300"
-            />
-          </svg>
-
-          {/* Time Display */}
-          <div className="text-center z-10">
-            <p className="text-6xl font-extralight text-text-primary">
-              {String(minutes).padStart(2, "0")}:{String(seconds).padStart(2, "0")}
-            </p>
-            <p className="text-sm text-text-muted mt-2 font-light">
-              {sessionConfig.mode === "deep-work" ? "Deep Work" : "Focus"} Session
-            </p>
+    <>
+      <ImmersiveSessionShell
+        goalHeader={
+          <SessionGoalHeader
+            goal={activeSession.goal}
+            mode={activeSession.mode}
+            durationMinutes={durationMinutes}
+          />
+        }
+        timer={
+          <FocusTimer
+            timeLeft={timeLeft}
+            totalDuration={totalDuration}
+            progress={progress}
+            isActive={isActive}
+            isAutoPaused={isAutoPaused}
+            glowColor={scoreMetrics.glowColor}
+          />
+        }
+        controls={
+          <SessionControlPills
+            isActive={isActive}
+            isPaused={isPaused}
+            isAutoPaused={isAutoPaused}
+            isLoading={isLoading}
+            onPause={pauseSession}
+            onResume={resumeSession}
+            onEnd={() => setConfirmEndOpen(true)}
+          />
+        }
+        state={<FocusStatePill metrics={scoreMetrics} isActive={isActive} />}
+        utilityDock={
+          <SessionUtilityDock
+            noteOpen={isNoteOpen}
+            onToggleNote={() => setIsNoteOpen((value) => !value)}
+            onToggleFullscreen={handleToggleFullscreen}
+          />
+        }
+        notePanel={
+          <SessionNotepad
+            isOpen={isNoteOpen}
+            note={sessionNote}
+            onNoteChange={setSessionNote}
+            onClose={() => setIsNoteOpen(false)}
+          />
+        }
+        diagnostics={
+          <div className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-[11px] font-mono text-text-muted backdrop-blur-md">
+            {tabSwitchCount} tab switches
           </div>
-        </div>
+        }
+        overlays={
+          <>
+            <DistractionWarningOverlay
+              warningLevel={warningLevel}
+              onDismiss={clearWarning}
+            />
+            <AutoPauseModal
+              isOpen={isAutoPaused}
+              onResume={resumeSession}
+              onEnd={() => setConfirmEndOpen(true)}
+              isLoading={isLoading}
+            />
+          </>
+        }
+      />
 
-        {/* Focus Score */}
-        <div className="absolute top-8 right-8 text-right">
-          <p className="text-xs text-text-muted font-light">Focus Score</p>
-          <p className="text-4xl font-light text-focus-purple">
-            {realtimeFocusScore ?? 100}%
-          </p>
-        </div>
-
-        {/* Session Goal */}
-        {sessionConfig.goal && (
-          <Card className="mt-8 p-6 max-w-md bg-focus-purple/10 border-focus-purple/30">
-            <p className="text-xs text-text-muted font-medium mb-2">GOAL</p>
-            <p className="text-sm text-text-secondary font-light">
-              {sessionConfig.goal}
-            </p>
-          </Card>
-        )}
-      </div>
-
-      {/* Session Controls */}
-      <div className="absolute bottom-8 right-8">
-        <Button
-          onClick={handleEndSession}
-          className="bg-red-600 hover:bg-red-700 text-white"
-        >
-          End Session
-        </Button>
-      </div>
-
-      {/* Warning Badge */}
-      {warningLevel && (
-        <div className="absolute top-8 left-8 p-3 rounded-lg bg-amber-500/20 border border-amber-500/50">
-          <p className="text-sm font-medium text-amber-300">
-            ⚠ Distraction Warning {warningLevel}/3
-          </p>
-        </div>
-      )}
-
-      {/* Auto-Pause Indicator */}
-      {isAutoPaused && (
-        <div className="absolute inset-0 flex items-center justify-center bg-black/50 z-50">
-          <Card className="p-6 text-center">
-            <p className="text-lg font-medium text-text-primary">Session Paused</p>
-            <p className="text-sm text-text-secondary mt-2 font-light">
-              Distraction detected. Click below to resume.
-            </p>
-            <Button className="mt-4 bg-focus-purple hover:bg-focus-purple/90 text-white">
-              Resume
+      <Dialog open={confirmEndOpen} onOpenChange={setConfirmEndOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>End this focus session?</DialogTitle>
+            <DialogDescription>
+              Your current note will be saved with the session summary.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-3 sm:gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setConfirmEndOpen(false)}
+            >
+              Keep focusing
             </Button>
-          </Card>
-        </div>
-      )}
-    </div>
+            <Button
+              type="button"
+              variant="danger"
+              onClick={handleEndSession}
+              disabled={isLoading}
+            >
+              End session
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }

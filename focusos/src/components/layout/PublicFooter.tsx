@@ -1,36 +1,29 @@
 import * as React from "react";
 import Link from "next/link";
+import { ExternalLink } from "lucide-react";
 
 export function PublicFooter() {
   const currentYear = new Date().getFullYear();
 
   return (
-    <footer className="border-t border-white/5 bg-background py-8 text-center text-xs font-light text-text-muted select-none">
-      <div className="max-w-7xl mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-        <div>
-          <span>&copy; {currentYear} FocusOS. Engineered for digital calm.</span>
-        </div>
-        <nav className="flex items-center space-x-6" aria-label="Footer Navigation">
-          <Link
-            href="/privacy"
-            className="hover:text-text-secondary transition-colors duration-120"
-          >
+    <footer className="relative z-10 border-t border-white/[0.06] bg-bg-void/70 py-8 text-xs text-text-muted backdrop-blur-xl">
+      <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 sm:px-6 md:flex-row">
+        <p>© {currentYear} FocusOS. Built for digital calm.</p>
+        <nav className="flex flex-wrap items-center justify-center gap-x-6 gap-y-3" aria-label="Footer navigation">
+          <Link href="/privacy" className="transition-colors hover:text-text-secondary">
             Privacy
           </Link>
-          <Link
-            href="/terms"
-            className="hover:text-text-secondary transition-colors duration-120"
-          >
+          <Link href="/terms" className="transition-colors hover:text-text-secondary">
             Terms
           </Link>
           <a
             href="https://chromewebstore.google.com"
             target="_blank"
             rel="noopener noreferrer"
-            className="hover:text-text-secondary transition-colors duration-120 flex items-center space-x-1"
+            className="inline-flex items-center gap-1 transition-colors hover:text-text-secondary"
           >
-            <span>Extension</span>
-            <span className="text-[10px] opacity-75">↗</span>
+            Extension
+            <ExternalLink className="h-3 w-3" aria-hidden="true" />
           </a>
         </nav>
       </div>

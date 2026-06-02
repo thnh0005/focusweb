@@ -18,7 +18,6 @@ export function useSession() {
   } = useSessionStore();
 
   const [timeLeft, setTimeLeft] = React.useState<number>(0);
-  const [progress, setProgress] = React.useState<number>(100);
 
   // Initialize remaining time when activeSession starts
   React.useEffect(() => {
@@ -26,11 +25,14 @@ export function useSession() {
       // If we just started, calculate remaining seconds
       const startedTime = new Date(activeSession.startedAt).getTime();
       const elapsedSeconds = Math.floor((Date.now() - startedTime) / 1000);
-      const remaining = Math.max(0, activeSession.targetDurationSeconds - elapsedSeconds);
-      setTimeLeft(remaining);
-    } else if (!activeSession) {
-      setTimeLeft(0);
-      setProgress(100);
+      const nextTimeLeft = Math.max(0, activeSession.targetDurationSeconds - elapsedSeconds);
+      const timer = window.setTimeout(() => setTimeLeft(nextTimeLeft), 0);
+      return () => window.clearTimeout(timer);
+    }
+
+    if (!activeSession) {
+      const timer = window.setTimeout(() => setTimeLeft(0), 0);
+      return () => window.clearTimeout(timer);
     }
   }, [activeSession, sessionStatus]);
 
@@ -55,14 +57,12 @@ export function useSession() {
     return () => clearInterval(timer);
   }, [sessionStatus, timeLeft, endSession]);
 
-  // Calculate Progress percentage
-  React.useEffect(() => {
+  const progress = React.useMemo(() => {
     if (!activeSession || activeSession.targetDurationSeconds <= 0) {
-      setProgress(100);
-      return;
+      return 100;
     }
     const percent = (timeLeft / activeSession.targetDurationSeconds) * 100;
-    setProgress(Math.max(0, Math.min(100, percent)));
+    return Math.max(0, Math.min(100, percent));
   }, [timeLeft, activeSession]);
 
   // Trigger event chime on manual start

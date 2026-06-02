@@ -25,7 +25,7 @@ export function TopBar({ streakCount = 7 }: TopBarProps) {
   };
 
   return (
-    <header className="h-16 border-b border-white/5 bg-background px-6 md:px-8 flex items-center justify-between z-10 relative select-none">
+    <header className="h-16 border-b border-white/[0.06] bg-bg-void px-6 md:px-8 flex items-center justify-between z-10 relative select-none">
       {/* Title / Breadcrumbs */}
       <div className="flex items-center space-x-2.5">
         <span className="text-xs font-light text-text-muted hover:text-text-secondary cursor-pointer transition-colors">

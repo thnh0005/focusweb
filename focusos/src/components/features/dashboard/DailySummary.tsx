@@ -31,7 +31,7 @@ export function DailySummary({ stats }: DailySummaryProps) {
           Daily Summary
         </CardTitle>
         <CardDescription className="text-text-muted text-xs font-light">
-          Track today's deep work focus achievements
+          Track today&apos;s deep work focus achievements
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 pt-0 flex-1 flex flex-col items-center justify-center gap-6">

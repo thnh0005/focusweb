@@ -18,36 +18,36 @@ const config: Config = {
     },
     extend: {
       colors: {
-        // ── Neutrals & Backgrounds ──────────────────────────────────
         background: "hsl(var(--background))",
         "surface-deep": "hsl(var(--surface-deep))",
         "card-container": "hsl(var(--card-container))",
         "subtle-border": "hsl(var(--subtle-border))",
+        "bg-void": "var(--bg-void)",
+        "bg-ink": "var(--bg-ink)",
+        "bg-surface": "var(--bg-surface)",
+        "bg-elevated": "var(--bg-elevated)",
+        "bg-overlay": "var(--bg-overlay)",
 
-        // ── Text ────────────────────────────────────────────────────
         "text-primary": "hsl(var(--text-primary))",
         "text-secondary": "hsl(var(--text-secondary))",
         "text-muted": "hsl(var(--text-muted))",
 
-        // ── Brand / Accent ───────────────────────────────────────────
         "focus-purple": "hsl(var(--focus-purple))",
         "focus-purple-muted": "hsl(var(--focus-purple-muted))",
         "focus-green": "hsl(var(--focus-green))",
         "focus-green-muted": "hsl(var(--focus-green-muted))",
         "ambient-cyan": "hsl(var(--ambient-cyan))",
+        "accent-soft": "hsl(var(--accent-soft))",
 
-        // ── Urgency Hierarchy ────────────────────────────────────────
         "urgency-amber": "hsl(var(--urgency-amber))",
         "urgency-coral": "hsl(var(--urgency-coral))",
 
-        // ── Focus Score States ───────────────────────────────────────
-        "score-deep-focus": "#22c55e",
-        "score-focused": "#84cc16",
-        "score-average": "#eab308",
-        "score-distracted": "#f97316",
-        "score-highly-distracted": "#ef4444",
+        "score-deep-focus": "hsl(var(--score-deep))",
+        "score-focused": "hsl(var(--score-focused))",
+        "score-average": "hsl(var(--score-average))",
+        "score-distracted": "hsl(var(--score-distracted))",
+        "score-highly-distracted": "hsl(var(--score-critical))",
 
-        // ── Shadcn compatibility ─────────────────────────────────────
         foreground: "hsl(var(--foreground))",
         card: {
           DEFAULT: "hsl(var(--card))",
@@ -83,9 +83,10 @@ const config: Config = {
       },
 
       fontFamily: {
-        sans: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
-        mono: ["var(--font-geist-mono)", "JetBrains Mono", "monospace"],
-        timer: ["var(--font-geist-sans)", "system-ui", "sans-serif"],
+        sans: ["var(--font-body)", "system-ui", "sans-serif"],
+        display: ["var(--font-display)", "system-ui", "sans-serif"],
+        mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
+        timer: ["var(--font-display)", "system-ui", "sans-serif"],
       },
 
       fontSize: {
@@ -95,14 +96,15 @@ const config: Config = {
 
       borderRadius: {
         lg: "var(--radius)",
-        md: "calc(var(--radius) - 2px)",
-        sm: "calc(var(--radius) - 4px)",
+        md: "calc(var(--radius) - 4px)",
+        sm: "calc(var(--radius) - 8px)",
+        xl: "calc(var(--radius) + 0.25rem)",
+        "2xl": "calc(var(--radius) + 0.5rem)",
         pill: "1000px",
-        "glass-card": "1.5rem",
-        "glass-inner": "calc(1.5rem - 3px)",
+        "glass-card": "calc(var(--radius) + 0.25rem)",
+        "glass-inner": "calc(var(--radius) - 0.25rem)",
       },
 
-      // ── Custom easing curves (design1.md spec) ───────────────────
       transitionTimingFunction: {
         reveal: "cubic-bezier(0.16, 1, 0.3, 1)",
         float: "cubic-bezier(0.45, 0.05, 0.55, 0.95)",
@@ -110,31 +112,36 @@ const config: Config = {
         dismiss: "cubic-bezier(0.4, 0, 1, 1)",
       },
 
-      // ── Duration tokens ──────────────────────────────────────────
       transitionDuration: {
         instant: "120ms",
         fast: "240ms",
         normal: "400ms",
         slow: "800ms",
-        ambient: "20000ms",
+        ambient: "24000ms",
       },
 
-      // ── Spacing ──────────────────────────────────────────────────
       spacing: {
         "sidebar-rail": "64px",
         "sidebar-expanded": "240px",
       },
 
-      // ── Animations ───────────────────────────────────────────────
       keyframes: {
+        "aurora-drift": {
+          "0%": { transform: "translate3d(-2%, -1%, 0) rotate(0deg) scale(1)" },
+          "100%": { transform: "translate3d(4%, 3%, 0) rotate(8deg) scale(1.08)" },
+        },
+        "aurora-breathe": {
+          "0%": { transform: "translate3d(2%, 3%, 0) rotate(-4deg) scale(1)", opacity: "0.52" },
+          "100%": { transform: "translate3d(-3%, -2%, 0) rotate(6deg) scale(1.12)", opacity: "0.74" },
+        },
         "orb-float": {
           "0%, 100%": { transform: "translate(0, 0)" },
-          "25%": { transform: "translate(30px, -20px)" },
-          "50%": { transform: "translate(-20px, 30px)" },
-          "75%": { transform: "translate(20px, 20px)" },
+          "25%": { transform: "translate(28px, -18px)" },
+          "50%": { transform: "translate(-22px, 26px)" },
+          "75%": { transform: "translate(18px, 20px)" },
         },
         "pulse-glow": {
-          "0%, 100%": { opacity: "0.6" },
+          "0%, 100%": { opacity: "0.58" },
           "50%": { opacity: "1" },
         },
         "fade-up": {
@@ -158,29 +165,40 @@ const config: Config = {
           to: { transform: "translateY(0) translateX(-50%)", opacity: "1" },
         },
       },
+
       animation: {
-        "orb-float": "orb-float 20s ease-float infinite",
+        "aurora-drift": "aurora-drift 28s ease-in-out infinite alternate",
+        "aurora-breathe": "aurora-breathe 36s ease-in-out infinite alternate",
+        "orb-float": "orb-float 24s ease-float infinite",
         "pulse-glow": "pulse-glow 3s ease-pulse infinite",
         "fade-up": "fade-up 400ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
         "fade-in": "fade-in 240ms cubic-bezier(0.16, 1, 0.3, 1) forwards",
-        shimmer: "shimmer 2s linear infinite",
+        shimmer: "shimmer 2.1s linear infinite",
         "slide-in-right": "slide-in-right 400ms cubic-bezier(0.16, 1, 0.3, 1)",
         "slide-down": "slide-down 400ms cubic-bezier(0.16, 1, 0.3, 1)",
       },
 
       backgroundImage: {
         "gradient-radial": "radial-gradient(var(--tw-gradient-stops))",
-        "glass-highlight": "linear-gradient(135deg, rgba(255,255,255,0.1) 0%, rgba(255,255,255,0) 100%)",
+        "ambient-aurora":
+          "radial-gradient(circle at 18% 22%, rgb(113 143 116 / 0.55), transparent 24%), radial-gradient(circle at 74% 18%, rgb(143 88 102 / 0.28), transparent 26%), radial-gradient(circle at 48% 72%, rgb(143 176 162 / 0.24), transparent 30%)",
+        "ambient-forest":
+          "radial-gradient(circle at 22% 22%, rgb(68 108 84 / 0.5), transparent 26%), radial-gradient(circle at 70% 64%, rgb(164 185 138 / 0.18), transparent 28%)",
+        "ambient-rain":
+          "radial-gradient(circle at 26% 24%, rgb(111 155 153 / 0.38), transparent 26%), radial-gradient(circle at 76% 66%, rgb(125 136 150 / 0.22), transparent 30%)",
+        "glass-highlight": "linear-gradient(135deg, rgb(255 255 255 / 0.1) 0%, rgb(255 255 255 / 0) 100%)",
       },
 
       boxShadow: {
-        glass: "inset 0 1px 0 rgba(255,255,255,0.10), 0 8px 32px rgba(0,0,0,0.48)",
-        "glass-sm": "inset 0 1px 0 rgba(255,255,255,0.08), 0 4px 16px rgba(0,0,0,0.32)",
-        "focus-purple": "0 0 40px rgba(124, 58, 237, 0.3)",
-        "focus-green": "0 0 40px rgba(20, 184, 166, 0.3)",
-        "score-glow-green": "0 0 24px rgba(34, 197, 94, 0.4)",
-        "score-glow-amber": "0 0 24px rgba(234, 179, 8, 0.4)",
-        "score-glow-red": "0 0 24px rgba(239, 68, 68, 0.4)",
+        glass: "inset 0 1px 0 rgb(255 255 255 / 0.08), 0 24px 70px rgb(0 0 0 / 0.42)",
+        "glass-sm": "inset 0 1px 0 rgb(255 255 255 / 0.06), 0 12px 34px rgb(0 0 0 / 0.32)",
+        ambient: "0 28px 90px rgb(33 48 36 / 0.34)",
+        glow: "0 0 80px rgb(124 171 145 / 0.2)",
+        "focus-purple": "0 0 40px rgb(124 171 145 / 0.26)",
+        "focus-green": "0 0 40px rgb(64 171 128 / 0.28)",
+        "score-glow-green": "0 0 24px rgb(64 171 128 / 0.35)",
+        "score-glow-amber": "0 0 24px rgb(218 165 78 / 0.34)",
+        "score-glow-red": "0 0 24px rgb(224 93 97 / 0.34)",
       },
 
       backdropBlur: {
