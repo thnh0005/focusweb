@@ -41,6 +41,10 @@ INSTALLED_APPS = [
     "rest_framework",
     "drf_spectacular",
     "core",
+    "apps.tracking",
+    "apps.extension",
+    "apps.ai",
+    "apps.scoring",
 ]
 
 MIDDLEWARE = [
