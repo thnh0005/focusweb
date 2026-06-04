@@ -17,6 +17,7 @@
 ## Run locally
 
 ```powershell
+Copy-Item .env.example .env
 python -m pip install -r requirements.txt
 docker compose up -d postgres redis
 python manage.py migrate
@@ -36,6 +37,7 @@ python manage.py test
 
 - `POST /api/auth/register/`
 - `POST /api/auth/login/`
+- `GET /api/auth/csrf/`
 - `POST /api/auth/logout/`
 - `GET /api/auth/me/`
 - `GET|PUT|PATCH /api/users/profile/`

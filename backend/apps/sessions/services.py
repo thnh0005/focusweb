@@ -48,15 +48,27 @@ def set_session_tags(session, tag_names):
 
 
 @transaction.atomic
-def transition_session(session, target_status, note=None, tags=None):
+def transition_session(
+    session,
+    target_status,
+    note=None,
+    tags=None,
+    allowed_from_statuses=None,
+):
     locked = (
         FocusSession.objects.select_for_update()
         .select_related("user")
         .get(pk=session.pk, user=session.user)
     )
 
-    if locked.status == target_status:
-        return locked
+    if allowed_from_statuses is not None and locked.status not in allowed_from_statuses:
+        raise ValidationError(
+            {
+                "status": [
+                    f"Cannot transition session from {locked.status} to {target_status}."
+                ]
+            }
+        )
     if target_status not in ALLOWED_TRANSITIONS.get(locked.status, set()):
         raise ValidationError(
             {

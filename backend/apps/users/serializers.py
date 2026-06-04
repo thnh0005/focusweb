@@ -8,6 +8,10 @@ from rest_framework import serializers
 from .models import OnboardingSurvey, Profile, User, UserPreference
 
 
+class CsrfTokenSerializer(serializers.Serializer):
+    csrfToken = serializers.CharField()
+
+
 class UserSerializer(serializers.ModelSerializer):
     displayName = serializers.CharField(source="display_name", read_only=True)
     avatarUrl = serializers.URLField(source="avatar_url", read_only=True)

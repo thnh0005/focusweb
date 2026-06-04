@@ -218,6 +218,7 @@ class SessionPauseView(GenericAPIView):
         session = transition_session(
             get_owned_session(request.user, session_id),
             FocusSession.Status.PAUSED,
+            allowed_from_statuses={FocusSession.Status.ACTIVE},
         )
         return Response(SessionSerializer(session).data)
 
@@ -229,6 +230,7 @@ class SessionResumeView(GenericAPIView):
         session = transition_session(
             get_owned_session(request.user, session_id),
             FocusSession.Status.ACTIVE,
+            allowed_from_statuses={FocusSession.Status.PAUSED},
         )
         return Response(SessionSerializer(session).data)
 
@@ -244,6 +246,7 @@ class SessionEndView(GenericAPIView):
             FocusSession.Status.COMPLETED,
             note=serializer.validated_data.get("note"),
             tags=serializer.validated_data.get("tags"),
+            allowed_from_statuses=set(FocusSession.OPEN_STATUSES),
         )
         return Response(SessionSerializer(session).data)
 
@@ -255,5 +258,6 @@ class SessionCancelView(GenericAPIView):
         session = transition_session(
             get_owned_session(request.user, session_id),
             FocusSession.Status.CANCELLED,
+            allowed_from_statuses=set(FocusSession.OPEN_STATUSES),
         )
         return Response(SessionSerializer(session).data)

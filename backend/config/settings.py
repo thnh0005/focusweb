@@ -22,13 +22,13 @@ def env_list(name, default=""):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
-DEBUG = env_bool("DJANGO_DEBUG", True)
+DEBUG = env_bool("DJANGO_DEBUG", False)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
-    if not DEBUG:
-        raise ImproperlyConfigured("DJANGO_SECRET_KEY is required when DEBUG=False.")
-    SECRET_KEY = "focusos-insecure-development-key"
+    raise ImproperlyConfigured(
+        "DJANGO_SECRET_KEY is required. Set it in the environment or backend/.env."
+    )
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 

@@ -9,6 +9,13 @@ User = get_user_model()
 PASSWORD = "A9!vQ2#pLm7$"
 
 
+def get_csrf_token(client):
+    response = client.get("/api/auth/csrf/")
+    assert response.status_code == status.HTTP_200_OK
+    assert "csrftoken" in response.cookies
+    return response.data["csrfToken"]
+
+
 class AuthApiTests(APITestCase):
     def test_register_creates_related_records_and_session(self):
         response = self.client.post(
@@ -97,8 +104,53 @@ class AuthApiTests(APITestCase):
         self.assertEqual(logout.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(self.client.get("/api/auth/me/").status_code, status.HTTP_403_FORBIDDEN)
 
+    def test_login_and_register_require_pre_auth_csrf(self):
+        User.objects.create_user(email="csrf-login@example.com", password=PASSWORD)
+
+        login_client = APIClient(enforce_csrf_checks=True)
+        blocked_login = login_client.post(
+            "/api/auth/login/",
+            {"email": "csrf-login@example.com", "password": PASSWORD},
+            format="json",
+        )
+        login_csrf_token = get_csrf_token(login_client)
+        allowed_login = login_client.post(
+            "/api/auth/login/",
+            {"email": "csrf-login@example.com", "password": PASSWORD},
+            format="json",
+            HTTP_X_CSRFTOKEN=login_csrf_token,
+        )
+
+        register_client = APIClient(enforce_csrf_checks=True)
+        blocked_register = register_client.post(
+            "/api/auth/register/",
+            {
+                "email": "csrf-register@example.com",
+                "password": PASSWORD,
+                "passwordConfirm": PASSWORD,
+            },
+            format="json",
+        )
+        register_csrf_token = get_csrf_token(register_client)
+        allowed_register = register_client.post(
+            "/api/auth/register/",
+            {
+                "email": "csrf-register@example.com",
+                "password": PASSWORD,
+                "passwordConfirm": PASSWORD,
+            },
+            format="json",
+            HTTP_X_CSRFTOKEN=register_csrf_token,
+        )
+
+        self.assertEqual(blocked_login.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(allowed_login.status_code, status.HTTP_200_OK)
+        self.assertEqual(blocked_register.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(allowed_register.status_code, status.HTTP_201_CREATED)
+
     def test_authenticated_mutations_require_csrf(self):
         client = APIClient(enforce_csrf_checks=True)
+        pre_auth_csrf_token = get_csrf_token(client)
         register = client.post(
             "/api/auth/register/",
             {
@@ -107,6 +159,7 @@ class AuthApiTests(APITestCase):
                 "passwordConfirm": PASSWORD,
             },
             format="json",
+            HTTP_X_CSRFTOKEN=pre_auth_csrf_token,
         )
         csrf_token = register.cookies["csrftoken"].value
 

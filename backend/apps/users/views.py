@@ -1,11 +1,14 @@
 from django.contrib.auth import login, logout
 from django.middleware.csrf import get_token
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_protect
 from rest_framework import status
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .serializers import (
+    CsrfTokenSerializer,
     LoginSerializer,
     OnboardingSerializer,
     ProfileSerializer,
@@ -23,6 +26,16 @@ def auth_response(request, user, message=None, response_status=status.HTTP_200_O
     return Response(payload, status=response_status)
 
 
+class CsrfTokenView(GenericAPIView):
+    authentication_classes = []
+    permission_classes = [AllowAny]
+    serializer_class = CsrfTokenSerializer
+
+    def get(self, request):
+        return Response({"csrfToken": get_token(request)})
+
+
+@method_decorator(csrf_protect, name="dispatch")
 class RegisterView(GenericAPIView):
     authentication_classes = []
     permission_classes = [AllowAny]
@@ -41,6 +54,7 @@ class RegisterView(GenericAPIView):
         )
 
 
+@method_decorator(csrf_protect, name="dispatch")
 class LoginView(GenericAPIView):
     authentication_classes = []
     permission_classes = [AllowAny]

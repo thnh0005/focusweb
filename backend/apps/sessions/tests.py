@@ -188,6 +188,64 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(pause_patch.data["status"], "paused")
         self.assertEqual(resume_patch.data["status"], "active")
 
+    def test_pause_and_resume_require_expected_source_status(self):
+        create = self.create_session()
+        session_id = create.data["id"]
+
+        resume_active = self.client.post(
+            f"/api/sessions/{session_id}/resume/",
+            format="json",
+        )
+        pause_active = self.client.post(
+            f"/api/sessions/{session_id}/pause/",
+            format="json",
+        )
+        pause_paused = self.client.post(
+            f"/api/sessions/{session_id}/pause/",
+            format="json",
+        )
+        resume_paused = self.client.post(
+            f"/api/sessions/{session_id}/resume/",
+            format="json",
+        )
+
+        self.assertEqual(resume_active.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(pause_active.status_code, status.HTTP_200_OK)
+        self.assertEqual(pause_paused.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(resume_paused.status_code, status.HTTP_200_OK)
+
+    def test_terminal_sessions_reject_end_and_cancel(self):
+        completed = self.create_session()
+        completed_id = completed.data["id"]
+        self.client.post(f"/api/sessions/{completed_id}/end/", format="json")
+
+        end_completed = self.client.post(
+            f"/api/sessions/{completed_id}/end/",
+            format="json",
+        )
+        cancel_completed = self.client.post(
+            f"/api/sessions/{completed_id}/cancel/",
+            format="json",
+        )
+
+        cancelled = self.create_session()
+        cancelled_id = cancelled.data["id"]
+        self.client.post(f"/api/sessions/{cancelled_id}/cancel/", format="json")
+
+        end_cancelled = self.client.post(
+            f"/api/sessions/{cancelled_id}/end/",
+            format="json",
+        )
+        cancel_cancelled = self.client.post(
+            f"/api/sessions/{cancelled_id}/cancel/",
+            format="json",
+        )
+
+        self.assertEqual(end_completed.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(cancel_completed.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(end_cancelled.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(cancel_cancelled.status_code, status.HTTP_400_BAD_REQUEST)
+
     def test_only_one_open_session_and_at_most_three_tags(self):
         first = self.create_session()
         second = self.create_session()
