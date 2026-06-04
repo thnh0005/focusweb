@@ -20,7 +20,7 @@ export function FocusLayout({
 }: FocusLayoutProps) {
   const [isPlaying, setIsPlaying] = React.useState(false);
   const [volume, setVolume] = React.useState(70);
-  const [trackName, setTrackName] = React.useState("Stoic Echoes (Lofi)");
+  const trackName = "Stoic Echoes (Lofi)";
 
   const meshMode = phase === "short-break" ? "short-break" : phase === "long-break" ? "long-break" : "focus";
 

@@ -174,7 +174,7 @@ export function UserMenu({
           <div className="p-4 border-b border-white/[0.06]">
             <div className="flex items-center gap-3">
               <Avatar className="h-10 w-10 border border-focus-purple/[0.20] shadow-[0_0_12px_rgba(124,58,237,0.12)]">
-                {avatarUrl && <AvatarFallback className="text-sm font-medium">{initials}</AvatarFallback>}
+                {avatarUrl && <AvatarImage src={avatarUrl} alt={userName} />}
                 <AvatarFallback className="text-sm font-medium">{initials}</AvatarFallback>
               </Avatar>
               <div className="flex-1 min-w-0">

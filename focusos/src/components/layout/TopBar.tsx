@@ -3,7 +3,6 @@
 import * as React from "react";
 import { usePathname } from "next/navigation";
 import { Flame, Star } from "lucide-react";
-import { cn } from "@/lib/utils/cn";
 
 export interface TopBarProps {
   streakCount?: number;

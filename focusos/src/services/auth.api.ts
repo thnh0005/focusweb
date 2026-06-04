@@ -17,6 +17,10 @@ interface MockAuthRecord {
   password: string;
 }
 
+async function prepareCsrf(): Promise<void> {
+  await apiClient.get<{ csrfToken: string }>("/auth/csrf/");
+}
+
 function canUseStorage() {
   return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
@@ -72,13 +76,13 @@ export const authApi = {
    * Login with email and password.
    * Django sets HttpOnly session cookie on success.
    */
-  login(credentials: LoginCredentials): Promise<AuthResponse> {
+  async login(credentials: LoginCredentials): Promise<AuthResponse> {
     if (MOCK_AUTH_ENABLED) {
       if (
         credentials.email === DEFAULT_MOCK_EMAIL &&
         credentials.password === DEFAULT_MOCK_PASSWORD
       ) {
-        return Promise.resolve({ user: seedDefaultRecord().user });
+        return { user: seedDefaultRecord().user };
       }
 
       const record = readMockRecord();
@@ -90,18 +94,19 @@ export const authApi = {
         credentials.email === record.user.email &&
         credentials.password === record.password
       ) {
-        return Promise.resolve({ user: record.user });
+        return { user: record.user };
       }
 
       return Promise.reject(new Error("Invalid email or password"));
     }
+    await prepareCsrf();
     return apiClient.post<AuthResponse>("/auth/login/", credentials);
   },
 
   /**
    * Register a new user account.
    */
-  register(credentials: RegisterCredentials): Promise<AuthResponse> {
+  async register(credentials: RegisterCredentials): Promise<AuthResponse> {
     if (MOCK_AUTH_ENABLED) {
       const user = createMockUser(credentials.email, {
         onboardingComplete: false,
@@ -111,8 +116,9 @@ export const authApi = {
         password: credentials.password,
       };
       writeMockRecord(record);
-      return Promise.resolve({ user });
+      return { user };
     }
+    await prepareCsrf();
     return apiClient.post<AuthResponse>("/auth/register/", credentials);
   },
 

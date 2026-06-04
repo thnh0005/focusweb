@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
-import { Volume2, VolumeX, Play, Pause, ChevronRight } from "lucide-react";
+import { Volume2, VolumeX, Play, Pause } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 import { useMusicStore } from "@/stores/music.store";
 import type { AmbientTrack } from "@/types/session.types";
