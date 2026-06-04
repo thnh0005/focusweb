@@ -2,7 +2,7 @@
 // Analytics Types — FocusOS
 // ═══════════════════════════════════════════════════════════════
 
-import type { FocusStateLabel, SessionMode } from "./session.types";
+import type { SessionMode } from "./session.types";
 
 // ── Date Range ────────────────────────────────────────────────
 

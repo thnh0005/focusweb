@@ -75,8 +75,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     },
   ]);
 
-  const unreadCount = notifications.filter((n) => !n.isRead).length;
-
   // Handlers
   const openCommandPalette = React.useCallback(() => {
     setUserMenuOpen(false);
@@ -88,12 +86,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     setNotificationsOpen(false);
     setCommandPaletteOpen(false);
     setUserMenuOpen((v) => !v);
-  }, []);
-
-  const openNotifications = React.useCallback(() => {
-    setUserMenuOpen(false);
-    setCommandPaletteOpen(false);
-    setNotificationsOpen((v) => !v);
   }, []);
 
   const markAllRead = React.useCallback(() => {

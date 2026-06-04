@@ -39,6 +39,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
+      data-scroll-behavior="smooth"
       className={`${sora.variable} ${dmSans.variable} h-full antialiased bg-background`}
     >
       <body className="min-h-full flex flex-col bg-background">

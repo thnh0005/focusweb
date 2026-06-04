@@ -1,7 +1,7 @@
 django
 djangorestframework
 django-cors-headers
-psycopg2-binary
+psycopg[binary]
 python-dotenv
 celery
 redis

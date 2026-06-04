@@ -56,14 +56,13 @@ function getCsrfToken(): string | null {
 
 interface RequestOptions extends RequestInit {
   params?: Record<string, string | number | boolean | undefined>;
-  skipAuth?: boolean;
 }
 
 async function request<T>(
   endpoint: string,
   options: RequestOptions = {}
 ): Promise<T> {
-  const { params, skipAuth: _skipAuth, ...fetchOptions } = options;
+  const { params, ...fetchOptions } = options;
 
   // Build URL with query params
   const url = new URL(`${API_BASE_URL}${endpoint}`);
@@ -76,11 +75,15 @@ async function request<T>(
   }
 
   // Build headers
+  const isFormData =
+    typeof FormData !== "undefined" && fetchOptions.body instanceof FormData;
   const headers: Record<string, string> = {
-    "Content-Type": "application/json",
     Accept: "application/json",
     ...(fetchOptions.headers as Record<string, string>),
   };
+  if (!isFormData) {
+    headers["Content-Type"] = "application/json";
+  }
 
   // Add CSRF token for state-mutating requests
   const method = (fetchOptions.method ?? "GET").toUpperCase();
@@ -172,12 +175,10 @@ export const apiClient = {
    * Upload a file using multipart/form-data
    */
   upload<T>(endpoint: string, formData: FormData, options?: RequestOptions): Promise<T> {
-    const { headers: _headers, ...rest } = options ?? {};
     return request<T>(endpoint, {
-      ...rest,
+      ...options,
       method: "POST",
       body: formData,
-      headers: {}, // Let browser set Content-Type with boundary
     });
   },
 };

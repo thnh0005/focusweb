@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Play, Upload, ShieldAlert, Music } from "lucide-react";
+import { Play, Upload, ShieldAlert } from "lucide-react";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import { cn } from "@/lib/utils/cn";
 
