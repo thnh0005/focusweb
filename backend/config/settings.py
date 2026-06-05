@@ -178,5 +178,7 @@ SPECTACULAR_SETTINGS = {
     "ENUM_NAME_OVERRIDES": {
         "SessionModeEnum": "apps.sessions.models.FocusSession.Mode",
         "TrendDirectionEnum": ["up", "down", "neutral"],
+        "BlacklistSeverityEnum": "apps.extension.models.BlacklistEntry.Severity",
+        "DistractionSeverityEnum": ["high", "medium", "low"],
     },
 }

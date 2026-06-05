@@ -1,6 +1,7 @@
 from django.urls import path
 
 from .views import (
+    DashboardOverviewView,
     DashboardStatsView,
     DistractionAnalyticsView,
     FocusTrendView,
@@ -11,6 +12,7 @@ from .views import (
 
 
 urlpatterns = [
+    path("dashboard/overview/", DashboardOverviewView.as_view(), name="dashboard-overview"),
     path("analytics/dashboard/", DashboardStatsView.as_view(), name="analytics-dashboard"),
     path("analytics/trend/", FocusTrendView.as_view(), name="analytics-trend"),
     path(

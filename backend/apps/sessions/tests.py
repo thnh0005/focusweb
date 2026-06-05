@@ -5,6 +5,8 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.scoring.models import FocusScore
+
 from .models import FocusSession, GoalTemplate, SessionStateTransition
 
 
@@ -142,6 +144,8 @@ class SessionLifecycleApiTests(APITestCase):
         self.user.profile.refresh_from_db()
         self.assertEqual(session.state_transitions.count(), 4)
         self.assertEqual(self.user.profile.total_sessions, 1)
+        self.assertIsNotNone(session.focus_score)
+        self.assertEqual(session.focus_state, "focused")
 
     def test_deep_work_requires_goal_and_template_can_supply_it(self):
         invalid = self.create_session(mode="deep-work", goal="")
@@ -264,6 +268,9 @@ class SessionLifecycleApiTests(APITestCase):
     def test_invalid_transition_and_cross_user_access_are_rejected(self):
         create = self.create_session()
         session_id = create.data["id"]
+        session = FocusSession.objects.get(pk=session_id)
+        session.started_at = timezone.now() - timedelta(minutes=60)
+        session.save(update_fields=["started_at"])
         self.client.post(f"/api/sessions/{session_id}/end/", format="json")
 
         invalid_transition = self.client.post(
@@ -302,5 +309,9 @@ class SessionLifecycleApiTests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["session"]["id"], session_id)
+        self.assertEqual(response.data["scoreBreakdown"]["total"], 70)
+        self.assertEqual(response.data["scoreMetadata"]["source"], "session-duration-fallback")
+        self.assertEqual(response.data["warningLog"], [])
         self.assertEqual(response.data["aiInsights"], [])
         self.assertFalse(response.data["isAiInsightReady"])
+        self.assertTrue(FocusScore.objects.filter(session_id=session_id).exists())

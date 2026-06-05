@@ -12,6 +12,7 @@ from rest_framework.response import Response
 from apps.sessions.models import FocusSession
 
 from .serializers import (
+    DashboardOverviewSerializer,
     DashboardStatsSerializer,
     DistractionAnalyticsSerializer,
     FocusTrendSerializer,
@@ -49,6 +50,7 @@ def validate_date_range(request):
 
 
 def sessions_for_range(user, date_range):
+    """Tạo queryset session theo user để các API dashboard dùng chung."""
     sessions = FocusSession.objects.filter(user=user)
     range_start = get_range_start(date_range)
     if range_start:
@@ -57,6 +59,7 @@ def sessions_for_range(user, date_range):
 
 
 def aggregate_sessions(sessions):
+    """Tổng hợp metric MVP một lần để dashboard và analytics luôn nhất quán."""
     stats = sessions.aggregate(
         total_focus_seconds=Coalesce(
             Sum(
@@ -147,6 +150,55 @@ class DashboardStatsView(GenericAPIView):
             "dateRange": date_range,
         }
         return Response(DashboardStatsSerializer(data).data)
+
+
+class DashboardOverviewView(GenericAPIView):
+    serializer_class = DashboardOverviewSerializer
+
+    @extend_schema(
+        operation_id="dashboard_overview",
+        parameters=[
+            OpenApiParameter(
+                name="range",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=["today", "7d", "30d", "90d", "all"],
+                default="7d",
+            )
+        ],
+        responses=DashboardOverviewSerializer,
+    )
+    def get(self, request):
+        # Dashboard overview tuần 2 trả payload gọn cho các card MVP:
+        # tổng thời gian, completion rate, active session và hoạt động gần nhất.
+        date_range = validate_date_range(request)
+        sessions = sessions_for_range(request.user, date_range)
+        stats = aggregate_sessions(sessions)
+        active_session = (
+            FocusSession.objects.filter(
+                user=request.user,
+                status__in=FocusSession.OPEN_STATUSES,
+            )
+            .order_by("-started_at")
+            .first()
+        )
+        last_session = (
+            FocusSession.objects.filter(user=request.user)
+            .order_by("-started_at")
+            .first()
+        )
+        data = {
+            "totalFocusMinutes": stats["total_focus_seconds"] // 60,
+            "totalSessions": stats["total_sessions"],
+            "completedSessions": stats["completed_session_count"],
+            "averageFocusScore": stats["average_focus_score"],
+            "completionRate": round(stats["completion_rate"], 2),
+            "deepWorkSessionCount": stats["deep_work_session_count"],
+            "activeSessionId": active_session.pk if active_session else None,
+            "lastSessionAt": last_session.started_at if last_session else None,
+            "dateRange": date_range,
+        }
+        return Response(DashboardOverviewSerializer(data).data)
 
 
 class FocusTrendView(GenericAPIView):

@@ -12,6 +12,7 @@ def custom_template_id():
 
 class GoalTemplateQuerySet(models.QuerySet):
     def available_to(self, user):
+        """Trả template mặc định kèm template riêng của người dùng hiện tại."""
         return self.filter(Q(is_built_in=True) | Q(user=user)).order_by(
             "-last_used_at",
             "label",
@@ -142,6 +143,7 @@ class FocusSession(models.Model):
         ]
 
     def calculate_actual_duration(self, at=None):
+        """Tính thời gian làm việc thật, đã trừ toàn bộ thời gian pause."""
         at = at or timezone.now()
         paused_seconds = self.accumulated_paused_seconds
         if self.paused_at:

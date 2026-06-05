@@ -19,6 +19,7 @@ from .services import set_session_tags, transition_session
 
 
 def get_owned_session(user, session_id):
+    """Chỉ lấy session thuộc user hiện tại; id của user khác trả 404."""
     try:
         return FocusSession.objects.prefetch_related("tags").get(
             pk=session_id,
@@ -26,6 +27,24 @@ def get_owned_session(user, session_id):
         )
     except (FocusSession.DoesNotExist, ValueError) as exc:
         raise NotFound("Session was not found.") from exc
+
+
+def get_score_breakdown(session):
+    """Đổi các dòng ScoreComponent đã lưu sang cấu trúc summary của frontend."""
+    try:
+        score = session.score_result
+    except FocusSession.score_result.RelatedObjectDoesNotExist:
+        return None, {}
+
+    components = {component.key: component.value for component in score.components.all()}
+    breakdown = {
+        "contentRelevance": components.get("content_relevance", 0),
+        "focusContinuity": components.get("focus_continuity", 0),
+        "tabStability": components.get("tab_stability", 0),
+        "distractionPenalty": components.get("distraction_penalty", 0),
+        "total": score.total_score,
+    }
+    return breakdown, score.metadata
 
 
 class GoalTemplateListView(GenericAPIView):
@@ -123,13 +142,24 @@ class SessionListCreateView(GenericAPIView):
 
     @extend_schema(operation_id="session_list")
     def get(self, request):
+        # Endpoint history tuần 2: hỗ trợ filter nhẹ cho dashboard drawer
+        # và luôn giới hạn dữ liệu trong user hiện tại.
         sessions = FocusSession.objects.filter(user=request.user).prefetch_related("tags")
         mode = request.query_params.get("mode")
         tag = request.query_params.get("tag")
+        status_filter = request.query_params.get("status")
+        started_after = request.query_params.get("startedAfter")
+        started_before = request.query_params.get("startedBefore")
         if mode:
             sessions = sessions.filter(mode=mode)
         if tag:
             sessions = sessions.filter(tags__name=tag)
+        if status_filter:
+            sessions = sessions.filter(status=status_filter)
+        if started_after:
+            sessions = sessions.filter(started_at__gte=started_after)
+        if started_before:
+            sessions = sessions.filter(started_at__lte=started_before)
 
         try:
             page = max(1, int(request.query_params.get("page", 1)))
@@ -196,15 +226,21 @@ class SessionSummaryView(GenericAPIView):
 
     @extend_schema(operation_id="session_summary", responses=SessionSummarySerializer)
     def get(self, request, session_id):
+        # Summary chỉ đọc và được dựng từ session/score đã lưu.
+        # Dev2 có thể thêm warning event và AI insight sau mà không làm đổi
+        # các key response frontend đang dùng.
         session = get_owned_session(request.user, session_id)
         if session.status != FocusSession.Status.COMPLETED:
             raise ValidationError("A summary is available after the session is completed.")
         target_minutes = max(1, session.target_duration_seconds // 60)
+        score_breakdown, score_metadata = get_score_breakdown(session)
         data = {
             "session": session,
-            "scoreBreakdown": None,
+            "scoreBreakdown": score_breakdown,
+            "scoreMetadata": score_metadata,
             "aiInsights": [],
             "distractionEvents": [],
+            "warningLog": [],
             "recommendation": f"Try another {target_minutes}-minute session.",
             "isAiInsightReady": False,
         }

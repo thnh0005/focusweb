@@ -57,6 +57,23 @@ class DashboardStatsApiTests(APITestCase):
         self.assertEqual(response.data["completionRate"], 66.67)
         self.assertEqual(response.data["dateRange"], "7d")
 
+    def test_dashboard_overview_returns_week_2_mvp_metrics(self):
+        self.create_session(actual_duration_seconds=1500, focus_score=75)
+        active = self.create_session(
+            status=FocusSession.Status.ACTIVE,
+            actual_duration_seconds=0,
+            focus_score=None,
+        )
+
+        response = self.client.get("/api/dashboard/overview/?range=7d")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["totalFocusMinutes"], 25)
+        self.assertEqual(response.data["totalSessions"], 2)
+        self.assertEqual(response.data["completedSessions"], 1)
+        self.assertEqual(response.data["activeSessionId"], str(active.pk))
+        self.assertEqual(response.data["dateRange"], "7d")
+
     def test_dashboard_range_and_validation(self):
         old_session = self.create_session()
         FocusSession.objects.filter(pk=old_session.pk).update(

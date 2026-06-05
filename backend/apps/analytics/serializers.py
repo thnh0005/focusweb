@@ -10,6 +10,18 @@ class DashboardStatsSerializer(serializers.Serializer):
     dateRange = serializers.ChoiceField(choices=["today", "7d", "30d", "90d", "all"])
 
 
+class DashboardOverviewSerializer(serializers.Serializer):
+    totalFocusMinutes = serializers.IntegerField()
+    totalSessions = serializers.IntegerField()
+    completedSessions = serializers.IntegerField()
+    averageFocusScore = serializers.FloatField(allow_null=True)
+    completionRate = serializers.FloatField()
+    deepWorkSessionCount = serializers.IntegerField()
+    activeSessionId = serializers.UUIDField(allow_null=True)
+    lastSessionAt = serializers.DateTimeField(allow_null=True)
+    dateRange = serializers.ChoiceField(choices=["today", "7d", "30d", "90d", "all"])
+
+
 class FocusTrendDataPointSerializer(serializers.Serializer):
     date = serializers.DateField()
     averageScore = serializers.FloatField(allow_null=True)

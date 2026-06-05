@@ -19,6 +19,7 @@ from .serializers import (
 
 
 def auth_response(request, user, message=None, response_status=status.HTTP_200_OK):
+    """Trả user đã đăng nhập và buộc tạo CSRF cookie cho frontend SPA."""
     get_token(request)
     payload = {"user": UserSerializer(user).data}
     if message:
@@ -42,6 +43,8 @@ class RegisterView(GenericAPIView):
     serializer_class = RegisterSerializer
 
     def post(self, request):
+        # Đăng ký xong sẽ login ngay để frontend đi tiếp onboarding
+        # mà không cần gọi thêm request login.
         serializer = RegisterSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         user = serializer.save()
@@ -80,6 +83,7 @@ class MeView(GenericAPIView):
     serializer_class = UserSerializer
 
     def get(self, request):
+        # Đọc /me đồng thời làm mới CSRF token cho các request ghi dữ liệu sau đó.
         get_token(request)
         return Response(UserSerializer(request.user).data)
 
@@ -134,6 +138,8 @@ class OnboardingCompleteView(GenericAPIView):
     serializer_class = OnboardingSerializer
 
     def post(self, request):
+        # Serializer cập nhật survey, profile, preferences và cờ user cùng lúc
+        # để onboarding không bị lưu dở một nửa.
         serializer = OnboardingSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
         serializer.save()

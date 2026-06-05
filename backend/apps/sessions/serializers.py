@@ -225,7 +225,9 @@ class FocusScoreBreakdownSerializer(serializers.Serializer):
 class SessionSummarySerializer(serializers.Serializer):
     session = SessionSerializer()
     scoreBreakdown = FocusScoreBreakdownSerializer(allow_null=True)
+    scoreMetadata = serializers.DictField()
     aiInsights = serializers.ListField(child=serializers.CharField())
     distractionEvents = serializers.ListField(child=serializers.DictField())
+    warningLog = serializers.ListField(child=serializers.DictField())
     recommendation = serializers.CharField()
     isAiInsightReady = serializers.BooleanField()

@@ -3,6 +3,7 @@ from django.db.models import F
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
+from apps.scoring.services.score_calculator import ScoreCalculator
 from apps.users.models import Profile
 
 from .models import FocusSession, SessionNote, SessionStateTransition, SessionTag
@@ -29,6 +30,7 @@ ALLOWED_TRANSITIONS = {
 
 
 def set_session_tags(session, tag_names):
+    """Chuẩn hóa tên tag và chỉ gắn tối đa 3 tag thuộc về người dùng."""
     normalized_names = []
     for name in tag_names:
         normalized = name.strip()
@@ -55,6 +57,11 @@ def transition_session(
     tags=None,
     allowed_from_statuses=None,
 ):
+    """Chuyển trạng thái session bằng một lần ghi DB có khóa.
+
+    Đây là lõi lifecycle của tuần 1. Tuần 2 gắn thêm bước tính final score
+    khi session hoàn thành để summary, history và dashboard dùng cùng dữ liệu.
+    """
     locked = (
         FocusSession.objects.select_for_update()
         .select_related("user")
@@ -82,6 +89,8 @@ def transition_session(
     previous_status = locked.status
 
     if target_status in {FocusSession.Status.PAUSED, FocusSession.Status.AUTO_PAUSED}:
+        # Lưu thời điểm bắt đầu pause; khi resume/end backend sẽ trừ khoảng
+        # này để actual duration luôn do server tính.
         locked.paused_at = now
     elif target_status == FocusSession.Status.ACTIVE:
         if locked.paused_at:
@@ -110,6 +119,9 @@ def transition_session(
         set_session_tags(locked, tags)
 
     if target_status == FocusSession.Status.COMPLETED:
+        # Lưu điểm trước khi cập nhật tổng profile để màn summary đọc được
+        # đầy đủ score ngay sau khi endpoint /end/ trả về.
+        ScoreCalculator().persist_final_score(locked)
         Profile.objects.filter(user=locked.user).update(
             total_sessions=F("total_sessions") + 1,
             total_focus_minutes=F("total_focus_minutes")
