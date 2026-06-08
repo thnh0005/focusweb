@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from django.conf import settings
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 
 DEFAULT_BLACKLIST_DOMAINS = [
@@ -19,7 +20,6 @@ DEFAULT_BLACKLIST_DOMAINS = [
 
 
 def ensure_default_blacklist_entries():
-    """Đảm bảo domain mặc định vẫn có sau khi test DB bị flush hoặc DB mới rỗng."""
     for domain, severity in DEFAULT_BLACKLIST_DOMAINS:
         BlacklistEntry.objects.update_or_create(
             domain=domain,
@@ -32,16 +32,34 @@ def ensure_default_blacklist_entries():
 
 
 def normalize_domain(value):
-    """Chuẩn hóa URL/domain người dùng nhập trước khi lưu hoặc sync."""
     raw_value = (value or "").strip().lower()
     parsed = urlparse(raw_value if "://" in raw_value else f"https://{raw_value}")
     domain = parsed.netloc or parsed.path
     return domain.split("/", maxsplit=1)[0].removeprefix("www.")
 
 
+class ExtensionHeartbeat(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user_id = models.UUIDField()
+    extension_version = models.CharField(max_length=64)
+    browser = models.CharField(max_length=64)
+    is_active = models.BooleanField(default=True)
+    last_seen = models.DateTimeField(default=timezone.now)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-last_seen"]
+        indexes = [
+            models.Index(fields=["user_id", "last_seen"]),
+            models.Index(fields=["is_active", "last_seen"]),
+        ]
+
+    def __str__(self):
+        return f"{self.browser} {self.extension_version}: {self.user_id}"
+
+
 class BlacklistEntryQuerySet(models.QuerySet):
     def available_to(self, user):
-        """Trả rule mặc định kèm boundary riêng của người dùng."""
         return self.filter(Q(is_default=True) | Q(user=user)).order_by(
             "-is_default",
             "domain",

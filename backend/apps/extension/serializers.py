@@ -8,6 +8,22 @@ from .models import BlacklistEntry, normalize_domain
 validate_domain_name = DomainNameValidator(accept_idna=False)
 
 
+class ExtensionHeartbeatRequestSerializer(serializers.Serializer):
+    extension_version = serializers.CharField(max_length=64)
+    browser = serializers.CharField(max_length=64)
+
+
+class ExtensionHeartbeatResponseSerializer(serializers.Serializer):
+    status = serializers.CharField()
+    connected = serializers.BooleanField()
+    last_seen = serializers.DateTimeField()
+
+
+class ActiveSessionResponseSerializer(serializers.Serializer):
+    has_active_session = serializers.BooleanField()
+    session = serializers.DictField(allow_null=True)
+
+
 class BlacklistEntrySerializer(serializers.ModelSerializer):
     isDefault = serializers.BooleanField(source="is_default", read_only=True)
     addedAt = serializers.DateTimeField(source="created_at", read_only=True)
@@ -50,4 +66,3 @@ class BlacklistSyncSerializer(serializers.Serializer):
     version = serializers.CharField()
     generatedAt = serializers.DateTimeField()
     entries = BlacklistSyncEntrySerializer(many=True)
-
