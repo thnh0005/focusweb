@@ -68,11 +68,11 @@ Các component hiện có:
 
 Phân loại trạng thái:
 
-- `85-100`: `deep-focus`
-- `70-84`: `focused`
-- `50-69`: `average`
-- `30-49`: `distracted`
-- `0-29`: `highly-distracted`
+- `90-100`: `deep-focus`
+- `75-89`: `focused`
+- `60-74`: `average`
+- `40-59`: `distracted`
+- `0-39`: `highly-distracted`
 
 Luồng tính điểm:
 

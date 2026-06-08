@@ -1,6 +1,11 @@
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.core.validators import DomainNameValidator
 from rest_framework import serializers
 
 from .models import BlacklistEntry, normalize_domain
+
+
+validate_domain_name = DomainNameValidator(accept_idna=False)
 
 
 class BlacklistEntrySerializer(serializers.ModelSerializer):
@@ -15,7 +20,9 @@ class BlacklistEntrySerializer(serializers.ModelSerializer):
 
     def validate_domain(self, value):
         domain = normalize_domain(value)
-        if "." not in domain:
+        try:
+            validate_domain_name(domain)
+        except DjangoValidationError:
             raise serializers.ValidationError("Enter a valid domain.")
         return domain
 

@@ -74,6 +74,52 @@ class DashboardStatsApiTests(APITestCase):
         self.assertEqual(response.data["activeSessionId"], str(active.pk))
         self.assertEqual(response.data["dateRange"], "7d")
 
+    def test_dashboard_overview_handles_empty_user(self):
+        empty_user = User.objects.create_user(
+            email="analytics-empty@example.com",
+            password=PASSWORD,
+        )
+        self.client.force_authenticate(empty_user)
+
+        response = self.client.get("/api/dashboard/overview/?range=all")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["totalFocusMinutes"], 0)
+        self.assertEqual(response.data["totalSessions"], 0)
+        self.assertEqual(response.data["completedSessions"], 0)
+        self.assertIsNone(response.data["averageFocusScore"])
+        self.assertEqual(response.data["completionRate"], 0)
+        self.assertIsNone(response.data["activeSessionId"])
+        self.assertIsNone(response.data["lastSessionAt"])
+
+    def test_dashboard_overview_uses_actual_completed_scored_user_sessions(self):
+        self.create_session(actual_duration_seconds=1200, focus_score=80)
+        self.create_session(actual_duration_seconds=2400, focus_score=None)
+        self.create_session(
+            status=FocusSession.Status.CANCELLED,
+            actual_duration_seconds=7200,
+            focus_score=100,
+        )
+        self.create_session(
+            status=FocusSession.Status.ACTIVE,
+            actual_duration_seconds=3600,
+            focus_score=None,
+        )
+        self.create_session(
+            user=self.other_user,
+            actual_duration_seconds=9999,
+            focus_score=5,
+        )
+
+        response = self.client.get("/api/dashboard/overview/?range=all")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["totalFocusMinutes"], 60)
+        self.assertEqual(response.data["totalSessions"], 4)
+        self.assertEqual(response.data["completedSessions"], 2)
+        self.assertEqual(response.data["averageFocusScore"], 80.0)
+        self.assertEqual(response.data["completionRate"], 50.0)
+
     def test_dashboard_range_and_validation(self):
         old_session = self.create_session()
         FocusSession.objects.filter(pk=old_session.pk).update(

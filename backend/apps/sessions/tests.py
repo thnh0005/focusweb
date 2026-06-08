@@ -315,3 +315,24 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["aiInsights"], [])
         self.assertFalse(response.data["isAiInsightReady"])
         self.assertTrue(FocusScore.objects.filter(session_id=session_id).exists())
+
+    def test_summary_is_user_scoped_and_handles_missing_score(self):
+        session = FocusSession.objects.create(
+            user=self.user,
+            mode=FocusSession.Mode.NORMAL,
+            status=FocusSession.Status.COMPLETED,
+            target_duration_seconds=1800,
+            actual_duration_seconds=900,
+            ended_at=timezone.now(),
+        )
+
+        response = self.client.get(f"/api/sessions/{session.pk}/summary/")
+        self.client.force_authenticate(self.other_user)
+        other_user_response = self.client.get(f"/api/sessions/{session.pk}/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["session"]["id"], str(session.pk))
+        self.assertIsNone(response.data["scoreBreakdown"])
+        self.assertEqual(response.data["scoreMetadata"], {})
+        self.assertEqual(response.data["warningLog"], [])
+        self.assertEqual(other_user_response.status_code, status.HTTP_404_NOT_FOUND)

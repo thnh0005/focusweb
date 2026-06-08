@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 
 
 class FocusScore(models.Model):
@@ -37,6 +38,12 @@ class FocusScore(models.Model):
             models.Index(fields=["user", "calculated_at"]),
             models.Index(fields=["user", "focus_state"]),
         ]
+        constraints = [
+            models.CheckConstraint(
+                condition=Q(total_score__gte=0, total_score__lte=100),
+                name="focus_score_total_between_0_100",
+            ),
+        ]
 
     def __str__(self):
         return f"{self.session_id}: {self.total_score}"
@@ -66,6 +73,14 @@ class ScoreComponent(models.Model):
     class Meta:
         ordering = ["key"]
         constraints = [
+            models.CheckConstraint(
+                condition=Q(value__gte=0, value__lte=100),
+                name="score_component_value_between_0_100",
+            ),
+            models.CheckConstraint(
+                condition=Q(weight__gte=0, weight__lte=1),
+                name="score_component_weight_between_0_1",
+            ),
             models.UniqueConstraint(
                 fields=["score", "key"],
                 name="unique_focus_score_component_key",

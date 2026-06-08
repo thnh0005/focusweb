@@ -20,15 +20,24 @@ class ScoreCalculator:
 
     def classify_focus_state(self, score):
         """Ánh xạ điểm số sang nhãn focus ổn định mà frontend đang dùng."""
-        if score >= 85:
+        if score >= 90:
             return FocusScore.State.DEEP_FOCUS
-        if score >= 70:
+        if score >= 75:
             return FocusScore.State.FOCUSED
-        if score >= 50:
+        if score >= 60:
             return FocusScore.State.AVERAGE
-        if score >= 30:
+        if score >= 40:
             return FocusScore.State.DISTRACTED
         return FocusScore.State.HIGHLY_DISTRACTED
+
+    def calculate_weighted_total(self, components):
+        bounded_components = {
+            key: max(0, min(100, components.get(key, 0))) for key in self.WEIGHTS
+        }
+        total = round(
+            sum(bounded_components[key] * self.WEIGHTS[key] for key in self.WEIGHTS)
+        )
+        return max(0, min(100, total))
 
     def calculate_final_score(self, session):
         """Tính final score tuần 2 từ dữ liệu session thuộc phạm vi Dev1.
@@ -45,10 +54,7 @@ class ScoreCalculator:
             ScoreComponent.Key.TAB_STABILITY: 100,
             ScoreComponent.Key.DISTRACTION_PENALTY: 100,
         }
-        total = round(
-            sum(components[key] * self.WEIGHTS[key] for key in self.WEIGHTS)
-        )
-        total = max(0, min(100, total))
+        total = self.calculate_weighted_total(components)
         return {
             "total": total,
             "state": self.classify_focus_state(total),
