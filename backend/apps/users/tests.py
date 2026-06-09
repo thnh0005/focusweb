@@ -219,6 +219,27 @@ class UserApiTests(APITestCase):
         self.assertEqual(alias_profile.status_code, status.HTTP_200_OK)
         self.assertEqual(primary_preferences.status_code, status.HTTP_200_OK)
 
+    def test_notification_settings_route_updates_preference_fields(self):
+        update = self.client.patch(
+            "/api/notifications/settings/",
+            {
+                "notificationsEnabled": True,
+                "sessionReminderEnabled": True,
+                "sessionReminderTime": "08:30",
+                "weeklySummaryEnabled": False,
+                "deepWorkSuggestionEnabled": True,
+            },
+            format="json",
+        )
+        read = self.client.get("/api/notifications/settings/")
+
+        self.assertEqual(update.status_code, status.HTTP_200_OK)
+        self.assertTrue(update.data["sessionReminderEnabled"])
+        self.assertEqual(update.data["sessionReminderTime"], "08:30")
+        self.assertFalse(update.data["weeklySummaryEnabled"])
+        self.assertEqual(read.status_code, status.HTTP_200_OK)
+        self.assertEqual(read.data["sessionReminderTime"], "08:30")
+
     def test_onboarding_complete_updates_profile_preferences_and_user(self):
         response = self.client.post(
             "/api/onboarding/complete/",

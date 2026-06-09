@@ -22,6 +22,18 @@ class DashboardOverviewSerializer(serializers.Serializer):
     dateRange = serializers.ChoiceField(choices=["today", "7d", "30d", "90d", "all"])
 
 
+class AnalyticsOverviewSerializer(serializers.Serializer):
+    totalFocusMinutes = serializers.IntegerField()
+    totalSessions = serializers.IntegerField()
+    completedSessions = serializers.IntegerField()
+    averageFocusScore = serializers.FloatField(allow_null=True)
+    completionRate = serializers.FloatField()
+    deepWorkSessionCount = serializers.IntegerField()
+    averageSessionMinutes = serializers.FloatField()
+    bestFocusState = serializers.CharField(allow_blank=True)
+    dateRange = serializers.ChoiceField(choices=["today", "7d", "30d", "90d", "all"])
+
+
 class FocusTrendDataPointSerializer(serializers.Serializer):
     date = serializers.DateField()
     averageScore = serializers.FloatField(allow_null=True)
@@ -89,3 +101,13 @@ class PatternInsightsSerializer(serializers.Serializer):
     minimumSessionsReached = serializers.BooleanField()
     sessionsAnalyzed = serializers.IntegerField()
     generatedAt = serializers.DateTimeField()
+
+
+class SessionBreakdownSerializer(serializers.Serializer):
+    normalSessionCount = serializers.IntegerField()
+    deepWorkSessionCount = serializers.IntegerField()
+    normalSessionPercentage = serializers.FloatField()
+    deepWorkSessionPercentage = serializers.FloatField()
+    averageNormalScore = serializers.FloatField(allow_null=True)
+    averageDeepWorkScore = serializers.FloatField(allow_null=True)
+    dateRange = serializers.ChoiceField(choices=["today", "7d", "30d", "90d", "all"])

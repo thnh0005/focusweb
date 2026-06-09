@@ -5,6 +5,7 @@ from .views import (
     LoginView,
     LogoutView,
     MeView,
+    NotificationSettingsView,
     OnboardingCompleteView,
     PreferenceView,
     ProfileView,
@@ -20,6 +21,11 @@ urlpatterns = [
     path("auth/me/", MeView.as_view(), name="auth-me"),
     path("users/profile/", ProfileView.as_view(), name="user-profile"),
     path("users/preferences/", PreferenceView.as_view(), name="user-preferences"),
+    path(
+        "notifications/settings/",
+        NotificationSettingsView.as_view(),
+        name="notification-settings",
+    ),
     path(
         "onboarding/complete/",
         OnboardingCompleteView.as_view(),

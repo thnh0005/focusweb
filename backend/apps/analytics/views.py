@@ -12,12 +12,14 @@ from rest_framework.response import Response
 from apps.sessions.models import FocusSession
 
 from .serializers import (
+    AnalyticsOverviewSerializer,
     DashboardOverviewSerializer,
     DashboardStatsSerializer,
     DistractionAnalyticsSerializer,
     FocusTrendSerializer,
     HeatmapDataPointSerializer,
     PatternInsightsSerializer,
+    SessionBreakdownSerializer,
     WeeklySnapshotSerializer,
 )
 
@@ -89,6 +91,20 @@ def aggregate_sessions(sessions):
     return stats
 
 
+def most_common_focus_state(sessions):
+    row = (
+        sessions.filter(
+            status=FocusSession.Status.COMPLETED,
+            focus_state__gt="",
+        )
+        .values("focus_state")
+        .annotate(total=Count("id"))
+        .order_by("-total", "focus_state")
+        .first()
+    )
+    return row["focus_state"] if row else ""
+
+
 def trend_values(values):
     if len(values) < 2:
         return "neutral", 0
@@ -150,6 +166,48 @@ class DashboardStatsView(GenericAPIView):
             "dateRange": date_range,
         }
         return Response(DashboardStatsSerializer(data).data)
+
+
+class AnalyticsOverviewView(GenericAPIView):
+    serializer_class = AnalyticsOverviewSerializer
+
+    @extend_schema(
+        operation_id="analytics_overview",
+        parameters=[
+            OpenApiParameter(
+                name="range",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=["today", "7d", "30d", "90d", "all"],
+                default="7d",
+            )
+        ],
+        responses=AnalyticsOverviewSerializer,
+    )
+    def get(self, request):
+        # Overview tuần 3 mở rộng dashboard MVP bằng average duration
+        # và focus state phổ biến nhất trong khoảng thời gian chọn.
+        date_range = validate_date_range(request)
+        sessions = sessions_for_range(request.user, date_range)
+        stats = aggregate_sessions(sessions)
+        completed_count = stats["completed_session_count"]
+        average_session_minutes = (
+            stats["total_focus_seconds"] / completed_count / 60
+            if completed_count
+            else 0
+        )
+        data = {
+            "totalFocusMinutes": stats["total_focus_seconds"] // 60,
+            "totalSessions": stats["total_sessions"],
+            "completedSessions": completed_count,
+            "averageFocusScore": stats["average_focus_score"],
+            "completionRate": round(stats["completion_rate"], 2),
+            "deepWorkSessionCount": stats["deep_work_session_count"],
+            "averageSessionMinutes": round(average_session_minutes, 2),
+            "bestFocusState": most_common_focus_state(sessions),
+            "dateRange": date_range,
+        }
+        return Response(AnalyticsOverviewSerializer(data).data)
 
 
 class DashboardOverviewView(GenericAPIView):
@@ -243,6 +301,12 @@ class FocusTrendView(GenericAPIView):
         return Response(FocusTrendSerializer(data).data)
 
 
+class FocusTrendContractView(FocusTrendView):
+    @extend_schema(operation_id="analytics_focus_trend_contract", responses=FocusTrendSerializer)
+    def get(self, request):
+        return super().get(request)
+
+
 class DistractionAnalyticsView(GenericAPIView):
     serializer_class = DistractionAnalyticsSerializer
 
@@ -260,6 +324,60 @@ class DistractionAnalyticsView(GenericAPIView):
             "dateRange": date_range,
         }
         return Response(DistractionAnalyticsSerializer(data).data)
+
+
+class SessionBreakdownView(GenericAPIView):
+    serializer_class = SessionBreakdownSerializer
+
+    @extend_schema(
+        operation_id="analytics_session_breakdown",
+        parameters=[
+            OpenApiParameter(
+                name="range",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=["today", "7d", "30d", "90d", "all"],
+                default="7d",
+            )
+        ],
+        responses=SessionBreakdownSerializer,
+    )
+    def get(self, request):
+        date_range = validate_date_range(request)
+        sessions = sessions_for_range(request.user, date_range)
+        stats = sessions.aggregate(
+            normal_count=Count("id", filter=Q(mode=FocusSession.Mode.NORMAL)),
+            deep_count=Count("id", filter=Q(mode=FocusSession.Mode.DEEP_WORK)),
+            average_normal_score=Avg(
+                "focus_score",
+                filter=Q(
+                    mode=FocusSession.Mode.NORMAL,
+                    status=FocusSession.Status.COMPLETED,
+                ),
+            ),
+            average_deep_work_score=Avg(
+                "focus_score",
+                filter=Q(
+                    mode=FocusSession.Mode.DEEP_WORK,
+                    status=FocusSession.Status.COMPLETED,
+                ),
+            ),
+        )
+        total = stats["normal_count"] + stats["deep_count"]
+        data = {
+            "normalSessionCount": stats["normal_count"],
+            "deepWorkSessionCount": stats["deep_count"],
+            "normalSessionPercentage": round(stats["normal_count"] / total * 100, 2)
+            if total
+            else 0,
+            "deepWorkSessionPercentage": round(stats["deep_count"] / total * 100, 2)
+            if total
+            else 0,
+            "averageNormalScore": stats["average_normal_score"],
+            "averageDeepWorkScore": stats["average_deep_work_score"],
+            "dateRange": date_range,
+        }
+        return Response(SessionBreakdownSerializer(data).data)
 
 
 class HeatmapView(GenericAPIView):
@@ -290,6 +408,15 @@ class HeatmapView(GenericAPIView):
             for row in rows
         ]
         return Response(HeatmapDataPointSerializer(data, many=True).data)
+
+
+class TimeHeatmapView(HeatmapView):
+    @extend_schema(
+        operation_id="analytics_time_heatmap",
+        responses=HeatmapDataPointSerializer(many=True),
+    )
+    def get(self, request):
+        return super().get(request)
 
 
 class WeeklySnapshotView(GenericAPIView):

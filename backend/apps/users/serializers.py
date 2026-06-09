@@ -235,6 +235,42 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
         return []
 
 
+class NotificationSettingsSerializer(serializers.ModelSerializer):
+    notificationsEnabled = serializers.BooleanField(
+        source="notifications_enabled",
+        required=False,
+    )
+    sessionReminderEnabled = serializers.BooleanField(
+        source="session_reminder_enabled",
+        required=False,
+    )
+    sessionReminderTime = serializers.TimeField(
+        source="session_reminder_time",
+        required=False,
+        allow_null=True,
+        format="%H:%M",
+        input_formats=["%H:%M", "%H:%M:%S"],
+    )
+    weeklySummaryEnabled = serializers.BooleanField(
+        source="weekly_summary_enabled",
+        required=False,
+    )
+    deepWorkSuggestionEnabled = serializers.BooleanField(
+        source="deep_work_suggestion_enabled",
+        required=False,
+    )
+
+    class Meta:
+        model = UserPreference
+        fields = [
+            "notificationsEnabled",
+            "sessionReminderEnabled",
+            "sessionReminderTime",
+            "weeklySummaryEnabled",
+            "deepWorkSuggestionEnabled",
+        ]
+
+
 class OnboardingSerializer(serializers.Serializer):
     profession = serializers.ChoiceField(
         choices=Profile.Profession.choices,

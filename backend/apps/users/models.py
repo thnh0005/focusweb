@@ -8,6 +8,8 @@ from .managers import UserManager
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    """User đăng nhập bằng email, dùng chung cho auth/session/profile."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     display_name = models.CharField(max_length=120, blank=True)
@@ -38,6 +40,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Profile(models.Model):
+    """Thông tin hồ sơ và thống kê tổng hợp phục vụ dashboard cá nhân."""
+
     class Profession(models.TextChoices):
         STUDENT = "student", "Student"
         DEVELOPER = "developer", "Developer"
@@ -65,6 +69,8 @@ class Profile(models.Model):
 
 
 class UserPreference(models.Model):
+    """Cấu hình mặc định của user cho session, giao diện và notification."""
+
     class SessionMode(models.TextChoices):
         NORMAL = "normal", "Normal"
         DEEP_WORK = "deep-work", "Deep Work"
@@ -113,6 +119,8 @@ class UserPreference(models.Model):
 
 
 class OnboardingSurvey(models.Model):
+    """Lưu câu trả lời onboarding để biết user đã hoàn tất setup ban đầu."""
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

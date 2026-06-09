@@ -10,6 +10,7 @@ from rest_framework.response import Response
 from .serializers import (
     CsrfTokenSerializer,
     LoginSerializer,
+    NotificationSettingsSerializer,
     OnboardingSerializer,
     ProfileSerializer,
     RegisterSerializer,
@@ -125,6 +126,31 @@ class PreferenceView(GenericAPIView):
 
     def _update(self, request, partial):
         serializer = UserPreferenceSerializer(
+            request.user.preferences,
+            data=request.data,
+            partial=partial,
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+
+class NotificationSettingsView(GenericAPIView):
+    serializer_class = NotificationSettingsSerializer
+
+    def get(self, request):
+        # Tuần 3 dùng lại UserPreference làm nguồn sự thật cho notification
+        # để không tách bảng khi mới chỉ cần lưu cấu hình reminder/report.
+        return Response(NotificationSettingsSerializer(request.user.preferences).data)
+
+    def put(self, request):
+        return self._update(request, partial=False)
+
+    def patch(self, request):
+        return self._update(request, partial=True)
+
+    def _update(self, request, partial):
+        serializer = NotificationSettingsSerializer(
             request.user.preferences,
             data=request.data,
             partial=partial,

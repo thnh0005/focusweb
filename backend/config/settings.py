@@ -180,5 +180,9 @@ SPECTACULAR_SETTINGS = {
         "TrendDirectionEnum": ["up", "down", "neutral"],
         "BlacklistSeverityEnum": "apps.extension.models.BlacklistEntry.Severity",
         "DistractionSeverityEnum": ["high", "medium", "low"],
+        "DocumentFileTypeEnum": "apps.ai.models.StudyDocument.FileType",
+        "DocumentStatusEnum": "apps.ai.models.StudyDocument.Status",
+        "DocumentSummaryModeEnum": "apps.ai.models.DocumentSummary.Mode",
+        "FlashcardDifficultyEnum": "apps.ai.models.FlashcardDeck.Difficulty",
     },
 }
