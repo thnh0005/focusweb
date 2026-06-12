@@ -4,13 +4,17 @@ from .views import (
     GoalTemplateDetailView,
     GoalTemplateAliasListView,
     GoalTemplateListView,
+    SessionAIInsightRetryView,
+    SessionAIInsightView,
     SessionCancelView,
     SessionDetailView,
     SessionEndView,
     SessionListCreateView,
     SessionPauseView,
+    SessionRealtimeScoreView,
     SessionResumeView,
     SessionSummaryView,
+    SessionWarningsView,
     SmartPresetView,
 )
 
@@ -28,6 +32,26 @@ urlpatterns = [
         "sessions/<uuid:session_id>/summary/",
         SessionSummaryView.as_view(),
         name="session-summary",
+    ),
+    path(
+        "sessions/<uuid:session_id>/score/realtime/",
+        SessionRealtimeScoreView.as_view(),
+        name="session-realtime-score",
+    ),
+    path(
+        "sessions/<uuid:session_id>/warnings/",
+        SessionWarningsView.as_view(),
+        name="session-warnings",
+    ),
+    path(
+        "sessions/<uuid:session_id>/ai-insight/",
+        SessionAIInsightView.as_view(),
+        name="session-ai-insight",
+    ),
+    path(
+        "sessions/<uuid:session_id>/ai-insight/retry/",
+        SessionAIInsightRetryView.as_view(),
+        name="session-ai-insight-retry",
     ),
     path(
         "sessions/<uuid:session_id>/pause/",

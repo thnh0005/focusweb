@@ -127,6 +127,16 @@ def transition_session(
             total_focus_minutes=F("total_focus_minutes")
             + locked.actual_duration_seconds // 60,
         )
+        transaction.on_commit(lambda: enqueue_session_insight(locked.id))
 
     return locked
+
+
+def enqueue_session_insight(session_id):
+    from apps.ai.tasks import generate_session_insight
+
+    try:
+        generate_session_insight.delay(str(session_id))
+    except Exception:
+        return None
 

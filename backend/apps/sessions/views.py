@@ -4,14 +4,27 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 
+from apps.ai.models import SessionInsight
+from apps.ai.services import (
+    SessionInsightConflict,
+    SessionInsightService,
+    SessionInsightValidationError,
+)
+from apps.scoring.realtime_score_service import RealtimeScoreService
+from apps.tracking.models import WarningCycle, WarningEvent
+
 from .models import FocusSession, GoalTemplate, SessionNote
 from .serializers import (
     ActiveSessionSerializer,
     CreateSessionSerializer,
     EndSessionSerializer,
     GoalTemplateSerializer,
+    RealtimeScoreResponseSerializer,
     SessionSerializer,
+    SessionInsightResponseSerializer,
+    SessionInsightRetryResponseSerializer,
     SessionSummarySerializer,
+    SessionWarningsResponseSerializer,
     SmartPresetSerializer,
     UpdateSessionSerializer,
 )
@@ -245,6 +258,143 @@ class SessionSummaryView(GenericAPIView):
             "isAiInsightReady": False,
         }
         return Response(SessionSummarySerializer(data).data)
+
+
+class SessionRealtimeScoreView(GenericAPIView):
+    serializer_class = RealtimeScoreResponseSerializer
+
+    @extend_schema(
+        operation_id="session_realtime_score",
+        responses=RealtimeScoreResponseSerializer,
+    )
+    def get(self, request, session_id):
+        session = get_owned_session(request.user, session_id)
+        if session.status not in {
+            FocusSession.Status.ACTIVE,
+            FocusSession.Status.PAUSED,
+        }:
+            raise ValidationError(
+                "Realtime score is available for active or paused sessions."
+            )
+        data = RealtimeScoreService().calculate_for_session(session)
+        return Response(RealtimeScoreResponseSerializer(data).data)
+
+
+class SessionWarningsView(GenericAPIView):
+    serializer_class = SessionWarningsResponseSerializer
+
+    @extend_schema(
+        operation_id="session_warnings",
+        responses=SessionWarningsResponseSerializer,
+    )
+    def get(self, request, session_id):
+        session = get_owned_session(request.user, session_id)
+        active_cycle = (
+            WarningCycle.objects.active()
+            .filter(session_id=session.id)
+            .order_by("-started_at")
+            .first()
+        )
+        warnings = WarningEvent.objects.filter(session_id=session.id).order_by(
+            "created_at",
+            "warning_level",
+        )
+        data = {
+            "session_id": session.id,
+            "session_status": session.status,
+            "mode": session.mode,
+            "warning_count": warnings.count(),
+            "active_cycle": self.serialize_cycle(active_cycle),
+            "warnings": [
+                {
+                    "id": warning.id,
+                    "cycle_id": warning.warning_cycle_id,
+                    "level": warning.warning_level,
+                    "decision_state": warning.decision_state,
+                    "decision_source": warning.decision_source,
+                    "decision_score": warning.decision_score,
+                    "domain": warning.domain,
+                    "reason_codes": warning.reason_codes,
+                    "auto_pause_required": warning.auto_pause_required,
+                    "triggered_at": warning.created_at,
+                }
+                for warning in warnings
+            ],
+        }
+        return Response(SessionWarningsResponseSerializer(data).data)
+
+    @staticmethod
+    def serialize_cycle(cycle):
+        if cycle is None:
+            return None
+        return {
+            "cycle_id": cycle.id,
+            "status": cycle.status,
+            "current_level": cycle.current_level,
+            "decision_source": cycle.decision_source,
+            "next_warning_at": cycle.next_warning_at,
+            "auto_pause_required": cycle.auto_pause_required,
+            "started_at": cycle.started_at,
+            "resolved_at": cycle.resolved_at,
+        }
+
+
+class SessionAIInsightView(GenericAPIView):
+    serializer_class = SessionInsightResponseSerializer
+
+    @extend_schema(
+        operation_id="session_ai_insight",
+        responses=SessionInsightResponseSerializer,
+    )
+    def get(self, request, session_id):
+        session = get_owned_session(request.user, session_id)
+        insight = SessionInsight.objects.filter(session=session).first()
+        if insight is None:
+            data = {
+                "session_id": session.id,
+                "status": SessionInsight.Status.PENDING,
+                "observations": [],
+                "source": None,
+                "model": None,
+                "generated_at": None,
+                "retry_count": 0,
+                "error_code": None,
+            }
+        else:
+            data = SessionInsightService.serialize(insight)
+        return Response(SessionInsightResponseSerializer(data).data)
+
+
+class SessionAIInsightRetryView(GenericAPIView):
+    serializer_class = SessionInsightRetryResponseSerializer
+
+    @extend_schema(
+        operation_id="session_ai_insight_retry",
+        responses={202: SessionInsightRetryResponseSerializer},
+    )
+    def post(self, request, session_id):
+        session = get_owned_session(request.user, session_id)
+        service = SessionInsightService()
+        try:
+            insight = service.queue_manual_retry(session)
+        except SessionInsightConflict as exc:
+            return Response(
+                {"error_code": exc.error_code, "detail": exc.message},
+                status=status.HTTP_409_CONFLICT,
+            )
+        except SessionInsightValidationError as exc:
+            raise ValidationError({"error_code": exc.error_code, "detail": exc.message})
+
+        data = {
+            "session_id": session.id,
+            "status": insight.status,
+            "message": "AI session insight regeneration has been queued.",
+            "retry_count": insight.retry_count,
+        }
+        return Response(
+            SessionInsightRetryResponseSerializer(data).data,
+            status=status.HTTP_202_ACCEPTED,
+        )
 
 
 class SessionPauseView(GenericAPIView):

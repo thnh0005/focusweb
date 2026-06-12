@@ -78,3 +78,20 @@ class EventBatchIngestResponseSerializer(serializers.Serializer):
     batch_id = serializers.UUIDField()
     accepted_count = serializers.IntegerField()
     rejected_count = serializers.IntegerField()
+    rule_evaluations = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
+    semantic_evaluations = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
+    hybrid_decisions = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
+    warning_cycles = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
+    ai = serializers.DictField(required=False)

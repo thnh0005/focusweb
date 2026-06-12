@@ -1,0 +1,49 @@
+from dataclasses import dataclass
+
+
+STATE_FOCUSED = "FOCUSED"
+STATE_POTENTIALLY_DISTRACTED = "POTENTIALLY_DISTRACTED"
+STATE_DISTRACTED = "DISTRACTED"
+
+DECISION_SOURCE_HYBRID = "HYBRID"
+DECISION_SOURCE_RULE_ONLY = "RULE_ONLY"
+DECISION_SOURCE_RULE_ONLY_FALLBACK = "RULE_ONLY_FALLBACK"
+
+RISK_LOW = "LOW"
+RISK_MEDIUM = "MEDIUM"
+RISK_HIGH = "HIGH"
+
+SEMANTIC_RELEVANT = "RELEVANT"
+SEMANTIC_UNCERTAIN = "UNCERTAIN"
+SEMANTIC_NOT_RELEVANT = "NOT_RELEVANT"
+
+SESSION_MODE_NORMAL = "normal"
+SESSION_MODE_DEEP_WORK = "deep-work"
+
+REASON_CONTENT_RELEVANT = "CONTENT_RELEVANT"
+REASON_CONTENT_UNCERTAIN = "CONTENT_UNCERTAIN"
+REASON_CONTENT_NOT_RELEVANT = "CONTENT_NOT_RELEVANT"
+REASON_SEMANTIC_UNAVAILABLE = "SEMANTIC_UNAVAILABLE"
+
+
+class HybridDecisionValidationError(ValueError):
+    pass
+
+
+@dataclass(frozen=True)
+class HybridDecisionConfig:
+    semantic_weight: float = 0.65
+    rule_weight: float = 0.35
+    semantic_confidence_weight: float = 0.70
+    rule_confidence_weight: float = 0.30
+    rule_low_confidence: float = 0.70
+    rule_medium_confidence: float = 0.80
+    rule_high_confidence: float = 0.90
+
+
+VALID_RISK_LEVELS = {RISK_LOW, RISK_MEDIUM, RISK_HIGH}
+VALID_SEMANTIC_CLASSIFICATIONS = {
+    SEMANTIC_RELEVANT,
+    SEMANTIC_UNCERTAIN,
+    SEMANTIC_NOT_RELEVANT,
+}
