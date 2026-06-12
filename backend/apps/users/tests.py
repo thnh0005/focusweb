@@ -1,6 +1,11 @@
+from datetime import timedelta
+
 from django.contrib.auth import get_user_model
+from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APIClient, APITestCase
+
+from apps.sessions.models import FocusSession
 
 from .models import OnboardingSurvey, Profile, UserPreference
 
@@ -276,4 +281,108 @@ class UserApiTests(APITestCase):
         self.user.onboarding_survey.refresh_from_db()
         self.assertTrue(self.user.onboarding_complete)
         self.assertTrue(self.user.onboarding_survey.skipped)
+
+    def test_week_4_music_theme_and_ambient_preferences(self):
+        music = self.client.put(
+            "/api/music/preferences/",
+            {
+                "musicEnabled": False,
+                "musicTrack": "lofi",
+                "customPlaylistUrl": "https://example.com/focus-playlist",
+                "soundEnabled": True,
+                "ambientSoundVolume": 25,
+            },
+            format="json",
+        )
+        theme = self.client.put(
+            "/api/theme/preferences/",
+            {
+                "theme": "aurora-night",
+                "themeAccent": "violet",
+                "workspaceBackgroundUrl": "https://example.com/background.png",
+            },
+            format="json",
+        )
+        ambient = self.client.put(
+            "/api/ambient/preferences/",
+            {
+                "ambientEffect": "rain",
+                "ambientEffectEnabled": True,
+                "ambientEffectIntensity": 80,
+            },
+            format="json",
+        )
+
+        self.assertEqual(music.status_code, status.HTTP_200_OK)
+        self.assertFalse(music.data["musicEnabled"])
+        self.assertEqual(music.data["musicTrack"], "lofi")
+        self.assertEqual(theme.status_code, status.HTTP_200_OK)
+        self.assertEqual(theme.data["theme"], "aurora-night")
+        self.assertEqual(theme.data["themeAccent"], "violet")
+        self.assertEqual(ambient.status_code, status.HTTP_200_OK)
+        self.assertEqual(ambient.data["ambientEffectIntensity"], 80)
+
+    def test_week_4_streak_uses_completed_session_days(self):
+        for days_ago in (0, 1, 3):
+            started_at = timezone.now() - timedelta(days=days_ago)
+            FocusSession.objects.create(
+                user=self.user,
+                mode=FocusSession.Mode.NORMAL,
+                status=FocusSession.Status.COMPLETED,
+                target_duration_seconds=3600,
+                actual_duration_seconds=1800,
+                focus_score=80,
+                started_at=started_at,
+                ended_at=started_at + timedelta(minutes=30),
+            )
+
+        response = self.client.get("/api/streak/")
+        alias = self.client.get("/api/user/streak/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["currentStreak"], 2)
+        self.assertEqual(response.data["longestStreak"], 2)
+        self.assertEqual(response.data["milestones"][0]["days"], 3)
+        self.assertEqual(alias.status_code, status.HTTP_200_OK)
+        self.user.profile.refresh_from_db()
+        self.assertEqual(self.user.profile.streak_count, 2)
+
+    def test_week_4_change_password_export_and_delete_account(self):
+        FocusSession.objects.create(
+            user=self.user,
+            mode=FocusSession.Mode.NORMAL,
+            status=FocusSession.Status.COMPLETED,
+            goal="Export account data",
+            target_duration_seconds=1800,
+            actual_duration_seconds=1200,
+            focus_score=70,
+            ended_at=timezone.now(),
+        )
+        new_password = "B8!newPassWord$"
+
+        change = self.client.post(
+            "/api/account/change-password/",
+            {
+                "currentPassword": PASSWORD,
+                "newPassword": new_password,
+                "newPasswordConfirm": new_password,
+            },
+            format="json",
+        )
+        export = self.client.post("/api/account/export-data/", format="json")
+
+        self.assertEqual(change.status_code, status.HTTP_200_OK)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password(new_password))
+        self.assertEqual(export.status_code, status.HTTP_200_OK)
+        self.assertEqual(export.data["user"]["email"], self.user.email)
+        self.assertEqual(export.data["sessions"][0]["goal"], "Export account data")
+
+        delete = self.client.delete(
+            "/api/account/delete/",
+            {"currentPassword": new_password},
+            format="json",
+        )
+        self.assertEqual(delete.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertFalse(User.objects.filter(pk=self.user.pk).exists())
 

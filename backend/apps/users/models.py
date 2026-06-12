@@ -79,12 +79,22 @@ class UserPreference(models.Model):
         CYBER = "cyber", "Cyber"
         MINIMAL = "minimal", "Minimal"
         FOREST = "forest", "Forest"
+        MINIMAL_DARK = "minimal-dark", "Minimal Dark"
+        AURORA_NIGHT = "aurora-night", "Aurora Night"
+        FOREST_CALM = "forest-calm", "Forest Calm"
+        RAIN_ROOM = "rain-room", "Rain Room"
 
     class AmbientEffect(models.TextChoices):
         RAIN = "rain", "Rain"
         SNOW = "snow", "Snow"
         STARS = "stars", "Stars"
         LEAVES = "leaves", "Leaves"
+
+    class MusicTrack(models.TextChoices):
+        RAIN = "rain", "Rain"
+        FOREST = "forest", "Forest"
+        LOFI = "lofi", "Lo-fi"
+        WHITE_NOISE = "white-noise", "White Noise"
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -110,6 +120,18 @@ class UserPreference(models.Model):
     deep_work_suggestion_enabled = models.BooleanField(default=True)
     sound_enabled = models.BooleanField(default=False)
     ambient_sound_volume = models.PositiveSmallIntegerField(default=50)
+    music_enabled = models.BooleanField(default=True)
+    music_track = models.CharField(
+        max_length=24,
+        choices=MusicTrack.choices,
+        default=MusicTrack.RAIN,
+    )
+    custom_playlist_url = models.URLField(blank=True)
+    ambient_effect_enabled = models.BooleanField(default=True)
+    ambient_effect_intensity = models.PositiveSmallIntegerField(default=50)
+    theme_accent = models.CharField(max_length=24, default="moss", blank=True)
+    workspace_background_url = models.URLField(blank=True)
+    auto_resume_session = models.BooleanField(default=False)
     extension_installed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

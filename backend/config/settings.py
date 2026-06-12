@@ -184,5 +184,8 @@ SPECTACULAR_SETTINGS = {
         "DocumentStatusEnum": "apps.ai.models.StudyDocument.Status",
         "DocumentSummaryModeEnum": "apps.ai.models.DocumentSummary.Mode",
         "FlashcardDifficultyEnum": "apps.ai.models.FlashcardDeck.Difficulty",
+        "MusicTrackEnum": "apps.users.models.UserPreference.MusicTrack",
+        "ReportExportStatusEnum": "apps.analytics.models.ReportExportJob.Status",
+        "ReportExportFormatEnum": "apps.analytics.models.ReportExportJob.Format",
     },
 }

@@ -4,14 +4,17 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 
-from .models import FocusSession, GoalTemplate, SessionNote
+from .models import FocusSession, GoalTemplate, SessionNote, SessionTag
 from .serializers import (
     ActiveSessionSerializer,
     CreateSessionSerializer,
     EndSessionSerializer,
     GoalTemplateSerializer,
+    RecentContextSerializer,
     SessionSerializer,
+    SessionNoteSerializer,
     SessionSummarySerializer,
+    SessionTagSerializer,
     SmartPresetSerializer,
     UpdateSessionSerializer,
 )
@@ -27,6 +30,14 @@ def get_owned_session(user, session_id):
         )
     except (FocusSession.DoesNotExist, ValueError) as exc:
         raise NotFound("Session was not found.") from exc
+
+
+def get_owned_tag(user, tag_id):
+    """Ẩn tag của user khác bằng 404 giống các API ownership khác."""
+    try:
+        return SessionTag.objects.get(pk=tag_id, user=user)
+    except (SessionTag.DoesNotExist, ValueError) as exc:
+        raise NotFound("Tag was not found.") from exc
 
 
 def get_score_breakdown(session):
@@ -110,6 +121,62 @@ class GoalTemplateDetailView(GenericAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class SessionTagListView(GenericAPIView):
+    serializer_class = SessionTagSerializer
+
+    @extend_schema(operation_id="tag_list", responses=SessionTagSerializer(many=True))
+    def get(self, request):
+        tags = SessionTag.objects.filter(user=request.user).prefetch_related("sessions")
+        search = request.query_params.get("search")
+        if search:
+            tags = tags.filter(name__icontains=search)
+        return Response(SessionTagSerializer(tags, many=True).data)
+
+    @extend_schema(
+        operation_id="tag_create",
+        request=SessionTagSerializer,
+        responses=SessionTagSerializer,
+    )
+    def post(self, request):
+        serializer = SessionTagSerializer(
+            data=request.data,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        tag = serializer.save(user=request.user)
+        return Response(SessionTagSerializer(tag).data, status=status.HTTP_201_CREATED)
+
+
+class SessionTagDetailView(GenericAPIView):
+    serializer_class = SessionTagSerializer
+
+    @extend_schema(operation_id="tag_retrieve", responses=SessionTagSerializer)
+    def get(self, request, tag_id):
+        return Response(SessionTagSerializer(get_owned_tag(request.user, tag_id)).data)
+
+    def put(self, request, tag_id):
+        return self._update(request, tag_id, partial=False)
+
+    def patch(self, request, tag_id):
+        return self._update(request, tag_id, partial=True)
+
+    def _update(self, request, tag_id, partial):
+        tag = get_owned_tag(request.user, tag_id)
+        serializer = SessionTagSerializer(
+            tag,
+            data=request.data,
+            partial=partial,
+            context={"request": request},
+        )
+        serializer.is_valid(raise_exception=True)
+        serializer.save()
+        return Response(serializer.data)
+
+    def delete(self, request, tag_id):
+        get_owned_tag(request.user, tag_id).delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+
 class GoalTemplateAliasListView(GenericAPIView):
     serializer_class = GoalTemplateSerializer
 
@@ -150,6 +217,7 @@ class SessionListCreateView(GenericAPIView):
         status_filter = request.query_params.get("status")
         started_after = request.query_params.get("startedAfter")
         started_before = request.query_params.get("startedBefore")
+        note_search = request.query_params.get("noteSearch") or request.query_params.get("q")
         if mode:
             sessions = sessions.filter(mode=mode)
         if tag:
@@ -160,6 +228,9 @@ class SessionListCreateView(GenericAPIView):
             sessions = sessions.filter(started_at__gte=started_after)
         if started_before:
             sessions = sessions.filter(started_at__lte=started_before)
+        if note_search:
+            sessions = sessions.filter(note__content__icontains=note_search)
+        sessions = sessions.distinct()
 
         try:
             page = max(1, int(request.query_params.get("page", 1)))
@@ -245,6 +316,81 @@ class SessionSummaryView(GenericAPIView):
             "isAiInsightReady": False,
         }
         return Response(SessionSummarySerializer(data).data)
+
+
+class SessionNoteView(GenericAPIView):
+    serializer_class = SessionNoteSerializer
+
+    @extend_schema(operation_id="session_note_retrieve", responses=SessionNoteSerializer)
+    def get(self, request, session_id):
+        session = get_owned_session(request.user, session_id)
+        note, _ = SessionNote.objects.get_or_create(session=session, defaults={"content": ""})
+        return Response(SessionNoteSerializer(note).data)
+
+    @extend_schema(
+        operation_id="session_note_update",
+        request=SessionNoteSerializer,
+        responses=SessionNoteSerializer,
+    )
+    def put(self, request, session_id):
+        return self._update(request, session_id, partial=False)
+
+    def patch(self, request, session_id):
+        return self._update(request, session_id, partial=True)
+
+    def _update(self, request, session_id, partial):
+        session = get_owned_session(request.user, session_id)
+        note, _ = SessionNote.objects.get_or_create(session=session)
+        serializer = SessionNoteSerializer(note, data=request.data, partial=partial)
+        serializer.is_valid(raise_exception=True)
+        note.content = serializer.validated_data.get("content", note.content)
+        note.save(update_fields=["content", "updated_at"])
+        return Response(SessionNoteSerializer(note).data)
+
+
+class RecentContextView(GenericAPIView):
+    serializer_class = RecentContextSerializer
+
+    @extend_schema(operation_id="recent_context", responses=RecentContextSerializer)
+    def get(self, request):
+        # Recent context tuần 4 gom dữ liệu session gần nhất để FE dựng gợi ý nhanh.
+        sessions = FocusSession.objects.filter(user=request.user).prefetch_related("tags")
+        active_session = (
+            sessions.filter(status__in=FocusSession.OPEN_STATUSES)
+            .order_by("-started_at")
+            .first()
+        )
+        last_completed = (
+            sessions.filter(status=FocusSession.Status.COMPLETED)
+            .order_by("-ended_at", "-started_at")
+            .first()
+        )
+        recent_goals = list(
+            sessions.exclude(goal="")
+            .order_by("-started_at")
+            .values_list("goal", flat=True)[:5]
+        )
+        recent_notes = [
+            {
+                "sessionId": str(note.session_id),
+                "content": note.content,
+                "updatedAt": note.updated_at,
+            }
+            for note in SessionNote.objects.filter(session__user=request.user)
+            .exclude(content="")
+            .order_by("-updated_at")[:5]
+        ]
+        suggested_tags = list(
+            SessionTag.objects.filter(user=request.user).values_list("name", flat=True)[:8]
+        )
+        data = {
+            "activeSession": active_session,
+            "lastCompletedSession": last_completed,
+            "recentGoals": recent_goals,
+            "recentNotes": recent_notes,
+            "suggestedTags": suggested_tags,
+        }
+        return Response(RecentContextSerializer(data).data)
 
 
 class SessionPauseView(GenericAPIView):

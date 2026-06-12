@@ -1,5 +1,7 @@
 from rest_framework import serializers
 
+from .models import ReportExportJob
+
 
 class DashboardStatsSerializer(serializers.Serializer):
     totalFocusMinutes = serializers.IntegerField()
@@ -111,3 +113,39 @@ class SessionBreakdownSerializer(serializers.Serializer):
     averageNormalScore = serializers.FloatField(allow_null=True)
     averageDeepWorkScore = serializers.FloatField(allow_null=True)
     dateRange = serializers.ChoiceField(choices=["today", "7d", "30d", "90d", "all"])
+
+
+class ReportExportRequestSerializer(serializers.Serializer):
+    dateRange = serializers.ChoiceField(
+        choices=["today", "7d", "30d", "90d", "all"],
+        default="7d",
+        required=False,
+    )
+    format = serializers.ChoiceField(
+        choices=ReportExportJob.Format.choices,
+        default=ReportExportJob.Format.JSON,
+        required=False,
+    )
+    tag = serializers.CharField(required=False, allow_blank=True, max_length=50)
+
+
+class ReportExportJobSerializer(serializers.ModelSerializer):
+    jobId = serializers.UUIDField(source="id", read_only=True)
+    dateRange = serializers.CharField(source="date_range", read_only=True)
+    format = serializers.CharField(source="export_format", read_only=True)
+    downloadUrl = serializers.CharField(source="download_url", read_only=True)
+    requestedAt = serializers.DateTimeField(source="requested_at", read_only=True)
+    completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+
+    class Meta:
+        model = ReportExportJob
+        fields = [
+            "jobId",
+            "status",
+            "format",
+            "dateRange",
+            "payload",
+            "downloadUrl",
+            "requestedAt",
+            "completedAt",
+        ]

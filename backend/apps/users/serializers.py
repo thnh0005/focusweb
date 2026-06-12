@@ -199,6 +199,42 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
         max_value=100,
         required=False,
     )
+    musicEnabled = serializers.BooleanField(source="music_enabled", required=False)
+    musicTrack = serializers.ChoiceField(
+        source="music_track",
+        choices=UserPreference.MusicTrack.choices,
+        required=False,
+    )
+    customPlaylistUrl = serializers.URLField(
+        source="custom_playlist_url",
+        required=False,
+        allow_blank=True,
+    )
+    ambientEffectEnabled = serializers.BooleanField(
+        source="ambient_effect_enabled",
+        required=False,
+    )
+    ambientEffectIntensity = serializers.IntegerField(
+        source="ambient_effect_intensity",
+        min_value=0,
+        max_value=100,
+        required=False,
+    )
+    themeAccent = serializers.CharField(
+        source="theme_accent",
+        required=False,
+        allow_blank=True,
+        max_length=24,
+    )
+    workspaceBackgroundUrl = serializers.URLField(
+        source="workspace_background_url",
+        required=False,
+        allow_blank=True,
+    )
+    autoResumeSession = serializers.BooleanField(
+        source="auto_resume_session",
+        required=False,
+    )
     goalTemplates = serializers.SerializerMethodField()
     customBlacklist = serializers.SerializerMethodField()
 
@@ -218,6 +254,14 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
             "customBlacklist",
             "soundEnabled",
             "ambientSoundVolume",
+            "musicEnabled",
+            "musicTrack",
+            "customPlaylistUrl",
+            "ambientEffectEnabled",
+            "ambientEffectIntensity",
+            "themeAccent",
+            "workspaceBackgroundUrl",
+            "autoResumeSession",
         ]
         extra_kwargs = {"theme": {"required": False}}
 
@@ -269,6 +313,135 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
             "weeklySummaryEnabled",
             "deepWorkSuggestionEnabled",
         ]
+
+
+class MusicPreferenceSerializer(serializers.ModelSerializer):
+    musicEnabled = serializers.BooleanField(source="music_enabled", required=False)
+    musicTrack = serializers.ChoiceField(
+        source="music_track",
+        choices=UserPreference.MusicTrack.choices,
+        required=False,
+    )
+    customPlaylistUrl = serializers.URLField(
+        source="custom_playlist_url",
+        required=False,
+        allow_blank=True,
+    )
+    soundEnabled = serializers.BooleanField(source="sound_enabled", required=False)
+    ambientSoundVolume = serializers.IntegerField(
+        source="ambient_sound_volume",
+        min_value=0,
+        max_value=100,
+        required=False,
+    )
+
+    class Meta:
+        model = UserPreference
+        fields = [
+            "musicEnabled",
+            "musicTrack",
+            "customPlaylistUrl",
+            "soundEnabled",
+            "ambientSoundVolume",
+        ]
+
+
+class ThemePreferenceSerializer(serializers.ModelSerializer):
+    themeAccent = serializers.CharField(
+        source="theme_accent",
+        required=False,
+        allow_blank=True,
+        max_length=24,
+    )
+    workspaceBackgroundUrl = serializers.URLField(
+        source="workspace_background_url",
+        required=False,
+        allow_blank=True,
+    )
+
+    class Meta:
+        model = UserPreference
+        fields = ["theme", "themeAccent", "workspaceBackgroundUrl"]
+        extra_kwargs = {"theme": {"required": False}}
+
+
+class AmbientPreferenceSerializer(serializers.ModelSerializer):
+    ambientEffect = serializers.ChoiceField(
+        source="ambient_effect",
+        choices=[("", "None"), *UserPreference.AmbientEffect.choices],
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+    )
+    ambientEffectEnabled = serializers.BooleanField(
+        source="ambient_effect_enabled",
+        required=False,
+    )
+    ambientEffectIntensity = serializers.IntegerField(
+        source="ambient_effect_intensity",
+        min_value=0,
+        max_value=100,
+        required=False,
+    )
+
+    class Meta:
+        model = UserPreference
+        fields = [
+            "ambientEffect",
+            "ambientEffectEnabled",
+            "ambientEffectIntensity",
+        ]
+
+    def validate_ambientEffect(self, value):
+        return value or ""
+
+
+class ChangePasswordSerializer(serializers.Serializer):
+    currentPassword = serializers.CharField(write_only=True, trim_whitespace=False)
+    newPassword = serializers.CharField(write_only=True, trim_whitespace=False)
+    newPasswordConfirm = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        user = self.context["request"].user
+        if not user.check_password(attrs["currentPassword"]):
+            raise serializers.ValidationError(
+                {"currentPassword": ["Current password is incorrect."]}
+            )
+        if attrs["newPassword"] != attrs["newPasswordConfirm"]:
+            raise serializers.ValidationError(
+                {"newPasswordConfirm": ["Passwords do not match."]}
+            )
+        try:
+            validate_password(attrs["newPassword"], user=user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"newPassword": list(exc.messages)}) from exc
+        return attrs
+
+
+class DeleteAccountSerializer(serializers.Serializer):
+    currentPassword = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate_currentPassword(self, value):
+        if not self.context["request"].user.check_password(value):
+            raise serializers.ValidationError("Current password is incorrect.")
+        return value
+
+
+class AccountExportSerializer(serializers.Serializer):
+    generatedAt = serializers.DateTimeField()
+    user = serializers.DictField()
+    profile = serializers.DictField()
+    preferences = serializers.DictField()
+    sessions = serializers.ListField(child=serializers.DictField())
+    documents = serializers.ListField(child=serializers.DictField())
+
+
+class StreakSerializer(serializers.Serializer):
+    currentStreak = serializers.IntegerField()
+    longestStreak = serializers.IntegerField()
+    lastSessionDate = serializers.DateField(allow_null=True)
+    milestoneReached = serializers.IntegerField(allow_null=True)
+    milestones = serializers.ListField(child=serializers.DictField())
 
 
 class OnboardingSerializer(serializers.Serializer):

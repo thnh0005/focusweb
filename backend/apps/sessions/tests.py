@@ -315,3 +315,47 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["aiInsights"], [])
         self.assertFalse(response.data["isAiInsightReady"])
         self.assertTrue(FocusScore.objects.filter(session_id=session_id).exists())
+
+    def test_week_4_tag_crud_and_history_filter(self):
+        create_tag = self.client.post(
+            "/api/tags/",
+            {"name": "Backend"},
+            format="json",
+        )
+        tag_id = create_tag.data["id"]
+        rename = self.client.patch(
+            f"/api/tags/{tag_id}/",
+            {"name": "Backend API"},
+            format="json",
+        )
+        create = self.create_session(tags=["Backend API"])
+        filtered = self.client.get("/api/sessions/?tag=Backend%20API")
+        delete = self.client.delete(f"/api/tags/{tag_id}/")
+
+        self.assertEqual(create_tag.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(rename.status_code, status.HTTP_200_OK)
+        self.assertEqual(rename.data["name"], "Backend API")
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(filtered.status_code, status.HTTP_200_OK)
+        self.assertEqual(filtered.data["count"], 1)
+        self.assertEqual(delete.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_week_4_session_note_search_and_recent_context(self):
+        create = self.create_session(goal="Finish note API")
+        session_id = create.data["id"]
+        note = self.client.put(
+            f"/api/sessions/{session_id}/note/",
+            {"content": "Remember the searchable note flow."},
+            format="json",
+        )
+        read_note = self.client.get(f"/api/sessions/{session_id}/note/")
+        history = self.client.get("/api/sessions/?noteSearch=searchable")
+        context = self.client.get("/api/recent-context/")
+
+        self.assertEqual(note.status_code, status.HTTP_200_OK)
+        self.assertEqual(read_note.data["content"], "Remember the searchable note flow.")
+        self.assertEqual(history.status_code, status.HTTP_200_OK)
+        self.assertEqual(history.data["count"], 1)
+        self.assertEqual(context.status_code, status.HTTP_200_OK)
+        self.assertEqual(context.data["activeSession"]["id"], session_id)
+        self.assertIn("Finish note API", context.data["recentGoals"])

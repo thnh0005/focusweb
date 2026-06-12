@@ -9,6 +9,8 @@ from .views import (
     FocusTrendView,
     HeatmapView,
     PatternInsightsView,
+    ReportExportDetailView,
+    ReportExportView,
     SessionBreakdownView,
     TimeHeatmapView,
     WeeklySnapshotView,
@@ -47,4 +49,10 @@ urlpatterns = [
         name="analytics-weekly-snapshot",
     ),
     path("analytics/patterns/", PatternInsightsView.as_view(), name="analytics-patterns"),
+    path("reports/export/", ReportExportView.as_view(), name="report-export"),
+    path(
+        "reports/export/<uuid:job_id>/",
+        ReportExportDetailView.as_view(),
+        name="report-export-detail",
+    ),
 ]
