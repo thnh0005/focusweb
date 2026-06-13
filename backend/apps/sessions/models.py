@@ -20,6 +20,8 @@ class GoalTemplateQuerySet(models.QuerySet):
 
 
 class GoalTemplate(models.Model):
+    """Template goal mặc định hoặc template riêng để tạo session nhanh hơn."""
+
     id = models.CharField(
         primary_key=True,
         max_length=64,
@@ -59,6 +61,8 @@ class GoalTemplate(models.Model):
 
 
 class SessionTag(models.Model):
+    """Tag thuộc từng user, dùng để gắn nhãn và lọc session ở history."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
         settings.AUTH_USER_MODEL,
@@ -82,6 +86,8 @@ class SessionTag(models.Model):
 
 
 class FocusSession(models.Model):
+    """Phiên tập trung chính, lưu lifecycle từ start tới pause/end/cancel."""
+
     class Mode(models.TextChoices):
         NORMAL = "normal", "Normal"
         DEEP_WORK = "deep-work", "Deep Work"
@@ -156,6 +162,8 @@ class FocusSession(models.Model):
 
 
 class SessionNote(models.Model):
+    """Ghi chú một-một với session để summary/history đọc lại được."""
+
     session = models.OneToOneField(
         FocusSession,
         on_delete=models.CASCADE,
@@ -170,6 +178,8 @@ class SessionNote(models.Model):
 
 
 class SessionStateTransition(models.Model):
+    """Audit log trạng thái để debug lifecycle và đồng bộ UI chính xác."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session = models.ForeignKey(
         FocusSession,

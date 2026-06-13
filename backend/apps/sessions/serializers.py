@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import FocusSession, GoalTemplate, SessionNote, SessionStateTransition
+from .models import SessionTag
 from .services import set_session_tags
 
 
@@ -22,6 +23,35 @@ class GoalTemplateSerializer(serializers.ModelSerializer):
         if instance and instance.is_built_in:
             raise serializers.ValidationError("Built-in templates cannot be changed.")
         return attrs
+
+
+class SessionTagSerializer(serializers.ModelSerializer):
+    usageCount = serializers.SerializerMethodField()
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = SessionTag
+        fields = ["id", "name", "usageCount", "createdAt"]
+        read_only_fields = ["id", "usageCount", "createdAt"]
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Tag name cannot be blank.")
+        return name
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        name = attrs.get("name", getattr(self.instance, "name", ""))
+        queryset = SessionTag.objects.filter(user=request.user, name__iexact=name)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError({"name": ["This tag already exists."]})
+        return attrs
+
+    def get_usageCount(self, instance) -> int:
+        return instance.sessions.count()
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -231,3 +261,84 @@ class SessionSummarySerializer(serializers.Serializer):
     warningLog = serializers.ListField(child=serializers.DictField())
     recommendation = serializers.CharField()
     isAiInsightReady = serializers.BooleanField()
+
+
+class RealtimeScoreResponseSerializer(serializers.Serializer):
+    session_id = serializers.UUIDField()
+    session_status = serializers.CharField()
+    score = serializers.IntegerField(allow_null=True)
+    label = serializers.CharField(allow_null=True)
+    components = serializers.DictField()
+    weights = serializers.DictField(required=False)
+    window_seconds = serializers.IntegerField(required=False)
+    event_count = serializers.IntegerField()
+    data_quality = serializers.CharField()
+    stale = serializers.BooleanField()
+    ai_status = serializers.CharField(required=False)
+    ai_error_code = serializers.CharField(allow_null=True, required=False)
+    calculated_at = serializers.DateTimeField(required=False)
+
+
+class WarningCycleSummarySerializer(serializers.Serializer):
+    cycle_id = serializers.UUIDField()
+    status = serializers.CharField()
+    current_level = serializers.IntegerField()
+    decision_source = serializers.CharField(allow_blank=True, required=False)
+    next_warning_at = serializers.DateTimeField(allow_null=True)
+    auto_pause_required = serializers.BooleanField()
+    started_at = serializers.DateTimeField()
+    resolved_at = serializers.DateTimeField(allow_null=True)
+
+
+class SessionWarningEntrySerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    cycle_id = serializers.UUIDField(allow_null=True)
+    level = serializers.IntegerField()
+    decision_state = serializers.CharField(allow_blank=True)
+    decision_source = serializers.CharField(allow_blank=True, required=False)
+    decision_score = serializers.IntegerField(allow_null=True)
+    domain = serializers.CharField(allow_blank=True)
+    reason_codes = serializers.ListField(child=serializers.CharField())
+    auto_pause_required = serializers.BooleanField()
+    triggered_at = serializers.DateTimeField()
+
+
+class SessionWarningsResponseSerializer(serializers.Serializer):
+    session_id = serializers.UUIDField()
+    session_status = serializers.CharField()
+    mode = serializers.CharField()
+    warning_count = serializers.IntegerField()
+    active_cycle = WarningCycleSummarySerializer(allow_null=True)
+    warnings = SessionWarningEntrySerializer(many=True)
+
+
+class SessionInsightResponseSerializer(serializers.Serializer):
+    session_id = serializers.UUIDField()
+    status = serializers.CharField()
+    observations = serializers.ListField(child=serializers.CharField())
+    source = serializers.CharField(allow_null=True)
+    model = serializers.CharField(allow_null=True)
+    generated_at = serializers.DateTimeField(allow_null=True)
+    retry_count = serializers.IntegerField()
+    error_code = serializers.CharField(allow_null=True)
+
+
+class SessionInsightRetryResponseSerializer(serializers.Serializer):
+    session_id = serializers.UUIDField()
+    status = serializers.CharField()
+    message = serializers.CharField()
+    retry_count = serializers.IntegerField()
+
+
+class SessionNoteSerializer(serializers.Serializer):
+    sessionId = serializers.UUIDField(source="session_id", read_only=True)
+    content = serializers.CharField(allow_blank=True, max_length=5000)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+
+class RecentContextSerializer(serializers.Serializer):
+    activeSession = SessionSerializer(allow_null=True)
+    lastCompletedSession = SessionSerializer(allow_null=True)
+    recentGoals = serializers.ListField(child=serializers.CharField())
+    recentNotes = serializers.ListField(child=serializers.DictField())
+    suggestedTags = serializers.ListField(child=serializers.CharField())

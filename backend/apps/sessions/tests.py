@@ -1,11 +1,15 @@
 from datetime import timedelta
+from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
+from apps.ai.models import AIAnalysisResult, SessionInsight
+from apps.ai.services.ai_client import AIClient
 from apps.scoring.models import FocusScore
+from apps.tracking.models import BrowserEvent, WarningEvent
 
 from .models import FocusSession, GoalTemplate, SessionStateTransition
 
@@ -316,6 +320,50 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertFalse(response.data["isAiInsightReady"])
         self.assertTrue(FocusScore.objects.filter(session_id=session_id).exists())
 
+    def test_week_4_tag_crud_and_history_filter(self):
+        create_tag = self.client.post(
+            "/api/tags/",
+            {"name": "Backend"},
+            format="json",
+        )
+        tag_id = create_tag.data["id"]
+        rename = self.client.patch(
+            f"/api/tags/{tag_id}/",
+            {"name": "Backend API"},
+            format="json",
+        )
+        create = self.create_session(tags=["Backend API"])
+        filtered = self.client.get("/api/sessions/?tag=Backend%20API")
+        delete = self.client.delete(f"/api/tags/{tag_id}/")
+
+        self.assertEqual(create_tag.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(rename.status_code, status.HTTP_200_OK)
+        self.assertEqual(rename.data["name"], "Backend API")
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(filtered.status_code, status.HTTP_200_OK)
+        self.assertEqual(filtered.data["count"], 1)
+        self.assertEqual(delete.status_code, status.HTTP_204_NO_CONTENT)
+
+    def test_week_4_session_note_search_and_recent_context(self):
+        create = self.create_session(goal="Finish note API")
+        session_id = create.data["id"]
+        note = self.client.put(
+            f"/api/sessions/{session_id}/note/",
+            {"content": "Remember the searchable note flow."},
+            format="json",
+        )
+        read_note = self.client.get(f"/api/sessions/{session_id}/note/")
+        history = self.client.get("/api/sessions/?noteSearch=searchable")
+        context = self.client.get("/api/recent-context/")
+
+        self.assertEqual(note.status_code, status.HTTP_200_OK)
+        self.assertEqual(read_note.data["content"], "Remember the searchable note flow.")
+        self.assertEqual(history.status_code, status.HTTP_200_OK)
+        self.assertEqual(history.data["count"], 1)
+        self.assertEqual(context.status_code, status.HTTP_200_OK)
+        self.assertEqual(context.data["activeSession"]["id"], session_id)
+        self.assertIn("Finish note API", context.data["recentGoals"])
+
     def test_summary_is_user_scoped_and_handles_missing_score(self):
         session = FocusSession.objects.create(
             user=self.user,
@@ -336,3 +384,381 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["scoreMetadata"], {})
         self.assertEqual(response.data["warningLog"], [])
         self.assertEqual(other_user_response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class RealtimeScoreApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="realtime@example.com",
+            password=PASSWORD,
+        )
+        self.other_user = User.objects.create_user(
+            email="realtime-other@example.com",
+            password=PASSWORD,
+        )
+        self.client.force_authenticate(self.user)
+
+    def create_session(self, user=None, **overrides):
+        values = {
+            "user": user or self.user,
+            "mode": FocusSession.Mode.DEEP_WORK,
+            "goal": "Study DRF serializers",
+            "status": FocusSession.Status.ACTIVE,
+            "target_duration_seconds": 3000,
+        }
+        values.update(overrides)
+        return FocusSession.objects.create(**values)
+
+    def create_event(self, session, **overrides):
+        values = {
+            "session_id": session.id,
+            "event_type": "url_change",
+            "domain": "docs.example.com",
+            "active_seconds": 30,
+            "idle_seconds": 0,
+            "tab_switch_count": 1,
+        }
+        values.update(overrides)
+        return BrowserEvent.objects.create(**values)
+
+    def create_events(self, session, count=3, **overrides):
+        return [self.create_event(session, **overrides) for _ in range(count)]
+
+    def create_analysis(self, session, event, score=80, focus_state=None):
+        return AIAnalysisResult.objects.create(
+            session_id=session.id,
+            browser_event_id=event.id,
+            provider="test",
+            model_name="test-model",
+            relevance_score=score,
+            is_relevant=score >= 70,
+            focus_state=focus_state or AIAnalysisResult.FocusState.FOCUSED,
+            raw_response={"classification": "RELEVANT", "confidence": 0.8},
+        )
+
+    def test_anonymous_request_is_denied(self):
+        session = self.create_session()
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertIn(
+            response.status_code,
+            {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN},
+        )
+
+    def test_owner_gets_realtime_score_for_active_session(self):
+        session = self.create_session()
+        events = self.create_events(session)
+        for event in events:
+            self.create_analysis(session, event, score=90)
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["session_id"], str(session.id))
+        self.assertEqual(response.data["session_status"], FocusSession.Status.ACTIVE)
+        self.assertIsNotNone(response.data["score"])
+        self.assertIn("label", response.data)
+        self.assertIn("components", response.data)
+        self.assertIn("data_quality", response.data)
+        self.assertIn("stale", response.data)
+
+    def test_owner_gets_realtime_score_for_paused_session(self):
+        session = self.create_session(status=FocusSession.Status.PAUSED)
+        self.create_events(session)
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["session_status"], FocusSession.Status.PAUSED)
+
+    def test_other_user_cannot_view_session_score(self):
+        session = self.create_session()
+
+        self.client.force_authenticate(self.other_user)
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_missing_session_returns_404(self):
+        response = self.client.get(
+            "/api/sessions/00000000-0000-0000-0000-000000000000/score/realtime/"
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_insufficient_data_still_returns_200(self):
+        session = self.create_session()
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertIsNone(response.data["score"])
+        self.assertIsNone(response.data["label"])
+        self.assertEqual(response.data["event_count"], 0)
+        self.assertEqual(response.data["data_quality"], "INSUFFICIENT")
+
+    def test_stale_data_returns_stale_true(self):
+        session = self.create_session()
+        events = self.create_events(session)
+        old_time = timezone.now() - timedelta(seconds=120)
+        BrowserEvent.objects.filter(pk__in=[event.pk for event in events]).update(
+            created_at=old_time,
+        )
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["stale"])
+
+    def test_query_uses_only_events_for_requested_session(self):
+        session = self.create_session()
+        other_session = FocusSession.objects.create(
+            user=self.other_user,
+            mode=FocusSession.Mode.DEEP_WORK,
+            goal="Other",
+            status=FocusSession.Status.ACTIVE,
+            target_duration_seconds=3000,
+        )
+        self.create_events(session, count=3)
+        self.create_events(other_session, count=5)
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["event_count"], 3)
+
+    def test_query_uses_only_analysis_for_requested_session(self):
+        session = self.create_session()
+        other_session = FocusSession.objects.create(
+            user=self.other_user,
+            mode=FocusSession.Mode.DEEP_WORK,
+            goal="Other",
+            status=FocusSession.Status.ACTIVE,
+            target_duration_seconds=3000,
+        )
+        events = self.create_events(session, count=3)
+        other_event = self.create_event(other_session)
+        self.create_analysis(other_session, other_event, score=0)
+        self.create_analysis(session, events[0], score=100)
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["components"]["content_relevance"], 100)
+
+    def test_api_does_not_call_openrouter_create_warning_pause_or_write_focus_score(self):
+        session = self.create_session()
+        self.create_events(session)
+
+        with patch.object(AIClient, "complete_json") as complete_json:
+            response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        session.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        complete_json.assert_not_called()
+        self.assertFalse(WarningEvent.objects.exists())
+        self.assertEqual(session.status, FocusSession.Status.ACTIVE)
+        self.assertFalse(FocusScore.objects.filter(session=session).exists())
+
+    def test_two_gets_do_not_create_duplicate_focus_score_records(self):
+        session = self.create_session()
+        FocusScore.objects.create(
+            user=self.user,
+            session=session,
+            total_score=77,
+            focus_state=FocusScore.State.FOCUSED,
+        )
+        self.create_events(session)
+
+        first = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+        second = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertEqual(FocusScore.objects.filter(session=session).count(), 1)
+        session.refresh_from_db()
+        self.assertIsNone(session.focus_score)
+
+    def test_closed_session_rejects_realtime_score_without_state_change(self):
+        session = self.create_session(status=FocusSession.Status.COMPLETED)
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+        session.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(session.status, FocusSession.Status.COMPLETED)
+
+
+class SessionAIInsightApiTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="session-insight-api@example.com",
+            password=PASSWORD,
+        )
+        self.other_user = User.objects.create_user(
+            email="session-insight-other@example.com",
+            password=PASSWORD,
+        )
+        self.client.force_authenticate(self.user)
+
+    def create_session(self, user=None, **overrides):
+        values = {
+            "user": user or self.user,
+            "mode": FocusSession.Mode.DEEP_WORK,
+            "goal": "Study Django REST Framework",
+            "status": FocusSession.Status.COMPLETED,
+            "target_duration_seconds": 3000,
+            "actual_duration_seconds": 2400,
+            "ended_at": timezone.now(),
+        }
+        values.update(overrides)
+        return FocusSession.objects.create(**values)
+
+    def test_get_requires_authentication_and_is_owner_scoped(self):
+        session = self.create_session()
+
+        self.client.force_authenticate(user=None)
+        anonymous = self.client.get(f"/api/sessions/{session.id}/ai-insight/")
+
+        self.client.force_authenticate(self.other_user)
+        other = self.client.get(f"/api/sessions/{session.id}/ai-insight/")
+
+        self.assertIn(
+            anonymous.status_code,
+            {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN},
+        )
+        self.assertEqual(other.status_code, status.HTTP_404_NOT_FOUND)
+
+    def test_get_pending_completed_and_failed_responses_do_not_enqueue_or_mutate(self):
+        session = self.create_session()
+        with patch("apps.ai.tasks.generate_session_insight.delay") as delay:
+            pending = self.client.get(f"/api/sessions/{session.id}/ai-insight/")
+
+        self.assertEqual(pending.status_code, status.HTTP_200_OK)
+        self.assertEqual(pending.data["status"], SessionInsight.Status.PENDING)
+        self.assertEqual(pending.data["observations"], [])
+        self.assertFalse(SessionInsight.objects.filter(session=session).exists())
+        delay.assert_not_called()
+
+        insight = SessionInsight.objects.create(
+            session=session,
+            status=SessionInsight.Status.COMPLETED,
+            observations=["Observation"],
+            source=SessionInsight.Source.AI,
+            model_name="test-model",
+            generated_at=timezone.now(),
+        )
+        completed = self.client.get(f"/api/sessions/{session.id}/ai-insight/")
+
+        self.assertEqual(completed.status_code, status.HTTP_200_OK)
+        self.assertEqual(completed.data["status"], SessionInsight.Status.COMPLETED)
+        self.assertEqual(completed.data["source"], SessionInsight.Source.AI)
+        self.assertEqual(completed.data["model"], "test-model")
+        self.assertNotIn("prompt", completed.data)
+        self.assertNotIn("content_snippet", completed.data)
+
+        insight.status = SessionInsight.Status.FAILED
+        insight.observations = []
+        insight.source = ""
+        insight.error_code = "AI_PROVIDER_ERROR"
+        insight.save()
+        failed = self.client.get(f"/api/sessions/{session.id}/ai-insight/")
+
+        self.assertEqual(failed.status_code, status.HTTP_200_OK)
+        self.assertEqual(failed.data["status"], SessionInsight.Status.FAILED)
+        self.assertEqual(failed.data["error_code"], "AI_PROVIDER_ERROR")
+
+    def test_retry_failed_updates_same_record_and_queues_after_commit(self):
+        session = self.create_session()
+        insight = SessionInsight.objects.create(
+            session=session,
+            status=SessionInsight.Status.FAILED,
+            error_code="AI_PROVIDER_ERROR",
+        )
+
+        with patch("apps.ai.tasks.generate_session_insight.delay") as delay:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    f"/api/sessions/{session.id}/ai-insight/retry/",
+                    format="json",
+                )
+
+        insight.refresh_from_db()
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data["status"], SessionInsight.Status.PENDING)
+        self.assertEqual(response.data["retry_count"], 1)
+        self.assertEqual(insight.retry_count, 1)
+        self.assertEqual(SessionInsight.objects.filter(session=session).count(), 1)
+        delay.assert_called_once_with(str(session.id))
+
+    def test_retry_conflicts_for_processing_completed_limit_and_active_session(self):
+        processing_session = self.create_session()
+        SessionInsight.objects.create(
+            session=processing_session,
+            status=SessionInsight.Status.PROCESSING,
+            started_at=timezone.now(),
+        )
+        processing = self.client.post(
+            f"/api/sessions/{processing_session.id}/ai-insight/retry/",
+            format="json",
+        )
+
+        completed_session = self.create_session(goal="Completed")
+        SessionInsight.objects.create(
+            session=completed_session,
+            status=SessionInsight.Status.COMPLETED,
+            source=SessionInsight.Source.AI,
+        )
+        completed = self.client.post(
+            f"/api/sessions/{completed_session.id}/ai-insight/retry/",
+            format="json",
+        )
+
+        limited_session = self.create_session(goal="Limited")
+        SessionInsight.objects.create(
+            session=limited_session,
+            status=SessionInsight.Status.FAILED,
+            retry_count=3,
+        )
+        limited = self.client.post(
+            f"/api/sessions/{limited_session.id}/ai-insight/retry/",
+            format="json",
+        )
+
+        active_session = self.create_session(
+            goal="Active",
+            status=FocusSession.Status.ACTIVE,
+            ended_at=None,
+        )
+        active = self.client.post(
+            f"/api/sessions/{active_session.id}/ai-insight/retry/",
+            format="json",
+        )
+
+        self.assertEqual(processing.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(
+            processing.data["error_code"],
+            "INSIGHT_ALREADY_PROCESSING",
+        )
+        self.assertEqual(completed.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(completed.data["error_code"], "INSIGHT_ALREADY_COMPLETED")
+        self.assertEqual(limited.status_code, status.HTTP_409_CONFLICT)
+        self.assertEqual(limited.data["error_code"], "RETRY_LIMIT_REACHED")
+        self.assertEqual(active.status_code, status.HTTP_400_BAD_REQUEST)
+
+    def test_retry_is_owner_scoped(self):
+        session = self.create_session()
+        SessionInsight.objects.create(
+            session=session,
+            status=SessionInsight.Status.FAILED,
+        )
+
+        self.client.force_authenticate(self.other_user)
+        response = self.client.post(
+            f"/api/sessions/{session.id}/ai-insight/retry/",
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

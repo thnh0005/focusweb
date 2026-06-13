@@ -22,6 +22,16 @@ def env_list(name, default=""):
     return [item.strip() for item in value.split(",") if item.strip()]
 
 
+def env_int(name, default):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    try:
+        return int(value)
+    except ValueError:
+        return default
+
+
 DEBUG = env_bool("DJANGO_DEBUG", False)
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
@@ -108,6 +118,43 @@ else:
 
 REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
 
+OPENROUTER_API_KEY = os.getenv("OPENROUTER_API_KEY", "")
+OPENROUTER_MODEL = os.getenv("OPENROUTER_MODEL", "")
+OPENROUTER_BASE_URL = os.getenv(
+    "OPENROUTER_BASE_URL",
+    "https://openrouter.ai/api/v1",
+)
+AI_REQUEST_TIMEOUT_SECONDS = env_int("AI_REQUEST_TIMEOUT_SECONDS", 2)
+AI_MAX_RETRIES = env_int("AI_MAX_RETRIES", 1)
+AI_RETRY_BACKOFF_SECONDS = env_int("AI_RETRY_BACKOFF_SECONDS", 1)
+AI_CIRCUIT_FAILURE_THRESHOLD = env_int("AI_CIRCUIT_FAILURE_THRESHOLD", 5)
+AI_CIRCUIT_COOLDOWN_SECONDS = env_int("AI_CIRCUIT_COOLDOWN_SECONDS", 60)
+SESSION_INSIGHT_TASK_MAX_RETRIES = env_int(
+    "SESSION_INSIGHT_TASK_MAX_RETRIES",
+    env_int("AI_INSIGHT_MAX_RETRIES", 2),
+)
+AI_INSIGHT_MAX_RETRIES = SESSION_INSIGHT_TASK_MAX_RETRIES
+SESSION_INSIGHT_TASK_RETRY_BACKOFF_SECONDS = env_int(
+    "SESSION_INSIGHT_TASK_RETRY_BACKOFF_SECONDS",
+    env_int("AI_INSIGHT_RETRY_BACKOFF_SECONDS", 30),
+)
+AI_INSIGHT_RETRY_BACKOFF_SECONDS = SESSION_INSIGHT_TASK_RETRY_BACKOFF_SECONDS
+SESSION_INSIGHT_MANUAL_RETRY_LIMIT = env_int("SESSION_INSIGHT_MANUAL_RETRY_LIMIT", 3)
+SESSION_INSIGHT_STALE_PROCESSING_SECONDS = env_int(
+    "SESSION_INSIGHT_STALE_PROCESSING_SECONDS",
+    900,
+)
+
+REALTIME_SCORE_WINDOW_SECONDS = env_int("REALTIME_SCORE_WINDOW_SECONDS", 300)
+REALTIME_SCORE_STALE_SECONDS = env_int("REALTIME_SCORE_STALE_SECONDS", 90)
+REALTIME_SCORE_MIN_EVENTS = env_int("REALTIME_SCORE_MIN_EVENTS", 3)
+REALTIME_SCORE_TAB_SWITCH_PENALTY = env_int(
+    "REALTIME_SCORE_TAB_SWITCH_PENALTY",
+    8,
+)
+WARNING_INTERVAL_SECONDS = env_int("WARNING_INTERVAL_SECONDS", 5)
+WARNING_MAX_LEVEL = env_int("WARNING_MAX_LEVEL", 3)
+
 CACHES = {
     "default": {
         "BACKEND": "django.core.cache.backends.redis.RedisCache",
@@ -180,5 +227,12 @@ SPECTACULAR_SETTINGS = {
         "TrendDirectionEnum": ["up", "down", "neutral"],
         "BlacklistSeverityEnum": "apps.extension.models.BlacklistEntry.Severity",
         "DistractionSeverityEnum": ["high", "medium", "low"],
+        "DocumentFileTypeEnum": "apps.ai.models.StudyDocument.FileType",
+        "DocumentStatusEnum": "apps.ai.models.StudyDocument.Status",
+        "DocumentSummaryModeEnum": "apps.ai.models.DocumentSummary.Mode",
+        "FlashcardDifficultyEnum": "apps.ai.models.FlashcardDeck.Difficulty",
+        "MusicTrackEnum": "apps.users.models.UserPreference.MusicTrack",
+        "ReportExportStatusEnum": "apps.analytics.models.ReportExportJob.Status",
+        "ReportExportFormatEnum": "apps.analytics.models.ReportExportJob.Format",
     },
 }

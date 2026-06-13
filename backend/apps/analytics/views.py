@@ -5,19 +5,25 @@ from django.db.models.functions import Coalesce, ExtractHour, ExtractWeekDay, Tr
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
-from rest_framework.exceptions import ValidationError
+from rest_framework import status
+from rest_framework.exceptions import NotFound, ValidationError
 from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.sessions.models import FocusSession
 
+from .models import ReportExportJob
 from .serializers import (
+    AnalyticsOverviewSerializer,
     DashboardOverviewSerializer,
     DashboardStatsSerializer,
     DistractionAnalyticsSerializer,
     FocusTrendSerializer,
     HeatmapDataPointSerializer,
     PatternInsightsSerializer,
+    ReportExportJobSerializer,
+    ReportExportRequestSerializer,
+    SessionBreakdownSerializer,
     WeeklySnapshotSerializer,
 )
 
@@ -49,13 +55,15 @@ def validate_date_range(request):
     return date_range
 
 
-def sessions_for_range(user, date_range):
+def sessions_for_range(user, date_range, tag=None):
     """Tạo queryset session theo user để các API dashboard dùng chung."""
     sessions = FocusSession.objects.filter(user=user)
     range_start = get_range_start(date_range)
     if range_start:
         sessions = sessions.filter(started_at__gte=range_start)
-    return sessions
+    if tag:
+        sessions = sessions.filter(tags__name=tag)
+    return sessions.distinct()
 
 
 def aggregate_sessions(sessions):
@@ -87,6 +95,20 @@ def aggregate_sessions(sessions):
         stats["completed_session_count"] / total_sessions * 100 if total_sessions else 0
     )
     return stats
+
+
+def most_common_focus_state(sessions):
+    row = (
+        sessions.filter(
+            status=FocusSession.Status.COMPLETED,
+            focus_state__gt="",
+        )
+        .values("focus_state")
+        .annotate(total=Count("id"))
+        .order_by("-total", "focus_state")
+        .first()
+    )
+    return row["focus_state"] if row else ""
 
 
 def trend_values(values):
@@ -122,6 +144,45 @@ def week_stats(user, week_start):
     }
 
 
+def build_report_payload(user, date_range, tag=""):
+    sessions = sessions_for_range(user, date_range, tag).prefetch_related("tags")
+    stats = aggregate_sessions(sessions)
+    return {
+        "summary": {
+            "totalFocusMinutes": stats["total_focus_seconds"] // 60,
+            "totalSessions": stats["total_sessions"],
+            "completedSessions": stats["completed_session_count"],
+            "averageFocusScore": stats["average_focus_score"],
+            "completionRate": round(stats["completion_rate"], 2),
+            "deepWorkSessionCount": stats["deep_work_session_count"],
+            "dateRange": date_range,
+            "tag": tag,
+        },
+        "sessions": [
+            {
+                "id": str(session.id),
+                "mode": session.mode,
+                "goal": session.goal,
+                "status": session.status,
+                "focusScore": session.focus_score,
+                "focusState": session.focus_state,
+                "actualDurationSeconds": session.actual_duration_seconds,
+                "startedAt": session.started_at.isoformat(),
+                "endedAt": session.ended_at.isoformat() if session.ended_at else None,
+                "tags": [tag.name for tag in session.tags.all()],
+            }
+            for session in sessions.order_by("-started_at")[:200]
+        ],
+    }
+
+
+def get_owned_export_job(user, job_id):
+    try:
+        return ReportExportJob.objects.get(pk=job_id, user=user)
+    except (ReportExportJob.DoesNotExist, ValueError) as exc:
+        raise NotFound("Report export job was not found.") from exc
+
+
 class DashboardStatsView(GenericAPIView):
     serializer_class = DashboardStatsSerializer
 
@@ -140,7 +201,9 @@ class DashboardStatsView(GenericAPIView):
     )
     def get(self, request):
         date_range = validate_date_range(request)
-        stats = aggregate_sessions(sessions_for_range(request.user, date_range))
+        stats = aggregate_sessions(
+            sessions_for_range(request.user, date_range, request.query_params.get("tag"))
+        )
         data = {
             "totalFocusMinutes": stats["total_focus_seconds"] // 60,
             "totalSessions": stats["total_sessions"],
@@ -150,6 +213,48 @@ class DashboardStatsView(GenericAPIView):
             "dateRange": date_range,
         }
         return Response(DashboardStatsSerializer(data).data)
+
+
+class AnalyticsOverviewView(GenericAPIView):
+    serializer_class = AnalyticsOverviewSerializer
+
+    @extend_schema(
+        operation_id="analytics_overview",
+        parameters=[
+            OpenApiParameter(
+                name="range",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=["today", "7d", "30d", "90d", "all"],
+                default="7d",
+            )
+        ],
+        responses=AnalyticsOverviewSerializer,
+    )
+    def get(self, request):
+        # Overview tuần 3 mở rộng dashboard MVP bằng average duration
+        # và focus state phổ biến nhất trong khoảng thời gian chọn.
+        date_range = validate_date_range(request)
+        sessions = sessions_for_range(request.user, date_range, request.query_params.get("tag"))
+        stats = aggregate_sessions(sessions)
+        completed_count = stats["completed_session_count"]
+        average_session_minutes = (
+            stats["total_focus_seconds"] / completed_count / 60
+            if completed_count
+            else 0
+        )
+        data = {
+            "totalFocusMinutes": stats["total_focus_seconds"] // 60,
+            "totalSessions": stats["total_sessions"],
+            "completedSessions": completed_count,
+            "averageFocusScore": stats["average_focus_score"],
+            "completionRate": round(stats["completion_rate"], 2),
+            "deepWorkSessionCount": stats["deep_work_session_count"],
+            "averageSessionMinutes": round(average_session_minutes, 2),
+            "bestFocusState": most_common_focus_state(sessions),
+            "dateRange": date_range,
+        }
+        return Response(AnalyticsOverviewSerializer(data).data)
 
 
 class DashboardOverviewView(GenericAPIView):
@@ -172,7 +277,7 @@ class DashboardOverviewView(GenericAPIView):
         # Dashboard overview tuần 2 trả payload gọn cho các card MVP:
         # tổng thời gian, completion rate, active session và hoạt động gần nhất.
         date_range = validate_date_range(request)
-        sessions = sessions_for_range(request.user, date_range)
+        sessions = sessions_for_range(request.user, date_range, request.query_params.get("tag"))
         stats = aggregate_sessions(sessions)
         active_session = (
             FocusSession.objects.filter(
@@ -208,7 +313,7 @@ class FocusTrendView(GenericAPIView):
     def get(self, request):
         date_range = validate_date_range(request)
         rows = (
-            sessions_for_range(request.user, date_range)
+            sessions_for_range(request.user, date_range, request.query_params.get("tag"))
             .filter(status=FocusSession.Status.COMPLETED)
             .annotate(day=TruncDate("started_at"))
             .values("day")
@@ -243,6 +348,12 @@ class FocusTrendView(GenericAPIView):
         return Response(FocusTrendSerializer(data).data)
 
 
+class FocusTrendContractView(FocusTrendView):
+    @extend_schema(operation_id="analytics_focus_trend_contract", responses=FocusTrendSerializer)
+    def get(self, request):
+        return super().get(request)
+
+
 class DistractionAnalyticsView(GenericAPIView):
     serializer_class = DistractionAnalyticsSerializer
 
@@ -262,6 +373,60 @@ class DistractionAnalyticsView(GenericAPIView):
         return Response(DistractionAnalyticsSerializer(data).data)
 
 
+class SessionBreakdownView(GenericAPIView):
+    serializer_class = SessionBreakdownSerializer
+
+    @extend_schema(
+        operation_id="analytics_session_breakdown",
+        parameters=[
+            OpenApiParameter(
+                name="range",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                enum=["today", "7d", "30d", "90d", "all"],
+                default="7d",
+            )
+        ],
+        responses=SessionBreakdownSerializer,
+    )
+    def get(self, request):
+        date_range = validate_date_range(request)
+        sessions = sessions_for_range(request.user, date_range, request.query_params.get("tag"))
+        stats = sessions.aggregate(
+            normal_count=Count("id", filter=Q(mode=FocusSession.Mode.NORMAL)),
+            deep_count=Count("id", filter=Q(mode=FocusSession.Mode.DEEP_WORK)),
+            average_normal_score=Avg(
+                "focus_score",
+                filter=Q(
+                    mode=FocusSession.Mode.NORMAL,
+                    status=FocusSession.Status.COMPLETED,
+                ),
+            ),
+            average_deep_work_score=Avg(
+                "focus_score",
+                filter=Q(
+                    mode=FocusSession.Mode.DEEP_WORK,
+                    status=FocusSession.Status.COMPLETED,
+                ),
+            ),
+        )
+        total = stats["normal_count"] + stats["deep_count"]
+        data = {
+            "normalSessionCount": stats["normal_count"],
+            "deepWorkSessionCount": stats["deep_count"],
+            "normalSessionPercentage": round(stats["normal_count"] / total * 100, 2)
+            if total
+            else 0,
+            "deepWorkSessionPercentage": round(stats["deep_count"] / total * 100, 2)
+            if total
+            else 0,
+            "averageNormalScore": stats["average_normal_score"],
+            "averageDeepWorkScore": stats["average_deep_work_score"],
+            "dateRange": date_range,
+        }
+        return Response(SessionBreakdownSerializer(data).data)
+
+
 class HeatmapView(GenericAPIView):
     serializer_class = HeatmapDataPointSerializer
 
@@ -270,11 +435,15 @@ class HeatmapView(GenericAPIView):
         responses=HeatmapDataPointSerializer(many=True),
     )
     def get(self, request):
+        sessions = FocusSession.objects.filter(
+            user=request.user,
+            status=FocusSession.Status.COMPLETED,
+        )
+        tag = request.query_params.get("tag")
+        if tag:
+            sessions = sessions.filter(tags__name=tag)
         rows = (
-            FocusSession.objects.filter(
-                user=request.user,
-                status=FocusSession.Status.COMPLETED,
-            )
+            sessions.distinct()
             .annotate(hour=ExtractHour("started_at"), weekday=ExtractWeekDay("started_at"))
             .values("hour", "weekday")
             .annotate(average_score=Avg("focus_score"), session_count=Count("id"))
@@ -290,6 +459,15 @@ class HeatmapView(GenericAPIView):
             for row in rows
         ]
         return Response(HeatmapDataPointSerializer(data, many=True).data)
+
+
+class TimeHeatmapView(HeatmapView):
+    @extend_schema(
+        operation_id="analytics_time_heatmap",
+        responses=HeatmapDataPointSerializer(many=True),
+    )
+    def get(self, request):
+        return super().get(request)
 
 
 class WeeklySnapshotView(GenericAPIView):
@@ -357,3 +535,47 @@ class PatternInsightsView(GenericAPIView):
             "generatedAt": timezone.now(),
         }
         return Response(PatternInsightsSerializer(data).data)
+
+
+class ReportExportView(GenericAPIView):
+    serializer_class = ReportExportJobSerializer
+
+    @extend_schema(
+        operation_id="report_export_create",
+        request=ReportExportRequestSerializer,
+        responses=ReportExportJobSerializer,
+    )
+    def post(self, request):
+        serializer = ReportExportRequestSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        date_range = serializer.validated_data["dateRange"]
+        export_format = serializer.validated_data["format"]
+        tag = serializer.validated_data.get("tag", "")
+        payload = build_report_payload(request.user, date_range, tag)
+        if export_format == ReportExportJob.Format.HTML:
+            payload["html"] = (
+                "<h1>FocusOS Study Report</h1>"
+                f"<p>Total focus minutes: {payload['summary']['totalFocusMinutes']}</p>"
+            )
+        if export_format == ReportExportJob.Format.PDF:
+            payload["note"] = "PDF rendering is reserved for the export worker; JSON data is ready."
+        job = ReportExportJob.objects.create(
+            user=request.user,
+            status=ReportExportJob.Status.READY,
+            export_format=export_format,
+            date_range=date_range,
+            payload=payload,
+            completed_at=timezone.now(),
+        )
+        return Response(
+            ReportExportJobSerializer(job).data,
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class ReportExportDetailView(GenericAPIView):
+    serializer_class = ReportExportJobSerializer
+
+    @extend_schema(operation_id="report_export_retrieve", responses=ReportExportJobSerializer)
+    def get(self, request, job_id):
+        return Response(ReportExportJobSerializer(get_owned_export_job(request.user, job_id)).data)
