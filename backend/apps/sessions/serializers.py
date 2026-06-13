@@ -4,6 +4,7 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import FocusSession, GoalTemplate, SessionNote, SessionStateTransition
+from .models import SessionTag
 from .services import set_session_tags
 
 
@@ -22,6 +23,35 @@ class GoalTemplateSerializer(serializers.ModelSerializer):
         if instance and instance.is_built_in:
             raise serializers.ValidationError("Built-in templates cannot be changed.")
         return attrs
+
+
+class SessionTagSerializer(serializers.ModelSerializer):
+    usageCount = serializers.SerializerMethodField()
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+
+    class Meta:
+        model = SessionTag
+        fields = ["id", "name", "usageCount", "createdAt"]
+        read_only_fields = ["id", "usageCount", "createdAt"]
+
+    def validate_name(self, value):
+        name = value.strip()
+        if not name:
+            raise serializers.ValidationError("Tag name cannot be blank.")
+        return name
+
+    def validate(self, attrs):
+        request = self.context["request"]
+        name = attrs.get("name", getattr(self.instance, "name", ""))
+        queryset = SessionTag.objects.filter(user=request.user, name__iexact=name)
+        if self.instance:
+            queryset = queryset.exclude(pk=self.instance.pk)
+        if queryset.exists():
+            raise serializers.ValidationError({"name": ["This tag already exists."]})
+        return attrs
+
+    def get_usageCount(self, instance) -> int:
+        return instance.sessions.count()
 
 
 class SessionSerializer(serializers.ModelSerializer):
@@ -298,3 +328,17 @@ class SessionInsightRetryResponseSerializer(serializers.Serializer):
     status = serializers.CharField()
     message = serializers.CharField()
     retry_count = serializers.IntegerField()
+
+
+class SessionNoteSerializer(serializers.Serializer):
+    sessionId = serializers.UUIDField(source="session_id", read_only=True)
+    content = serializers.CharField(allow_blank=True, max_length=5000)
+    updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
+
+
+class RecentContextSerializer(serializers.Serializer):
+    activeSession = SessionSerializer(allow_null=True)
+    lastCompletedSession = SessionSerializer(allow_null=True)
+    recentGoals = serializers.ListField(child=serializers.CharField())
+    recentNotes = serializers.ListField(child=serializers.DictField())
+    suggestedTags = serializers.ListField(child=serializers.CharField())

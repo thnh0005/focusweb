@@ -8,6 +8,8 @@ from .managers import UserManager
 
 
 class User(AbstractBaseUser, PermissionsMixin):
+    """User đăng nhập bằng email, dùng chung cho auth/session/profile."""
+
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     email = models.EmailField(unique=True)
     display_name = models.CharField(max_length=120, blank=True)
@@ -38,6 +40,8 @@ class User(AbstractBaseUser, PermissionsMixin):
 
 
 class Profile(models.Model):
+    """Thông tin hồ sơ và thống kê tổng hợp phục vụ dashboard cá nhân."""
+
     class Profession(models.TextChoices):
         STUDENT = "student", "Student"
         DEVELOPER = "developer", "Developer"
@@ -65,6 +69,8 @@ class Profile(models.Model):
 
 
 class UserPreference(models.Model):
+    """Cấu hình mặc định của user cho session, giao diện và notification."""
+
     class SessionMode(models.TextChoices):
         NORMAL = "normal", "Normal"
         DEEP_WORK = "deep-work", "Deep Work"
@@ -73,12 +79,22 @@ class UserPreference(models.Model):
         CYBER = "cyber", "Cyber"
         MINIMAL = "minimal", "Minimal"
         FOREST = "forest", "Forest"
+        MINIMAL_DARK = "minimal-dark", "Minimal Dark"
+        AURORA_NIGHT = "aurora-night", "Aurora Night"
+        FOREST_CALM = "forest-calm", "Forest Calm"
+        RAIN_ROOM = "rain-room", "Rain Room"
 
     class AmbientEffect(models.TextChoices):
         RAIN = "rain", "Rain"
         SNOW = "snow", "Snow"
         STARS = "stars", "Stars"
         LEAVES = "leaves", "Leaves"
+
+    class MusicTrack(models.TextChoices):
+        RAIN = "rain", "Rain"
+        FOREST = "forest", "Forest"
+        LOFI = "lofi", "Lo-fi"
+        WHITE_NOISE = "white-noise", "White Noise"
 
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
@@ -104,6 +120,18 @@ class UserPreference(models.Model):
     deep_work_suggestion_enabled = models.BooleanField(default=True)
     sound_enabled = models.BooleanField(default=False)
     ambient_sound_volume = models.PositiveSmallIntegerField(default=50)
+    music_enabled = models.BooleanField(default=True)
+    music_track = models.CharField(
+        max_length=24,
+        choices=MusicTrack.choices,
+        default=MusicTrack.RAIN,
+    )
+    custom_playlist_url = models.URLField(blank=True)
+    ambient_effect_enabled = models.BooleanField(default=True)
+    ambient_effect_intensity = models.PositiveSmallIntegerField(default=50)
+    theme_accent = models.CharField(max_length=24, default="moss", blank=True)
+    workspace_background_url = models.URLField(blank=True)
+    auto_resume_session = models.BooleanField(default=False)
     extension_installed = models.BooleanField(default=False)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
@@ -113,6 +141,8 @@ class UserPreference(models.Model):
 
 
 class OnboardingSurvey(models.Model):
+    """Lưu câu trả lời onboarding để biết user đã hoàn tất setup ban đầu."""
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,

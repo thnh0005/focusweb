@@ -5,7 +5,9 @@ from django.utils import timezone
 from rest_framework import status
 from rest_framework.test import APITestCase
 
-from apps.sessions.models import FocusSession
+from apps.sessions.models import FocusSession, SessionTag
+
+from .models import ReportExportJob
 
 
 User = get_user_model()
@@ -140,19 +142,86 @@ class DashboardStatsApiTests(APITestCase):
             mode=FocusSession.Mode.DEEP_WORK,
             actual_duration_seconds=2700,
             focus_score=95,
+            focus_state="deep-focus",
         )
+        self.create_session(actual_duration_seconds=1800, focus_score=75, focus_state="focused")
 
+        overview = self.client.get("/api/analytics/overview/?range=7d")
         trend = self.client.get("/api/analytics/trend/?range=7d")
+        focus_trend = self.client.get("/api/analytics/focus-trend/?range=7d")
         distractions = self.client.get("/api/analytics/distractions/?range=7d")
         heatmap = self.client.get("/api/analytics/heatmap/")
+        time_heatmap = self.client.get("/api/analytics/time-heatmap/")
+        breakdown = self.client.get("/api/analytics/session-breakdown/?range=7d")
         weekly = self.client.get("/api/analytics/weekly-snapshot/")
         patterns = self.client.get("/api/analytics/patterns/")
 
+        self.assertEqual(overview.status_code, status.HTTP_200_OK)
+        self.assertEqual(overview.data["totalSessions"], 2)
+        self.assertEqual(overview.data["completedSessions"], 2)
+        self.assertEqual(overview.data["averageSessionMinutes"], 37.5)
         self.assertEqual(trend.status_code, status.HTTP_200_OK)
-        self.assertEqual(trend.data["dataPoints"][0]["sessionCount"], 1)
-        self.assertEqual(trend.data["dataPoints"][0]["totalMinutes"], 45)
+        self.assertEqual(trend.data["dataPoints"][0]["sessionCount"], 2)
+        self.assertEqual(trend.data["dataPoints"][0]["totalMinutes"], 75)
+        self.assertEqual(focus_trend.status_code, status.HTTP_200_OK)
         self.assertEqual(distractions.data["topSources"], [])
         self.assertEqual(heatmap.status_code, status.HTTP_200_OK)
-        self.assertEqual(heatmap.data[0]["sessionCount"], 1)
-        self.assertEqual(weekly.data["thisWeek"]["totalFocusMinutes"], 45)
-        self.assertEqual(patterns.data["sessionsAnalyzed"], 1)
+        self.assertEqual(heatmap.data[0]["sessionCount"], 2)
+        self.assertEqual(time_heatmap.status_code, status.HTTP_200_OK)
+        self.assertEqual(breakdown.status_code, status.HTTP_200_OK)
+        self.assertEqual(breakdown.data["normalSessionCount"], 1)
+        self.assertEqual(breakdown.data["deepWorkSessionCount"], 1)
+        self.assertEqual(weekly.data["thisWeek"]["totalFocusMinutes"], 75)
+        self.assertEqual(patterns.data["sessionsAnalyzed"], 2)
+
+    def test_week_4_analytics_can_filter_by_session_tag(self):
+        backend_tag = SessionTag.objects.create(user=self.user, name="Backend")
+        frontend_tag = SessionTag.objects.create(user=self.user, name="Frontend")
+        backend_session = self.create_session(
+            actual_duration_seconds=1800,
+            focus_score=90,
+        )
+        frontend_session = self.create_session(
+            actual_duration_seconds=3600,
+            focus_score=60,
+        )
+        backend_session.tags.add(backend_tag)
+        frontend_session.tags.add(frontend_tag)
+
+        overview = self.client.get("/api/analytics/overview/?range=all&tag=Backend")
+        breakdown = self.client.get(
+            "/api/analytics/session-breakdown/?range=all&tag=Backend"
+        )
+
+        self.assertEqual(overview.status_code, status.HTTP_200_OK)
+        self.assertEqual(overview.data["totalSessions"], 1)
+        self.assertEqual(overview.data["totalFocusMinutes"], 30)
+        self.assertEqual(overview.data["averageFocusScore"], 90.0)
+        self.assertEqual(breakdown.status_code, status.HTTP_200_OK)
+        self.assertEqual(breakdown.data["normalSessionCount"], 1)
+
+    def test_week_4_report_export_create_and_retrieve(self):
+        tag = SessionTag.objects.create(user=self.user, name="Backend")
+        session = self.create_session(
+            goal="Export weekly focus report",
+            actual_duration_seconds=2400,
+            focus_score=88,
+        )
+        session.tags.add(tag)
+
+        create = self.client.post(
+            "/api/reports/export/",
+            {"dateRange": "all", "format": "html", "tag": "Backend"},
+            format="json",
+        )
+        job_id = create.data["jobId"]
+        retrieve = self.client.get(f"/api/reports/export/{job_id}/")
+
+        self.assertEqual(create.status_code, status.HTTP_201_CREATED)
+        self.assertEqual(create.data["status"], ReportExportJob.Status.READY)
+        self.assertEqual(create.data["format"], ReportExportJob.Format.HTML)
+        self.assertEqual(create.data["payload"]["summary"]["totalFocusMinutes"], 40)
+        self.assertEqual(create.data["payload"]["summary"]["tag"], "Backend")
+        self.assertIn("html", create.data["payload"])
+        self.assertEqual(retrieve.status_code, status.HTTP_200_OK)
+        self.assertEqual(retrieve.data["jobId"], job_id)
