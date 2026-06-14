@@ -2,6 +2,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.utils import timezone
 
 
 class AIAnalysisResult(models.Model):
@@ -150,8 +151,15 @@ class DocumentSummary(models.Model):
     """Persist document summaries so the API has a stable read contract."""
 
     class Mode(models.TextChoices):
-        KEY_POINTS = "key-points", "Key points"
+        KEY_POINTS = "key_points", "Key points"
         DETAILED = "detailed", "Detailed"
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+        STALE = "stale", "Stale"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     document = models.ForeignKey(
@@ -160,12 +168,35 @@ class DocumentSummary(models.Model):
         related_name="summaries",
     )
     mode = models.CharField(max_length=16, choices=Mode.choices)
-    content = models.TextField()
-    source = models.CharField(max_length=32, default="server-fallback")
-    generated_at = models.DateTimeField(auto_now=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.PENDING,
+    )
+    content = models.TextField(blank=True)
+    structured_content = models.JSONField(default=dict, blank=True)
+    input_checksum = models.CharField(max_length=64, blank=True)
+    model_name = models.CharField(max_length=100, blank=True)
+    provider = models.CharField(max_length=100, blank=True)
+    prompt_version = models.CharField(max_length=32, blank=True)
+    source = models.CharField(max_length=32, default="ai")
+    source_character_count = models.PositiveIntegerField(default=0)
+    source_word_count = models.PositiveIntegerField(default=0)
+    chunk_count = models.PositiveSmallIntegerField(default=0)
+    source_truncated = models.BooleanField(default=False)
+    generation_attempts = models.PositiveSmallIntegerField(default=0)
+    error_code = models.CharField(max_length=64, blank=True)
+    error_message = models.TextField(blank=True)
+    generated_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         ordering = ["-generated_at"]
+        indexes = [
+            models.Index(fields=["document", "mode", "status"]),
+            models.Index(fields=["input_checksum"]),
+        ]
         constraints = [
             models.UniqueConstraint(
                 fields=["document", "mode"],
@@ -179,6 +210,14 @@ class DocumentSummary(models.Model):
 
 class FlashcardDeck(models.Model):
     """Persist generated flashcard decks for a study document."""
+
+    class Status(models.TextChoices):
+        PENDING = "pending", "Pending"
+        PROCESSING = "processing", "Processing"
+        COMPLETED = "completed", "Completed"
+        PARTIAL = "partial", "Partial"
+        FAILED = "failed", "Failed"
+        STALE = "stale", "Stale"
 
     class Difficulty(models.TextChoices):
         EASY = "easy", "Easy"
@@ -198,12 +237,30 @@ class FlashcardDeck(models.Model):
     )
     title = models.CharField(max_length=160, blank=True)
     quantity = models.PositiveSmallIntegerField(default=0)
+    requested_quantity = models.PositiveSmallIntegerField(default=0)
+    generated_quantity = models.PositiveSmallIntegerField(default=0)
     difficulty = models.CharField(
         max_length=12,
         choices=Difficulty.choices,
         default=Difficulty.MEDIUM,
     )
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.COMPLETED,
+    )
     page_range = models.JSONField(default=dict, blank=True)
+    scope = models.JSONField(default=dict, blank=True)
+    source_checksum = models.CharField(max_length=64, blank=True)
+    generation_fingerprint = models.CharField(max_length=64, blank=True)
+    model_name = models.CharField(max_length=100, blank=True)
+    provider = models.CharField(max_length=100, blank=True)
+    prompt_version = models.CharField(max_length=32, blank=True)
+    source_character_count = models.PositiveIntegerField(default=0)
+    source_truncated = models.BooleanField(default=False)
+    generation_attempts = models.PositiveSmallIntegerField(default=0)
+    error_code = models.CharField(max_length=64, blank=True)
+    error_message = models.TextField(blank=True)
     generated_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -212,6 +269,8 @@ class FlashcardDeck(models.Model):
         indexes = [
             models.Index(fields=["user", "generated_at"]),
             models.Index(fields=["document", "generated_at"]),
+            models.Index(fields=["generation_fingerprint"]),
+            models.Index(fields=["document", "status"]),
         ]
 
     def __str__(self):

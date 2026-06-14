@@ -1,3 +1,4 @@
+import json
 from datetime import timedelta
 from unittest.mock import patch
 
@@ -11,7 +12,13 @@ from apps.ai.services.ai_client import AIClient
 from apps.scoring.models import FocusScore
 from apps.tracking.models import BrowserEvent, WarningEvent
 
-from .models import FocusSession, GoalTemplate, SessionStateTransition
+from .models import (
+    FocusSession,
+    GoalTemplate,
+    SessionNote,
+    SessionStateTransition,
+    SessionTag,
+)
 
 
 User = get_user_model()
@@ -361,8 +368,12 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(history.status_code, status.HTTP_200_OK)
         self.assertEqual(history.data["count"], 1)
         self.assertEqual(context.status_code, status.HTTP_200_OK)
-        self.assertEqual(context.data["activeSession"]["id"], session_id)
-        self.assertIn("Finish note API", context.data["recentGoals"])
+        self.assertEqual(context.data["status"], "empty")
+        self.assertFalse(context.data["has_context"])
+        self.assertIsNone(context.data["recent_context"])
+        self.assertEqual(context.data["active_session"]["session_id"], session_id)
+        self.assertNotIn("recentNotes", context.data)
+        self.assertNotIn("recentGoals", context.data)
 
     def test_summary_is_user_scoped_and_handles_missing_score(self):
         session = FocusSession.objects.create(
@@ -384,6 +395,206 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["scoreMetadata"], {})
         self.assertEqual(response.data["warningLog"], [])
         self.assertEqual(other_user_response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class RecentLearningContextDay23Tests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(
+            email="recent-context@example.com",
+            password=PASSWORD,
+        )
+        self.other_user = User.objects.create_user(
+            email="recent-context-other@example.com",
+            password=PASSWORD,
+        )
+        self.client.force_authenticate(self.user)
+
+    def create_session(self, user=None, **overrides):
+        now = timezone.now()
+        values = {
+            "user": user or self.user,
+            "mode": FocusSession.Mode.NORMAL,
+            "goal": "Study Django ORM",
+            "status": FocusSession.Status.COMPLETED,
+            "target_duration_seconds": 3000,
+            "actual_duration_seconds": 2760,
+            "started_at": now - timedelta(minutes=50),
+            "ended_at": now - timedelta(minutes=4),
+        }
+        values.update(overrides)
+        return FocusSession.objects.create(**values)
+
+    def test_authentication_required(self):
+        self.client.force_authenticate(user=None)
+
+        response = self.client.get("/api/recent-context/")
+
+        self.assertIn(
+            response.status_code,
+            [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN],
+        )
+
+    def test_empty_when_no_completed_session_with_valid_goal(self):
+        self.create_session(goal="   ")
+        self.create_session(goal="")
+        self.create_session(user=self.other_user, goal="Other user goal")
+
+        response = self.client.get("/api/recent-context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "empty")
+        self.assertFalse(response.data["has_context"])
+        self.assertIsNone(response.data["recent_context"])
+        self.assertIsNone(response.data["reuse_config"])
+        self.assertIsNone(response.data["active_session"])
+
+    def test_selects_latest_completed_valid_goal_skips_invalid_sessions(self):
+        old = self.create_session(
+            goal="Old valid goal",
+            started_at=timezone.now() - timedelta(days=3, minutes=50),
+            ended_at=timezone.now() - timedelta(days=3),
+        )
+        latest = self.create_session(
+            goal="Latest completed goal",
+            started_at=timezone.now() - timedelta(days=1, minutes=50),
+            ended_at=timezone.now() - timedelta(days=1),
+        )
+        self.create_session(
+            goal="Cancelled should not win",
+            status=FocusSession.Status.CANCELLED,
+            ended_at=timezone.now(),
+        )
+        self.create_session(
+            goal="Other user should not win",
+            user=self.other_user,
+            ended_at=timezone.now(),
+        )
+        FocusSession.objects.create(
+            user=self.user,
+            mode=FocusSession.Mode.DEEP_WORK,
+            goal="Active should be separate",
+            status=FocusSession.Status.ACTIVE,
+            target_duration_seconds=1800,
+            started_at=timezone.now(),
+        )
+
+        response = self.client.get("/api/recent-context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "ready")
+        self.assertTrue(response.data["has_context"])
+        self.assertEqual(response.data["recent_context"]["session_id"], str(latest.id))
+        self.assertNotEqual(response.data["recent_context"]["session_id"], str(old.id))
+        self.assertEqual(
+            response.data["active_session"]["goal"],
+            "Active should be separate",
+        )
+
+    def test_goal_normalization_mode_duration_and_reuse_config(self):
+        session = self.create_session(
+            mode=FocusSession.Mode.DEEP_WORK,
+            goal=" \x00Hoàn thành API\r\nGiữ nguyên Case  ",
+            target_duration_seconds=3000,
+            actual_duration_seconds=0,
+            started_at=timezone.now() - timedelta(minutes=47),
+            ended_at=timezone.now(),
+        )
+
+        response = self.client.get("/api/recent-context/")
+
+        context = response.data["recent_context"]
+        reuse = response.data["reuse_config"]
+        self.assertEqual(context["session_id"], str(session.id))
+        self.assertEqual(context["goal"], "Hoàn thành API\nGiữ nguyên Case")
+        self.assertEqual(context["mode"], "deep_work")
+        self.assertEqual(context["target_duration_minutes"], 50)
+        self.assertEqual(context["actual_duration_minutes"], 47)
+        self.assertEqual(reuse["goal"], context["goal"])
+        self.assertEqual(reuse["mode"], "deep_work")
+        self.assertTrue(reuse["requires_goal"])
+        self.assertEqual(reuse["duration_minutes"], 50)
+
+    def test_tags_are_limited_to_three_and_reused_by_id(self):
+        session = self.create_session(goal="Tagged context")
+        tags = [
+            SessionTag.objects.create(user=self.user, name=name)
+            for name in ["Backend", "AI", "Docs", "Zeta"]
+        ]
+        other_tag = SessionTag.objects.create(user=self.other_user, name="Private")
+        session.tags.add(*tags, other_tag)
+
+        response = self.client.get("/api/recent-context/")
+
+        returned_tags = response.data["recent_context"]["tags"]
+        returned_names = [tag["name"] for tag in returned_tags]
+        returned_ids = [tag["id"] for tag in returned_tags]
+        self.assertEqual(returned_names, ["AI", "Backend", "Docs"])
+        self.assertEqual(response.data["reuse_config"]["tag_ids"], returned_ids)
+        self.assertNotIn(str(other_tag.id), returned_ids)
+
+    def test_active_session_is_returned_but_not_used_as_recent_context(self):
+        FocusSession.objects.create(
+            user=self.user,
+            mode=FocusSession.Mode.DEEP_WORK,
+            goal="Current deep work",
+            status=FocusSession.Status.PAUSED,
+            target_duration_seconds=5400,
+            started_at=timezone.now(),
+        )
+
+        response = self.client.get("/api/recent-context/")
+
+        self.assertEqual(response.data["status"], "empty")
+        self.assertIsNone(response.data["recent_context"])
+        self.assertEqual(response.data["active_session"]["goal"], "Current deep work")
+        self.assertEqual(response.data["active_session"]["mode"], "deep_work")
+
+    def test_privacy_excludes_urls_titles_snippets_notes_and_warning_messages(self):
+        session = self.create_session(goal="Private-safe goal")
+        event = BrowserEvent.objects.create(
+            session_id=session.id,
+            event_type="tab_active",
+            url="https://private.example.com/full/path",
+            domain="private.example.com",
+            page_title="Secret title",
+            meta_description="Secret description",
+            content_snippet="Secret snippet",
+        )
+        WarningEvent.objects.create(
+            session_id=session.id,
+            browser_event=event,
+            warning_level=1,
+            warning_type=WarningEvent.WarningType.MANUAL,
+            domain="private.example.com",
+            url="https://private.example.com/full/path",
+            message="Secret warning message",
+        )
+        SessionNote.objects.create(session=session, content="Secret session note")
+
+        response = self.client.get("/api/recent-context/")
+
+        payload = json.dumps(response.data, ensure_ascii=False)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertNotIn("https://private.example.com/full/path", payload)
+        self.assertNotIn("Secret title", payload)
+        self.assertNotIn("Secret description", payload)
+        self.assertNotIn("Secret snippet", payload)
+        self.assertNotIn("Secret warning message", payload)
+        self.assertNotIn("Secret session note", payload)
+
+    def test_recent_context_does_not_call_ai(self):
+        self.create_session(goal="No AI context")
+
+        with patch.object(AIClient, "complete_json") as complete_json:
+            response = self.client.get("/api/recent-context/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        complete_json.assert_not_called()
+
+    def test_unsupported_methods_return_405(self):
+        for method in ["post", "put", "patch", "delete"]:
+            response = getattr(self.client, method)("/api/recent-context/")
+            self.assertEqual(response.status_code, status.HTTP_405_METHOD_NOT_ALLOWED)
 
 
 class RealtimeScoreApiTests(APITestCase):

@@ -96,6 +96,21 @@ class WeeklySnapshotSerializer(serializers.Serializer):
     delta = WeeklyDeltaSerializer()
     aiRecommendation = serializers.CharField(required=False)
     trendDirection = serializers.ChoiceField(choices=["up", "down", "neutral"])
+    status = serializers.CharField(required=False)
+    data_complete = serializers.BooleanField(required=False)
+    personalized = serializers.BooleanField(required=False)
+    period = serializers.DictField(required=False)
+    current_week = serializers.DictField(required=False)
+    previous_week = serializers.DictField(required=False)
+    comparison = serializers.DictField(required=False, allow_null=True)
+    focus_trend = serializers.DictField(required=False)
+    patterns = serializers.DictField(required=False)
+    recommendations = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
+    commentary = serializers.ListField(child=serializers.DictField(), required=False)
+    generated_at = serializers.DateTimeField(required=False)
 
 
 class PatternInsightsSerializer(serializers.Serializer):
@@ -116,6 +131,9 @@ class SessionBreakdownSerializer(serializers.Serializer):
 
 
 class ReportExportRequestSerializer(serializers.Serializer):
+    date_from = serializers.DateField(required=False)
+    date_to = serializers.DateField(required=False)
+    range = serializers.ChoiceField(choices=["7d", "30d"], required=False)
     dateRange = serializers.ChoiceField(
         choices=["today", "7d", "30d", "90d", "all"],
         default="7d",
@@ -132,10 +150,25 @@ class ReportExportRequestSerializer(serializers.Serializer):
 class ReportExportJobSerializer(serializers.ModelSerializer):
     jobId = serializers.UUIDField(source="id", read_only=True)
     dateRange = serializers.CharField(source="date_range", read_only=True)
+    dateFrom = serializers.DateField(source="date_from", read_only=True)
+    dateTo = serializers.DateField(source="date_to", read_only=True)
+    requestedTimezone = serializers.CharField(source="requested_timezone", read_only=True)
     format = serializers.CharField(source="export_format", read_only=True)
     downloadUrl = serializers.CharField(source="download_url", read_only=True)
+    downloadReady = serializers.SerializerMethodField()
+    fileSize = serializers.IntegerField(source="file_size", read_only=True)
+    errorCode = serializers.CharField(source="error_code", read_only=True)
+    errorMessage = serializers.CharField(source="error_message", read_only=True)
     requestedAt = serializers.DateTimeField(source="requested_at", read_only=True)
+    startedAt = serializers.DateTimeField(source="started_at", read_only=True)
     completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+    expiresAt = serializers.DateTimeField(source="expires_at", read_only=True)
+
+    def get_downloadReady(self, obj):
+        return obj.status in [
+            ReportExportJob.Status.COMPLETED,
+            ReportExportJob.Status.READY,
+        ] and bool(obj.download_url or obj.file)
 
     class Meta:
         model = ReportExportJob
@@ -144,8 +177,19 @@ class ReportExportJobSerializer(serializers.ModelSerializer):
             "status",
             "format",
             "dateRange",
+            "dateFrom",
+            "dateTo",
+            "requestedTimezone",
             "payload",
             "downloadUrl",
+            "downloadReady",
+            "fileSize",
+            "checksum",
+            "progress",
+            "errorCode",
+            "errorMessage",
             "requestedAt",
+            "startedAt",
             "completedAt",
+            "expiresAt",
         ]

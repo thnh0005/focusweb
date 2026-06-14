@@ -31,7 +31,7 @@ from .serializers import (
     SmartPresetSerializer,
     UpdateSessionSerializer,
 )
-from .services import set_session_tags, transition_session
+from .services import RecentLearningContextService, set_session_tags, transition_session
 
 
 def get_owned_session(user, session_id):
@@ -503,43 +503,7 @@ class RecentContextView(GenericAPIView):
 
     @extend_schema(operation_id="recent_context", responses=RecentContextSerializer)
     def get(self, request):
-        # Recent context tuần 4 gom dữ liệu session gần nhất để FE dựng gợi ý nhanh.
-        sessions = FocusSession.objects.filter(user=request.user).prefetch_related("tags")
-        active_session = (
-            sessions.filter(status__in=FocusSession.OPEN_STATUSES)
-            .order_by("-started_at")
-            .first()
-        )
-        last_completed = (
-            sessions.filter(status=FocusSession.Status.COMPLETED)
-            .order_by("-ended_at", "-started_at")
-            .first()
-        )
-        recent_goals = list(
-            sessions.exclude(goal="")
-            .order_by("-started_at")
-            .values_list("goal", flat=True)[:5]
-        )
-        recent_notes = [
-            {
-                "sessionId": str(note.session_id),
-                "content": note.content,
-                "updatedAt": note.updated_at,
-            }
-            for note in SessionNote.objects.filter(session__user=request.user)
-            .exclude(content="")
-            .order_by("-updated_at")[:5]
-        ]
-        suggested_tags = list(
-            SessionTag.objects.filter(user=request.user).values_list("name", flat=True)[:8]
-        )
-        data = {
-            "activeSession": active_session,
-            "lastCompletedSession": last_completed,
-            "recentGoals": recent_goals,
-            "recentNotes": recent_notes,
-            "suggestedTags": suggested_tags,
-        }
+        data = RecentLearningContextService(request.user).build()
         return Response(RecentContextSerializer(data).data)
 
 

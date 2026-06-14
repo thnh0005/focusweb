@@ -1,6 +1,7 @@
 from datetime import timedelta
 
 from django.contrib.auth import login, logout, update_session_auth_hash
+from django.db import transaction
 from django.middleware.csrf import get_token
 from django.utils import timezone
 from django.utils.decorators import method_decorator
@@ -11,6 +12,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 
 from .serializers import (
+    AccountDataExportJobSerializer,
+    AccountDeletionJobSerializer,
     AccountExportSerializer,
     AmbientPreferenceSerializer,
     ChangePasswordSerializer,
@@ -27,6 +30,10 @@ from .serializers import (
     UserPreferenceSerializer,
     UserSerializer,
 )
+from .models import UserPreference
+from .account_deletion import create_or_reuse_account_deletion_job
+from .account_export import create_or_reuse_account_export_job
+from .tasks import delete_account_data_task, generate_account_data_export_task
 
 
 def auth_response(request, user, message=None, response_status=status.HTTP_200_OK):
@@ -174,7 +181,8 @@ class MusicPreferenceView(GenericAPIView):
     serializer_class = MusicPreferenceSerializer
 
     def get(self, request):
-        return Response(MusicPreferenceSerializer(request.user.preferences).data)
+        preferences = self.get_preferences(request.user)
+        return Response(MusicPreferenceSerializer(preferences).data)
 
     def put(self, request):
         return self._update(request, partial=False)
@@ -183,14 +191,22 @@ class MusicPreferenceView(GenericAPIView):
         return self._update(request, partial=True)
 
     def _update(self, request, partial):
-        serializer = MusicPreferenceSerializer(
-            request.user.preferences,
-            data=request.data,
-            partial=partial,
-        )
-        serializer.is_valid(raise_exception=True)
-        serializer.save()
-        return Response(serializer.data)
+        with transaction.atomic():
+            preferences = self.get_preferences(request.user)
+            serializer = MusicPreferenceSerializer(
+                preferences,
+                data=request.data,
+                partial=partial,
+            )
+            serializer.is_valid(raise_exception=True)
+            instance = serializer.save()
+        data = MusicPreferenceSerializer(instance).data
+        return Response({"status": "updated", "preferences": data, **data})
+
+    @staticmethod
+    def get_preferences(user):
+        preferences, _ = UserPreference.objects.get_or_create(user=user)
+        return preferences
 
 
 class ThemePreferenceView(GenericAPIView):
@@ -315,28 +331,18 @@ class ChangePasswordView(GenericAPIView):
 
 
 class AccountExportView(GenericAPIView):
-    serializer_class = AccountExportSerializer
+    serializer_class = AccountDataExportJobSerializer
 
     def post(self, request):
-        from apps.ai.models import StudyDocument
-        from apps.ai.serializers import StudyDocumentSerializer
-        from apps.sessions.models import FocusSession
-        from apps.sessions.serializers import SessionSerializer
-
-        sessions = FocusSession.objects.filter(user=request.user).prefetch_related("tags")
-        documents = StudyDocument.objects.filter(user=request.user).prefetch_related(
-            "summaries",
-            "flashcard_decks__cards",
+        job, created = create_or_reuse_account_export_job(request.user)
+        if created:
+            transaction.on_commit(
+                lambda: generate_account_data_export_task.delay(str(job.id))
+            )
+        return Response(
+            AccountDataExportJobSerializer(job).data,
+            status=status.HTTP_202_ACCEPTED if created else status.HTTP_200_OK,
         )
-        data = {
-            "generatedAt": timezone.now(),
-            "user": UserSerializer(request.user).data,
-            "profile": ProfileSerializer(request.user.profile).data,
-            "preferences": UserPreferenceSerializer(request.user.preferences).data,
-            "sessions": SessionSerializer(sessions, many=True).data,
-            "documents": StudyDocumentSerializer(documents, many=True).data,
-        }
-        return Response(AccountExportSerializer(data).data)
 
 
 class AccountDeleteView(GenericAPIView):
@@ -345,10 +351,17 @@ class AccountDeleteView(GenericAPIView):
     def delete(self, request):
         serializer = DeleteAccountSerializer(data=request.data, context={"request": request})
         serializer.is_valid(raise_exception=True)
-        user = request.user
+        job, created = create_or_reuse_account_deletion_job(
+            request.user,
+            confirmed=True,
+        )
         logout(request)
-        user.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+        if created:
+            transaction.on_commit(lambda: delete_account_data_task.delay(str(job.id)))
+        return Response(
+            AccountDeletionJobSerializer(job).data,
+            status=status.HTTP_202_ACCEPTED if created else status.HTTP_200_OK,
+        )
 
 
 class OnboardingCompleteView(GenericAPIView):

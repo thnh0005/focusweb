@@ -17,6 +17,18 @@ from .parsers import (
     classify_relevance,
 )
 from .prompt_builder import PromptBuilder
+from .document_summary import (
+    DocumentChunker,
+    DocumentSummaryError,
+    DocumentSummaryOutputValidator,
+    DocumentSummaryService,
+)
+from .flashcard_generation import (
+    DocumentSourceSelector,
+    FlashcardGenerationError,
+    FlashcardGenerationService,
+    FlashcardOutputValidator,
+)
 from .semantic_service import SemanticAnalysisService
 from .session_insight_service import (
     ERROR_ALREADY_COMPLETED,
@@ -44,6 +56,14 @@ __all__ = [
     "AITimeout",
     "AIUnknownError",
     "PromptBuilder",
+    "DocumentChunker",
+    "DocumentSummaryError",
+    "DocumentSummaryOutputValidator",
+    "DocumentSummaryService",
+    "DocumentSourceSelector",
+    "FlashcardGenerationError",
+    "FlashcardGenerationService",
+    "FlashcardOutputValidator",
     "SemanticAIResponseParser",
     "SemanticAnalysisService",
     "SessionInsightConflict",

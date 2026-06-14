@@ -1,10 +1,11 @@
 from django.db import transaction
 from django.db.models import F
+from django.db.models.functions import Trim
 from django.utils import timezone
 from rest_framework.exceptions import ValidationError
 
 from apps.scoring.services.score_calculator import ScoreCalculator
-from apps.users.models import Profile
+from apps.users.models import Profile, UserPreference
 
 from .models import FocusSession, SessionNote, SessionStateTransition, SessionTag
 
@@ -139,4 +140,161 @@ def enqueue_session_insight(session_id):
         generate_session_insight.delay(str(session_id))
     except Exception:
         return None
+
+
+class RecentLearningContextService:
+    """Builds safe reuse context from session history without notes or event content."""
+
+    HISTORICAL_STATUSES = [FocusSession.Status.COMPLETED, "finished"]
+    MODE_MAP = {
+        FocusSession.Mode.NORMAL: "normal",
+        FocusSession.Mode.DEEP_WORK: "deep_work",
+        "deep_work": "deep_work",
+    }
+
+    def __init__(self, user):
+        self.user = user
+        self.generated_at = timezone.now()
+
+    def build(self):
+        recent_session = self.recent_completed_session()
+        active_session = self.active_session()
+        active_data = self.serialize_active_session(active_session)
+
+        if recent_session is None:
+            return {
+                "status": "empty",
+                "has_context": False,
+                "recent_context": None,
+                "reuse_config": None,
+                "active_session": active_data,
+                "generated_at": self.generated_at,
+            }
+
+        recent_context = self.serialize_recent_context(recent_session)
+        return {
+            "status": "ready",
+            "has_context": True,
+            "recent_context": recent_context,
+            "reuse_config": self.build_reuse_config(recent_session, recent_context),
+            "active_session": active_data,
+            "generated_at": self.generated_at,
+        }
+
+    def recent_completed_session(self):
+        return (
+            FocusSession.objects.filter(
+                user=self.user,
+                status__in=self.HISTORICAL_STATUSES,
+            )
+            .annotate(trimmed_goal=Trim("goal"))
+            .exclude(trimmed_goal="")
+            .prefetch_related("tags")
+            .order_by(
+                F("ended_at").desc(nulls_last=True),
+                F("started_at").desc(nulls_last=True),
+                "-created_at",
+            )
+            .first()
+        )
+
+    def active_session(self):
+        return (
+            FocusSession.objects.filter(
+                user=self.user,
+                status__in=FocusSession.OPEN_STATUSES,
+            )
+            .order_by("-started_at", "-created_at")
+            .first()
+        )
+
+    def serialize_recent_context(self, session):
+        tags = self.serialize_tags(session)
+        return {
+            "session_id": session.id,
+            "goal": self.normalize_goal(session.goal),
+            "mode": self.normalize_mode(session.mode),
+            "target_duration_minutes": self.target_duration_minutes(session),
+            "actual_duration_minutes": self.actual_duration_minutes(session),
+            "session_status": session.status,
+            "started_at": session.started_at,
+            "ended_at": session.ended_at,
+            "tags": tags,
+        }
+
+    def serialize_active_session(self, session):
+        if session is None:
+            return None
+        return {
+            "session_id": session.id,
+            "goal": self.normalize_goal(session.goal),
+            "mode": self.normalize_mode(session.mode),
+            "target_duration_minutes": self.target_duration_minutes(session),
+            "session_status": session.status,
+            "started_at": session.started_at,
+        }
+
+    def build_reuse_config(self, session, recent_context):
+        mode = recent_context["mode"]
+        return {
+            "goal": recent_context["goal"],
+            "mode": mode,
+            "requires_goal": mode == "deep_work",
+            "duration_minutes": self.target_duration_minutes(session),
+            "tag_ids": [str(tag["id"]) for tag in recent_context["tags"]],
+        }
+
+    def serialize_tags(self, session):
+        tags = session.tags.filter(user=self.user).order_by("name")[:3]
+        return [{"id": tag.id, "name": tag.name} for tag in tags]
+
+    @staticmethod
+    def normalize_goal(goal):
+        return (goal or "").replace("\x00", "").replace("\r\n", "\n").replace(
+            "\r",
+            "\n",
+        ).strip()
+
+    def normalize_mode(self, mode):
+        if mode in self.MODE_MAP:
+            return self.MODE_MAP[mode]
+
+        preference_mode = self.preference_mode()
+        if preference_mode in self.MODE_MAP:
+            return self.MODE_MAP[preference_mode]
+        return "normal"
+
+    def target_duration_minutes(self, session):
+        seconds = getattr(session, "target_duration_seconds", None)
+        if seconds and seconds > 0:
+            return max(1, round(seconds / 60))
+        return self.default_duration_minutes()
+
+    def actual_duration_minutes(self, session):
+        seconds = getattr(session, "actual_duration_seconds", None)
+        if seconds and seconds > 0:
+            return max(0, round(seconds / 60))
+        if (
+            session.started_at
+            and session.ended_at
+            and session.ended_at >= session.started_at
+        ):
+            seconds = (session.ended_at - session.started_at).total_seconds()
+            return max(0, round(seconds / 60))
+        return None
+
+    def preference_mode(self):
+        try:
+            return self.user.preferences.default_mode
+        except UserPreference.DoesNotExist:
+            return FocusSession.Mode.NORMAL
+
+    def default_duration_minutes(self):
+        try:
+            duration = self.user.preferences.default_duration_minutes
+        except UserPreference.DoesNotExist:
+            duration = None
+        if duration and duration > 0:
+            return duration
+        return 25
 

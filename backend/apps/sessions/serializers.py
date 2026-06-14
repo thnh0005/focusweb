@@ -336,9 +336,44 @@ class SessionNoteSerializer(serializers.Serializer):
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
 
 
+class RecentContextTagSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    name = serializers.CharField()
+
+
+class RecentSessionContextSerializer(serializers.Serializer):
+    session_id = serializers.UUIDField()
+    goal = serializers.CharField()
+    mode = serializers.CharField()
+    target_duration_minutes = serializers.IntegerField(allow_null=True)
+    actual_duration_minutes = serializers.IntegerField(allow_null=True)
+    session_status = serializers.CharField()
+    started_at = serializers.DateTimeField()
+    ended_at = serializers.DateTimeField(allow_null=True)
+    tags = RecentContextTagSerializer(many=True)
+
+
+class ActiveSessionContextSerializer(serializers.Serializer):
+    session_id = serializers.UUIDField()
+    goal = serializers.CharField(allow_blank=True)
+    mode = serializers.CharField()
+    target_duration_minutes = serializers.IntegerField()
+    session_status = serializers.CharField()
+    started_at = serializers.DateTimeField()
+
+
+class RecentContextReuseConfigSerializer(serializers.Serializer):
+    goal = serializers.CharField()
+    mode = serializers.CharField()
+    requires_goal = serializers.BooleanField()
+    duration_minutes = serializers.IntegerField()
+    tag_ids = serializers.ListField(child=serializers.UUIDField())
+
+
 class RecentContextSerializer(serializers.Serializer):
-    activeSession = SessionSerializer(allow_null=True)
-    lastCompletedSession = SessionSerializer(allow_null=True)
-    recentGoals = serializers.ListField(child=serializers.CharField())
-    recentNotes = serializers.ListField(child=serializers.DictField())
-    suggestedTags = serializers.ListField(child=serializers.CharField())
+    status = serializers.ChoiceField(choices=["ready", "empty"])
+    has_context = serializers.BooleanField()
+    recent_context = RecentSessionContextSerializer(allow_null=True)
+    reuse_config = RecentContextReuseConfigSerializer(allow_null=True)
+    active_session = ActiveSessionContextSerializer(allow_null=True)
+    generated_at = serializers.DateTimeField()

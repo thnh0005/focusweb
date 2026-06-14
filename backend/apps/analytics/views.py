@@ -2,6 +2,7 @@ from datetime import datetime, time, timedelta
 
 from django.db.models import Avg, Count, Q, Sum
 from django.db.models.functions import Coalesce, ExtractHour, ExtractWeekDay, TruncDate
+from django.db import transaction
 from django.utils import timezone
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter, extend_schema
@@ -11,8 +12,16 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.sessions.models import FocusSession
+from apps.recommendations.weekly_report_service import WeeklyFocusReportService
 
 from .models import ReportExportJob
+from .report_export import (
+    ReportValidationError,
+    create_or_reuse_pdf_export_job,
+    date_range_from_preset,
+    resolve_user_timezone,
+    validate_report_dates,
+)
 from .serializers import (
     AnalyticsOverviewSerializer,
     DashboardOverviewSerializer,
@@ -26,6 +35,7 @@ from .serializers import (
     SessionBreakdownSerializer,
     WeeklySnapshotSerializer,
 )
+from .tasks import generate_study_report_export_task
 
 
 DATE_RANGE_DAYS = {
@@ -478,41 +488,7 @@ class WeeklySnapshotView(GenericAPIView):
         responses=WeeklySnapshotSerializer,
     )
     def get(self, request):
-        today = timezone.localdate()
-        monday = today - timedelta(days=today.weekday())
-        current_start = timezone.make_aware(
-            datetime.combine(monday, time.min),
-            timezone.get_current_timezone(),
-        )
-        this_week = week_stats(request.user, current_start)
-        last_week = week_stats(request.user, current_start - timedelta(days=7))
-        score_delta = None
-        if (
-            this_week["averageFocusScore"] is not None
-            and last_week["averageFocusScore"] is not None
-        ):
-            score_delta = round(
-                this_week["averageFocusScore"] - last_week["averageFocusScore"],
-                2,
-            )
-        direction, _ = trend_values(
-            [last_week["totalFocusMinutes"], this_week["totalFocusMinutes"]]
-        )
-        data = {
-            "thisWeek": this_week,
-            "lastWeek": last_week,
-            "delta": {
-                "focusMinutes": (
-                    this_week["totalFocusMinutes"] - last_week["totalFocusMinutes"]
-                ),
-                "sessions": this_week["totalSessions"] - last_week["totalSessions"],
-                "averageFocusScore": score_delta,
-                "deepWorkCount": (
-                    this_week["deepWorkCount"] - last_week["deepWorkCount"]
-                ),
-            },
-            "trendDirection": direction,
-        }
+        data = WeeklyFocusReportService(request.user).build()
         return Response(WeeklySnapshotSerializer(data).data)
 
 
@@ -548,8 +524,42 @@ class ReportExportView(GenericAPIView):
     def post(self, request):
         serializer = ReportExportRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        date_range = serializer.validated_data["dateRange"]
+        date_range = serializer.validated_data.get("dateRange", "7d")
         export_format = serializer.validated_data["format"]
+        if export_format == ReportExportJob.Format.PDF:
+            try:
+                tzinfo, _timezone_name = resolve_user_timezone(request.user)
+                has_date_from = bool(serializer.validated_data.get("date_from"))
+                has_date_to = bool(serializer.validated_data.get("date_to"))
+                if has_date_from != has_date_to:
+                    raise ReportValidationError(
+                        "date_from and date_to must be provided together.",
+                        code="INVALID_REPORT_DATE_RANGE",
+                    )
+                if has_date_from and has_date_to:
+                    date_from = serializer.validated_data["date_from"]
+                    date_to = serializer.validated_data["date_to"]
+                else:
+                    range_name = serializer.validated_data.get("range") or date_range
+                    date_from, date_to = date_range_from_preset(range_name, tzinfo)
+                validate_report_dates(date_from, date_to)
+            except ReportValidationError as exc:
+                raise ValidationError({"error_code": exc.code, "detail": str(exc)}) from exc
+
+            job, created = create_or_reuse_pdf_export_job(
+                request.user,
+                date_from,
+                date_to,
+            )
+            if created:
+                transaction.on_commit(
+                    lambda: generate_study_report_export_task.delay(str(job.id))
+                )
+            return Response(
+                ReportExportJobSerializer(job).data,
+                status=status.HTTP_202_ACCEPTED if created else status.HTTP_200_OK,
+            )
+
         tag = serializer.validated_data.get("tag", "")
         payload = build_report_payload(request.user, date_range, tag)
         if export_format == ReportExportJob.Format.HTML:
@@ -578,4 +588,16 @@ class ReportExportDetailView(GenericAPIView):
 
     @extend_schema(operation_id="report_export_retrieve", responses=ReportExportJobSerializer)
     def get(self, request, job_id):
-        return Response(ReportExportJobSerializer(get_owned_export_job(request.user, job_id)).data)
+        job = get_owned_export_job(request.user, job_id)
+        if (
+            job.status == ReportExportJob.Status.COMPLETED
+            and job.expires_at
+            and job.expires_at <= timezone.now()
+        ):
+            job.status = ReportExportJob.Status.EXPIRED
+            job.download_url = ""
+            if job.file:
+                job.file.delete(save=False)
+                job.file = ""
+            job.save(update_fields=["status", "download_url", "file", "updated_at"])
+        return Response(ReportExportJobSerializer(job).data)

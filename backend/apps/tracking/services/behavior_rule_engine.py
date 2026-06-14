@@ -59,18 +59,28 @@ def coerce_nonnegative_int(value) -> int:
 
 
 class BlacklistRepository:
-    @staticmethod
-    def find_match(user, domain: str) -> BlacklistMatch | None:
+    def __init__(self):
+        self._entries_by_user_id = {}
+
+    def entries_for_user(self, user):
+        user_id = getattr(user, "pk", None)
+        if user_id not in self._entries_by_user_id:
+            self._entries_by_user_id[user_id] = list(
+                BlacklistEntry.objects.available_to(user).only(
+                    "domain",
+                    "severity",
+                    "is_default",
+                )
+            )
+        return self._entries_by_user_id[user_id]
+
+    def find_match(self, user, domain: str) -> BlacklistMatch | None:
         normalized_domain = normalize_rule_domain(domain)
         if not normalized_domain:
             return None
 
         matches = []
-        for entry in BlacklistEntry.objects.available_to(user).only(
-            "domain",
-            "severity",
-            "is_default",
-        ):
+        for entry in self.entries_for_user(user):
             if domains_match(normalized_domain, entry.domain):
                 matches.append(
                     BlacklistMatch(

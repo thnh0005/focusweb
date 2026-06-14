@@ -5,7 +5,15 @@ from django.db import transaction
 from django.utils import timezone
 from rest_framework import serializers
 
-from .models import OnboardingSurvey, Profile, User, UserPreference
+from .models import (
+    AccountDataExportJob,
+    AccountDeletionJob,
+    OnboardingSurvey,
+    Profile,
+    User,
+    UserPreference,
+)
+from .services import MusicProviderDetector
 
 
 class CsrfTokenSerializer(serializers.Serializer):
@@ -210,6 +218,16 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
         required=False,
         allow_blank=True,
     )
+    musicAutoplay = serializers.BooleanField(source="music_autoplay", required=False)
+    useCustomPlaylist = serializers.BooleanField(
+        source="use_custom_playlist",
+        required=False,
+    )
+    customPlaylistProvider = serializers.ChoiceField(
+        source="custom_playlist_provider",
+        choices=UserPreference.MusicPlaylistProvider.choices,
+        required=False,
+    )
     ambientEffectEnabled = serializers.BooleanField(
         source="ambient_effect_enabled",
         required=False,
@@ -257,6 +275,9 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
             "musicEnabled",
             "musicTrack",
             "customPlaylistUrl",
+            "musicAutoplay",
+            "useCustomPlaylist",
+            "customPlaylistProvider",
             "ambientEffectEnabled",
             "ambientEffectIntensity",
             "themeAccent",
@@ -315,35 +336,234 @@ class NotificationSettingsSerializer(serializers.ModelSerializer):
         ]
 
 
-class MusicPreferenceSerializer(serializers.ModelSerializer):
-    musicEnabled = serializers.BooleanField(source="music_enabled", required=False)
-    musicTrack = serializers.ChoiceField(
-        source="music_track",
+class MusicPreferenceSerializer(serializers.Serializer):
+    enabled = serializers.BooleanField(required=False)
+    built_in_track = serializers.ChoiceField(
         choices=UserPreference.MusicTrack.choices,
         required=False,
     )
-    customPlaylistUrl = serializers.URLField(
-        source="custom_playlist_url",
+    volume = serializers.IntegerField(min_value=0, max_value=100, required=False)
+    autoplay = serializers.BooleanField(required=False)
+    use_custom_playlist = serializers.BooleanField(required=False)
+    custom_playlist_url = serializers.CharField(
         required=False,
         allow_blank=True,
+        max_length=2048,
     )
-    soundEnabled = serializers.BooleanField(source="sound_enabled", required=False)
+    custom_playlist_provider = serializers.ChoiceField(
+        choices=UserPreference.MusicPlaylistProvider.choices,
+        required=False,
+    )
+    musicEnabled = serializers.BooleanField(required=False, write_only=True)
+    musicTrack = serializers.CharField(required=False, write_only=True)
+    customPlaylistUrl = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        max_length=2048,
+        write_only=True,
+    )
+    soundEnabled = serializers.BooleanField(required=False)
     ambientSoundVolume = serializers.IntegerField(
-        source="ambient_sound_volume",
         min_value=0,
         max_value=100,
         required=False,
+        write_only=True,
     )
+    musicAutoplay = serializers.BooleanField(required=False, write_only=True)
+    useCustomPlaylist = serializers.BooleanField(required=False, write_only=True)
+    customPlaylistProvider = serializers.CharField(required=False, write_only=True)
 
-    class Meta:
-        model = UserPreference
-        fields = [
-            "musicEnabled",
-            "musicTrack",
-            "customPlaylistUrl",
-            "soundEnabled",
-            "ambientSoundVolume",
-        ]
+    LEGACY_TRACK_ALIASES = {"white-noise": UserPreference.MusicTrack.WHITE_NOISE}
+
+    def to_internal_value(self, data):
+        unknown = set(data) - set(self.fields)
+        if unknown:
+            raise serializers.ValidationError(
+                {field: ["Unknown music preference field."] for field in sorted(unknown)}
+            )
+        for field in ("volume", "ambientSoundVolume"):
+            if field in data and (
+                isinstance(data[field], bool) or not isinstance(data[field], int)
+            ):
+                raise serializers.ValidationError(
+                    {field: ["Volume must be an integer from 0 to 100."]}
+                )
+        return super().to_internal_value(data)
+
+    def validate(self, attrs):
+        instance = self.instance
+        current = {
+            "enabled": instance.music_enabled,
+            "built_in_track": self.normalize_track(instance.music_track),
+            "volume": instance.ambient_sound_volume,
+            "autoplay": instance.music_autoplay,
+            "use_custom_playlist": instance.use_custom_playlist,
+            "custom_playlist_url": instance.custom_playlist_url,
+            "custom_playlist_provider": instance.custom_playlist_provider,
+            "sound_enabled": instance.sound_enabled,
+        }
+
+        preferences = {
+            "enabled": attrs.get("enabled", attrs.get("musicEnabled", current["enabled"])),
+            "built_in_track": attrs.get(
+                "built_in_track",
+                attrs.get("musicTrack", current["built_in_track"]),
+            ),
+            "volume": attrs.get(
+                "volume",
+                attrs.get("ambientSoundVolume", current["volume"]),
+            ),
+            "autoplay": attrs.get(
+                "autoplay",
+                attrs.get("musicAutoplay", current["autoplay"]),
+            ),
+            "use_custom_playlist": attrs.get(
+                "use_custom_playlist",
+                attrs.get("useCustomPlaylist", current["use_custom_playlist"]),
+            ),
+            "custom_playlist_url": attrs.get(
+                "custom_playlist_url",
+                attrs.get("customPlaylistUrl", current["custom_playlist_url"]),
+            ),
+            "custom_playlist_provider": attrs.get(
+                "custom_playlist_provider",
+                attrs.get(
+                    "customPlaylistProvider",
+                    current["custom_playlist_provider"],
+                ),
+            ),
+            "sound_enabled": attrs.get("soundEnabled", current["sound_enabled"]),
+        }
+
+        preferences["built_in_track"] = self.normalize_track(
+            preferences["built_in_track"]
+        )
+        valid_providers = {
+            choice[0] for choice in UserPreference.MusicPlaylistProvider.choices
+        }
+        if preferences["custom_playlist_provider"] not in valid_providers:
+            raise serializers.ValidationError(
+                {"custom_playlist_provider": ["Unsupported custom playlist provider."]}
+            )
+        if preferences["enabled"] and not preferences["use_custom_playlist"]:
+            if preferences["built_in_track"] == UserPreference.MusicTrack.NONE:
+                raise serializers.ValidationError(
+                    {
+                        "built_in_track": [
+                            "Choose a built-in track when music is enabled."
+                        ]
+                    }
+                )
+
+        url = (preferences["custom_playlist_url"] or "").strip()
+        provider = preferences["custom_playlist_provider"]
+        provider_key_sent = (
+            "custom_playlist_provider" in self.initial_data
+            or "customPlaylistProvider" in self.initial_data
+        )
+        if url:
+            try:
+                normalized_url = MusicProviderDetector.validate_custom_url(url)
+                detected_provider = MusicProviderDetector.detect_provider(normalized_url)
+            except serializers.ValidationError as exc:
+                raise serializers.ValidationError({"custom_playlist_url": exc.detail})
+            if (
+                provider
+                and provider != UserPreference.MusicPlaylistProvider.NONE
+                and provider != detected_provider
+            ):
+                raise serializers.ValidationError(
+                    {
+                        "custom_playlist_provider": [
+                            "Playlist provider does not match the URL."
+                        ]
+                    }
+                )
+            preferences["custom_playlist_url"] = normalized_url
+            preferences["custom_playlist_provider"] = detected_provider
+        elif preferences["use_custom_playlist"]:
+            raise serializers.ValidationError(
+                {"custom_playlist_url": ["Custom playlist URL is required."]}
+            )
+        elif "custom_playlist_url" in attrs or "customPlaylistUrl" in attrs:
+            preferences["custom_playlist_provider"] = (
+                UserPreference.MusicPlaylistProvider.NONE
+            )
+
+        if (
+            preferences["use_custom_playlist"]
+            and provider_key_sent
+            and provider == UserPreference.MusicPlaylistProvider.NONE
+        ):
+            raise serializers.ValidationError(
+                {
+                    "custom_playlist_provider": [
+                        "Custom playlist provider must be identified."
+                    ]
+                }
+            )
+
+        return preferences
+
+    def update(self, instance, validated_data):
+        instance.music_enabled = validated_data["enabled"]
+        instance.music_track = validated_data["built_in_track"]
+        instance.ambient_sound_volume = validated_data["volume"]
+        instance.music_autoplay = validated_data["autoplay"]
+        instance.use_custom_playlist = validated_data["use_custom_playlist"]
+        instance.custom_playlist_url = validated_data["custom_playlist_url"]
+        instance.custom_playlist_provider = validated_data["custom_playlist_provider"]
+        instance.sound_enabled = validated_data["sound_enabled"]
+        instance.save(
+            update_fields=[
+                "music_enabled",
+                "music_track",
+                "ambient_sound_volume",
+                "music_autoplay",
+                "use_custom_playlist",
+                "custom_playlist_url",
+                "custom_playlist_provider",
+                "sound_enabled",
+                "updated_at",
+            ]
+        )
+        return instance
+
+    def to_representation(self, instance):
+        track = self.normalize_track(instance.music_track)
+        custom_url = instance.custom_playlist_url or None
+        source = "custom_playlist" if instance.use_custom_playlist else "built_in"
+        data = {
+            "enabled": instance.music_enabled,
+            "source": source,
+            "built_in_track": track,
+            "volume": instance.ambient_sound_volume,
+            "autoplay": instance.music_autoplay,
+            "use_custom_playlist": instance.use_custom_playlist,
+            "custom_playlist_url": custom_url,
+            "custom_playlist_provider": instance.custom_playlist_provider,
+            "custom_playlist": {
+                "enabled": instance.use_custom_playlist,
+                "url": custom_url,
+                "provider": instance.custom_playlist_provider,
+            },
+            "updated_at": instance.updated_at,
+            "musicEnabled": instance.music_enabled,
+            "musicTrack": track,
+            "customPlaylistUrl": custom_url,
+            "soundEnabled": instance.sound_enabled,
+            "ambientSoundVolume": instance.ambient_sound_volume,
+        }
+        return data
+
+    def normalize_track(self, value):
+        normalized = self.LEGACY_TRACK_ALIASES.get(value, value)
+        valid_tracks = {choice[0] for choice in UserPreference.MusicTrack.choices}
+        if normalized not in valid_tracks:
+            raise serializers.ValidationError(
+                {"built_in_track": ["Unsupported built-in music track."]}
+            )
+        return normalized
 
 
 class ThemePreferenceSerializer(serializers.ModelSerializer):
@@ -434,6 +654,71 @@ class AccountExportSerializer(serializers.Serializer):
     preferences = serializers.DictField()
     sessions = serializers.ListField(child=serializers.DictField())
     documents = serializers.ListField(child=serializers.DictField())
+
+
+class AccountDataExportJobSerializer(serializers.ModelSerializer):
+    jobId = serializers.UUIDField(source="id", read_only=True)
+    format = serializers.CharField(source="export_format", read_only=True)
+    downloadUrl = serializers.SerializerMethodField()
+    downloadReady = serializers.SerializerMethodField()
+    fileSize = serializers.IntegerField(source="file_size", read_only=True)
+    errorCode = serializers.CharField(source="error_code", read_only=True)
+    errorMessage = serializers.CharField(source="error_message", read_only=True)
+    requestedAt = serializers.DateTimeField(source="requested_at", read_only=True)
+    startedAt = serializers.DateTimeField(source="started_at", read_only=True)
+    completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+    expiresAt = serializers.DateTimeField(source="expires_at", read_only=True)
+
+    class Meta:
+        model = AccountDataExportJob
+        fields = [
+            "jobId",
+            "status",
+            "format",
+            "downloadUrl",
+            "downloadReady",
+            "fileSize",
+            "checksum",
+            "progress",
+            "errorCode",
+            "errorMessage",
+            "requestedAt",
+            "startedAt",
+            "completedAt",
+            "expiresAt",
+        ]
+
+    def get_downloadUrl(self, obj):
+        if obj.status == AccountDataExportJob.Status.COMPLETED and obj.file:
+            return obj.file.url
+        return ""
+
+    def get_downloadReady(self, obj):
+        return obj.status == AccountDataExportJob.Status.COMPLETED and bool(obj.file)
+
+
+class AccountDeletionJobSerializer(serializers.ModelSerializer):
+    jobId = serializers.UUIDField(source="id", read_only=True)
+    errorCode = serializers.CharField(source="error_code", read_only=True)
+    errorMessage = serializers.CharField(source="error_message", read_only=True)
+    requestedAt = serializers.DateTimeField(source="requested_at", read_only=True)
+    scheduledFor = serializers.DateTimeField(source="scheduled_for", read_only=True)
+    startedAt = serializers.DateTimeField(source="started_at", read_only=True)
+    completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+
+    class Meta:
+        model = AccountDeletionJob
+        fields = [
+            "jobId",
+            "status",
+            "confirmed",
+            "errorCode",
+            "errorMessage",
+            "requestedAt",
+            "scheduledFor",
+            "startedAt",
+            "completedAt",
+        ]
 
 
 class StreakSerializer(serializers.Serializer):
