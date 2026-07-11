@@ -15,6 +15,7 @@ import { SessionGoalHeader } from "@/components/session/SessionGoalHeader";
 import { SessionControlPills } from "@/components/session/SessionControlPills";
 import { FocusStatePill } from "@/components/session/FocusStatePill";
 import { SessionUtilityDock } from "@/components/session/SessionUtilityDock";
+import { SceneSwitcher } from "@/components/focus-home/SceneSwitcher";
 import {
   Dialog,
   DialogContent,
@@ -206,6 +207,7 @@ export default function ActiveSessionPage() {
               onEnd={() => setConfirmEndOpen(true)}
               isLoading={isLoading}
             />
+            <SceneSwitcher />
           </>
         }
       />

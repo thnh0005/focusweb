@@ -5,6 +5,8 @@ export * from "./FocusHomeHero";
 export * from "./MiniStatsDrawer";
 export * from "./RecentSessionsPanel";
 export * from "./AmbientWorkspaceBackground";
+export * from "./AnimatedSceneBackground";
+export * from "./SceneSwitcher";
 export * from "./CenterFocusClock";
 export * from "./PriorityFocusTask";
 export * from "./FloatingFocusDock";

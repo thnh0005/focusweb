@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Maximize2, Music2, StickyNote, Volume2 } from "lucide-react";
+import { Maximize2, Music2, StickyNote } from "lucide-react";
+import { AmbientControls } from "@/components/features/focus/AmbientControls";
+import { MusicPlayer } from "@/components/features/focus/MusicPlayer";
 import { useMusicStore } from "@/stores/music.store";
 import { cn } from "@/lib/utils/cn";
 
@@ -18,12 +20,13 @@ export function SessionUtilityDock({
   onToggleFullscreen,
   className,
 }: SessionUtilityDockProps) {
-  const { currentTrack, playing, volume, togglePlay } = useMusicStore();
+  const { currentTrack, playing } = useMusicStore();
+  const [soundOpen, setSoundOpen] = React.useState(false);
 
   return (
     <div
       className={cn(
-        "flex w-full flex-col gap-3 rounded-3xl border border-white/10 bg-[rgb(18_22_17/0.62)] p-3 shadow-glass backdrop-blur-glass sm:w-auto sm:min-w-[440px]",
+        "flex w-full flex-col gap-3 rounded-3xl border border-white/10 bg-[rgb(18_22_17/0.62)] p-3 shadow-glass backdrop-blur-glass sm:w-auto sm:min-w-[440px] lg:min-w-[520px]",
         className
       )}
       aria-label="Session utilities"
@@ -32,11 +35,14 @@ export function SessionUtilityDock({
         <div className="flex min-w-0 items-center gap-3">
           <button
             type="button"
-            onClick={togglePlay}
-            disabled={!currentTrack}
-            className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-text-primary transition-all duration-fast hover:bg-white/[0.1] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-45"
-            aria-label={playing ? "Pause music" : "Play music"}
-            title={playing ? "Pause music" : "Play music"}
+            onClick={() => setSoundOpen((value) => !value)}
+            className={cn(
+              "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.055] text-text-primary transition-all duration-fast hover:bg-white/[0.1] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              soundOpen && "bg-primary/15 shadow-focus-purple"
+            )}
+            aria-label={soundOpen ? "Close audio controls" : "Open audio controls"}
+            title={soundOpen ? "Close audio controls" : "Open audio controls"}
+            aria-expanded={soundOpen}
           >
             <Music2 className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
           </button>
@@ -45,7 +51,7 @@ export function SessionUtilityDock({
               {currentTrack?.label || "No audio selected"}
             </p>
             <p className="mt-0.5 text-[11px] font-mono text-text-muted">
-              {currentTrack ? (playing ? "Playing" : "Paused") : "Music ready when a track exists"}
+              {currentTrack ? (playing ? "Playing soundscape" : "Soundscape paused") : "Soundscape ready"}
             </p>
           </div>
         </div>
@@ -66,18 +72,10 @@ export function SessionUtilityDock({
         </div>
       </div>
 
-      {currentTrack && (
-        <div className="flex items-center gap-3 border-t border-white/8 pt-3">
-          <Volume2 className="h-4 w-4 shrink-0 text-text-muted stroke-[1.6]" aria-hidden="true" />
-          <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/[0.08]">
-            <div
-              className="h-full rounded-full bg-primary transition-all duration-fast"
-              style={{ width: `${volume}%` }}
-            />
-          </div>
-          <span className="w-10 text-right text-[11px] font-mono text-text-muted">
-            {volume}%
-          </span>
+      {soundOpen && (
+        <div className="grid gap-3 border-t border-white/[0.08] pt-3 lg:grid-cols-[minmax(0,0.85fr)_minmax(0,1.35fr)]">
+          <MusicPlayer />
+          <AmbientControls compact />
         </div>
       )}
     </div>

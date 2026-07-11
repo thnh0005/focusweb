@@ -10,12 +10,28 @@ import type {
   EndSessionPayload,
 } from "@/types/session.types";
 
+interface ActiveSessionLookupResponse {
+  has_active_session: boolean;
+  session: ActiveSession | null;
+}
+
 export const sessionsApi = {
   /**
    * Create and start a new focus session.
    */
   createSession(payload: CreateSessionPayload): Promise<ActiveSession> {
     return apiClient.post<ActiveSession>("/sessions/", payload);
+  },
+
+  /**
+   * Fetch the currently active session, used when the backend rejects
+   * creating a duplicate open session.
+   */
+  async getActiveSession(): Promise<ActiveSession | null> {
+    const response = await apiClient.get<ActiveSessionLookupResponse>(
+      "/extension/active-session/"
+    );
+    return response.has_active_session ? response.session : null;
   },
 
   /**

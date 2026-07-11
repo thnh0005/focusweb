@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { sessionsApi } from "@/services/sessions.api";
 import { blacklistApi } from "@/services/blacklist.api";
+import { ApiError } from "@/services/client";
 import {
   notifySessionStart,
   notifySessionPause,
@@ -75,13 +76,28 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         console.warn("Could not load blacklist entries for extension sync:", err);
       }
 
-      // 2. Register session in database
-      const activeSession = await sessionsApi.createSession({
-        mode: config.mode,
-        goal: config.goal,
-        targetDurationSeconds: config.durationMinutes * 60,
-        tags: config.tags,
-      });
+      // 2. Register session in database. Nếu backend báo đã có session mở,
+      // lấy lại session đó để người dùng tiếp tục vào phòng focus thay vì kẹt HTTP 400.
+      let activeSession: ActiveSession;
+      try {
+        activeSession = await sessionsApi.createSession({
+          mode: config.mode,
+          goal: config.goal,
+          targetDurationSeconds: config.durationMinutes * 60,
+          tags: config.tags,
+        });
+      } catch (error) {
+        if (error instanceof ApiError && error.statusCode === 400) {
+          const existingSession = await sessionsApi.getActiveSession();
+          if (existingSession) {
+            activeSession = existingSession;
+          } else {
+            throw error;
+          }
+        } else {
+          throw error;
+        }
+      }
 
       // 3. Dispatch to Chrome Extension bridge
       await notifySessionStart(

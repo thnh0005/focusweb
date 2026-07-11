@@ -4,7 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Brain, Clock, Sparkles, Zap } from "lucide-react";
-import { AmbientScene } from "@/components/ambient/AmbientScene";
+import { AmbientWorkspaceBackground } from "@/components/focus-home/AmbientWorkspaceBackground";
+import { SceneSwitcher } from "@/components/features/focus/SceneSwitcher";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { sessionsApi } from "@/services/sessions.api";
@@ -12,6 +13,7 @@ import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useExtensionStore } from "@/stores/extension.store";
 import { useSessionStore } from "@/stores/session.store";
 import { cn } from "@/lib/utils/cn";
+import { requestFocusFullscreen } from "@/lib/utils/fullscreen";
 import type { SessionMode } from "@/types/session.types";
 
 const presetDurations = [
@@ -61,6 +63,7 @@ export default function SessionConfigPage() {
   const handleStartSession = async () => {
     if (!isValid) return;
 
+    void requestFocusFullscreen();
     setIsLoading(true);
     try {
       await startSession({
@@ -84,29 +87,30 @@ export default function SessionConfigPage() {
   };
 
   return (
-    <AmbientScene variant="forest" intensity="medium" className="min-h-[100dvh]">
+    <AmbientWorkspaceBackground className="min-h-[100dvh]">
       <main className="flex min-h-[100dvh] items-center justify-center px-4 py-8 sm:px-6">
-        <section className="glass-card ambient-glow w-full max-w-2xl rounded-[2rem] p-5 shadow-ambient sm:p-7 md:p-9">
-          <div className="mb-8 flex items-start justify-between gap-4">
-            <div>
-              <p className="text-sm text-text-muted">Focus room</p>
-              <h1 className="mt-2 text-4xl font-light leading-tight text-text-primary md:text-5xl">
-                Set your focus
-              </h1>
-              <p className="mt-3 max-w-[32rem] text-sm font-light leading-relaxed text-text-secondary">
-                Choose a mode, pick a duration, and enter the room.
-              </p>
+        <div className="grid w-full max-w-6xl gap-5 lg:grid-cols-[minmax(0,42rem)_20rem] lg:items-start">
+          <section className="glass-card ambient-glow w-full rounded-[2rem] p-5 shadow-ambient sm:p-7 md:p-9">
+            <div className="mb-8 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-sm text-text-muted">Focus room</p>
+                <h1 className="mt-2 text-4xl font-light leading-tight text-text-primary md:text-5xl">
+                  Set your focus
+                </h1>
+                <p className="mt-3 max-w-[32rem] text-sm font-light leading-relaxed text-text-secondary">
+                  Choose a mode, pick a duration, and enter the room.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => router.back()}
+                className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.045] text-text-secondary transition-all duration-fast hover:bg-white/[0.08] hover:text-text-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label="Go back"
+                title="Go back"
+              >
+                <ArrowLeft className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
+              </button>
             </div>
-            <button
-              type="button"
-              onClick={() => router.back()}
-              className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.045] text-text-secondary transition-all duration-fast hover:bg-white/[0.08] hover:text-text-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label="Go back"
-              title="Go back"
-            >
-              <ArrowLeft className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
-            </button>
-          </div>
 
           {smartPreset && (
             <button
@@ -257,9 +261,12 @@ export default function SessionConfigPage() {
               </Button>
             </div>
           </div>
-        </section>
+          </section>
+
+          <SceneSwitcher mode="inline" className="hidden lg:block" />
+        </div>
       </main>
-    </AmbientScene>
+    </AmbientWorkspaceBackground>
   );
 }
 

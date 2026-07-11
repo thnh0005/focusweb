@@ -1,99 +1,217 @@
 import { create } from "zustand";
+import {
+  AMBIENT_LOOPS,
+  DEFAULT_MUSIC_ID,
+  getAmbientLoop,
+  getMusicTrack,
+  type AmbientLoopId,
+  type MusicTrackId,
+  type MusicTrack,
+} from "@/constants/ambient-tracks";
+import {
+  DEFAULT_SCENE_ID,
+  getFocusScene,
+  type FocusSceneId,
+} from "@/constants/focus-scenes";
 import { AudioManager } from "@/lib/audio/AudioManager";
 import type { AmbientTrack } from "@/types/session.types";
 
+type AmbientVolumeMap = Partial<Record<AmbientLoopId, number>>;
+
+interface PersistedMusicState {
+  currentSceneId: FocusSceneId;
+  currentMusicId: MusicTrackId;
+  volume: number;
+  ambientVolumes: AmbientVolumeMap;
+  isMuted: boolean;
+}
+
 export interface MusicState {
-  currentTrack: AmbientTrack | null;
+  currentTrack: MusicTrack | null;
+  currentSceneId: FocusSceneId;
+  currentMusicId: MusicTrackId;
   playing: boolean;
-  volume: number; // 0–100
+  volume: number;
+  ambientVolumes: AmbientVolumeMap;
+  isMuted: boolean;
   customPlaylistUrl: string | null;
 
-  // Actions
   selectTrack: (track: AmbientTrack) => void;
+  setMusic: (musicId: MusicTrackId) => void;
+  setScene: (sceneId: FocusSceneId) => void;
+  setCurrentSceneId: (sceneId: FocusSceneId) => void;
   togglePlay: () => void;
   setVolume: (volume: number) => void;
+  setAmbientVolume: (ambientId: AmbientLoopId, volume: number) => void;
+  toggleAmbient: (ambientId: AmbientLoopId) => void;
+  setMuted: (muted: boolean) => void;
   setCustomPlaylist: (url: string) => void;
   stop: () => void;
 }
 
-// Keep an HTMLAudioElement instance active inside a closure on the client side.
-let ambientAudio: HTMLAudioElement | null = null;
+const STORAGE_KEY = "focusos.study-with-me.audio";
 
-function getAudioElement(): HTMLAudioElement | null {
-  if (typeof window === "undefined") return null;
-  if (!ambientAudio) {
-    ambientAudio = new Audio();
-    ambientAudio.loop = true;
-  }
-  return ambientAudio;
+function canUseStorage() {
+  return typeof window !== "undefined" && typeof window.localStorage !== "undefined";
 }
 
+function sceneDefaultAmbientVolumes(sceneId: FocusSceneId): AmbientVolumeMap {
+  const scene = getFocusScene(sceneId);
+  return scene.ambientMix ?? { [scene.ambientId]: getAmbientLoop(scene.ambientId).defaultVolume };
+}
+
+function readPersistedState(): PersistedMusicState {
+  const fallbackScene = getFocusScene(DEFAULT_SCENE_ID);
+  const fallback: PersistedMusicState = {
+    currentSceneId: fallbackScene.id,
+    currentMusicId: fallbackScene.musicId ?? DEFAULT_MUSIC_ID,
+    volume: 54,
+    ambientVolumes: sceneDefaultAmbientVolumes(fallbackScene.id),
+    isMuted: false,
+  };
+
+  if (!canUseStorage()) return fallback;
+
+  try {
+    const raw = window.localStorage.getItem(STORAGE_KEY);
+    if (!raw) return fallback;
+    const parsed = JSON.parse(raw) as Partial<PersistedMusicState>;
+    const scene = getFocusScene(parsed.currentSceneId);
+    const music = getMusicTrack(parsed.currentMusicId);
+
+    return {
+      currentSceneId: scene.id,
+      currentMusicId: music.id,
+      volume: typeof parsed.volume === "number" ? parsed.volume : fallback.volume,
+      ambientVolumes: parsed.ambientVolumes ?? sceneDefaultAmbientVolumes(scene.id),
+      isMuted: Boolean(parsed.isMuted),
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+function persistState(state: MusicState) {
+  if (!canUseStorage()) return;
+  const payload: PersistedMusicState = {
+    currentSceneId: state.currentSceneId,
+    currentMusicId: state.currentMusicId,
+    volume: state.volume,
+    ambientVolumes: state.ambientVolumes,
+    isMuted: state.isMuted,
+  };
+  window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
+}
+
+function playCurrentMix(state: MusicState) {
+  const music = getMusicTrack(state.currentMusicId);
+  void AudioManager.playMusic(music.id, music.audioUrl, state.volume);
+
+  AMBIENT_LOOPS.forEach((loop) => {
+    const loopVolume = state.ambientVolumes[loop.id] ?? 0;
+    if (loopVolume > 0) {
+      void AudioManager.playAmbient(loop.id, loop.audioUrl, loopVolume);
+    } else {
+      AudioManager.stopAmbient(loop.id);
+    }
+  });
+  AudioManager.setMuted(state.isMuted);
+}
+
+const initialState = readPersistedState();
+
 export const useMusicStore = create<MusicState>((set, get) => ({
-  currentTrack: null,
+  currentTrack: getMusicTrack(initialState.currentMusicId),
+  currentSceneId: initialState.currentSceneId,
+  currentMusicId: initialState.currentMusicId,
   playing: false,
-  volume: 50,
+  volume: initialState.volume,
+  ambientVolumes: initialState.ambientVolumes,
+  isMuted: initialState.isMuted,
   customPlaylistUrl: null,
 
   selectTrack: (track) => {
-    const audio = getAudioElement();
-    if (!audio) return;
-
-    const wasPlaying = get().playing;
-
-    // Stop current play
-    audio.pause();
-
-    set({ currentTrack: track });
-
-    if (track.audioUrl) {
-      audio.src = track.audioUrl;
-      audio.volume = get().volume / 100;
-      
-      if (wasPlaying) {
-        audio.play().catch((err) => {
-          console.warn("[MusicStore] Auto-play failed on track change:", err);
-          set({ playing: false });
-        });
-      }
-    } else {
-      audio.src = "";
+    const music = getMusicTrack(track.id);
+    set({ currentTrack: music, currentMusicId: music.id });
+    persistState(get());
+    if (get().playing) {
+      void AudioManager.playMusic(music.id, music.audioUrl, get().volume);
     }
+  },
+
+  setMusic: (musicId) => {
+    const music = getMusicTrack(musicId);
+    set({ currentMusicId: music.id, currentTrack: music });
+    persistState(get());
+    if (get().playing) {
+      void AudioManager.playMusic(music.id, music.audioUrl, get().volume);
+    }
+  },
+
+  setCurrentSceneId: (sceneId) => {
+    const scene = getFocusScene(sceneId);
+    const music = getMusicTrack(scene.musicId);
+    set({
+      currentSceneId: scene.id,
+      currentMusicId: music.id,
+      currentTrack: music,
+      ambientVolumes: sceneDefaultAmbientVolumes(scene.id),
+    });
+    persistState(get());
+    if (get().playing) {
+      playCurrentMix(get());
+    }
+  },
+
+  setScene: (sceneId) => {
+    get().setCurrentSceneId(sceneId);
   },
 
   togglePlay: () => {
-    const audio = getAudioElement();
-    if (!audio) return;
-
-    const { playing, currentTrack } = get();
-
-    if (playing) {
-      audio.pause();
+    const state = get();
+    if (state.playing) {
+      AudioManager.stop();
       set({ playing: false });
-    } else {
-      if (currentTrack?.audioUrl) {
-        audio.volume = get().volume / 100;
-        audio.play()
-          .then(() => {
-            set({ playing: true });
-          })
-          .catch((err) => {
-            console.warn("[MusicStore] Playback blocked by browser policy:", err);
-          });
-      } else {
-        // If playing is toggled without track, do nothing
-        console.warn("[MusicStore] No track selected to play");
-      }
+      return;
     }
+
+    playCurrentMix(state);
+    set({ playing: true });
   },
 
   setVolume: (volume) => {
-    const audio = getAudioElement();
-    if (audio) {
-      audio.volume = volume / 100;
+    const safeVolume = Math.max(0, Math.min(100, volume));
+    set({ volume: safeVolume });
+    AudioManager.setMusicVolume(safeVolume);
+    persistState(get());
+  },
+
+  setAmbientVolume: (ambientId, volume) => {
+    const safeVolume = Math.max(0, Math.min(100, volume));
+    set((state) => ({
+      ambientVolumes: { ...state.ambientVolumes, [ambientId]: safeVolume },
+    }));
+    if (get().playing) {
+      const loop = getAmbientLoop(ambientId);
+      if (safeVolume > 0) {
+        void AudioManager.playAmbient(loop.id, loop.audioUrl, safeVolume);
+      } else {
+        AudioManager.stopAmbient(loop.id);
+      }
     }
-    // Also sync volume down to our central AudioManager singleton
-    AudioManager.setAmbientVolume(volume);
-    set({ volume });
+    persistState(get());
+  },
+
+  toggleAmbient: (ambientId) => {
+    const current = get().ambientVolumes[ambientId] ?? 0;
+    const next = current > 0 ? 0 : getAmbientLoop(ambientId).defaultVolume;
+    get().setAmbientVolume(ambientId, next);
+  },
+
+  setMuted: (muted) => {
+    set({ isMuted: muted });
+    AudioManager.setMuted(muted);
+    persistState(get());
   },
 
   setCustomPlaylist: (url) => {
@@ -101,11 +219,6 @@ export const useMusicStore = create<MusicState>((set, get) => ({
   },
 
   stop: () => {
-    const audio = getAudioElement();
-    if (audio) {
-      audio.pause();
-    }
-    // Sync stop call to AudioManager
     AudioManager.stop();
     set({ playing: false });
   },

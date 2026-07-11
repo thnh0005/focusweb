@@ -1,8 +1,10 @@
 "use client";
 
 import * as React from "react";
-import { AmbientScene } from "@/components/ambient/AmbientScene";
+import { AnimatedSceneBackground } from "@/components/focus-home/AnimatedSceneBackground";
+import { getFocusScene } from "@/constants/focus-scenes";
 import { cn } from "@/lib/utils/cn";
+import { useMusicStore } from "@/stores/music.store";
 
 export interface ImmersiveSessionShellProps {
   goalHeader: React.ReactNode;
@@ -27,19 +29,23 @@ export function ImmersiveSessionShell({
   diagnostics,
   className,
 }: ImmersiveSessionShellProps) {
+  const currentSceneId = useMusicStore((state) => state.currentSceneId);
+  const scene = getFocusScene(currentSceneId);
+
   return (
-    <AmbientScene
-      variant="forest"
-      intensity="medium"
+    <AnimatedSceneBackground
+      scene={scene}
       className={cn("min-h-[100dvh] overflow-hidden", className)}
     >
       <main className="relative flex min-h-[100dvh] flex-col px-4 py-5 sm:px-6 lg:px-10">
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-bg-void/70 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-40 bg-gradient-to-b from-bg-void/80 to-transparent" />
 
         <div className="relative z-10 flex min-h-[calc(100dvh-2.5rem)] flex-col">
-          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-28 pt-8 text-center sm:gap-8 sm:pb-32 md:pb-36">
+          <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-40 pt-8 text-center sm:gap-8 sm:pb-44 md:pb-48">
             {goalHeader}
-            <div className="w-full">{timer}</div>
+            <div className="w-full rounded-[2rem] border border-white/[0.08] bg-black/10 px-4 py-7 shadow-glass backdrop-blur-[2px] sm:px-8 sm:py-9">
+              {timer}
+            </div>
             <div className="flex flex-col items-center gap-5">
               {controls}
               {state}
@@ -63,6 +69,6 @@ export function ImmersiveSessionShell({
 
         {overlays}
       </main>
-    </AmbientScene>
+    </AnimatedSceneBackground>
   );
 }

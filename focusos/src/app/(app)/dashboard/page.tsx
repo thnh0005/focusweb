@@ -9,6 +9,7 @@ import { analyticsApi } from "@/services/analytics.api";
 import { sessionsApi } from "@/services/sessions.api";
 import { useAuthStore } from "@/stores/auth.store";
 import { useUserStore } from "@/stores/user.store";
+import { requestFocusFullscreen } from "@/lib/utils/fullscreen";
 import type { SessionMode } from "@/types/session.types";
 
 function FocusHomeSkeleton() {
@@ -70,6 +71,7 @@ export default function DashboardPage() {
   const isLoading = statsLoading && sessionsLoading;
 
   const handleStartFocus = React.useCallback(() => {
+    void requestFocusFullscreen();
     router.push("/session");
   }, [router]);
 

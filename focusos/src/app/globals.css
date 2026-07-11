@@ -399,6 +399,454 @@ a {
   background-size: 160px 160px;
 }
 
+.scene-effects {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow: hidden;
+  pointer-events: none;
+  opacity: 0.72;
+}
+
+.scene-effects::before,
+.scene-effects::after {
+  content: "";
+  position: absolute;
+  inset: -18%;
+  pointer-events: none;
+}
+
+.scene-effects--rain::before {
+  background-image:
+    linear-gradient(112deg, transparent 0 43%, rgb(210 226 235 / 0.32) 44% 45%, transparent 46% 100%),
+    linear-gradient(112deg, transparent 0 68%, rgb(210 226 235 / 0.2) 69% 70%, transparent 71% 100%);
+  background-size: 92px 160px, 138px 220px;
+  animation: focus-rain-fall 1.25s linear infinite;
+  filter: blur(0.2px);
+  opacity: 0.44;
+}
+
+.scene-effects--rain::after {
+  inset: 0;
+  background:
+    radial-gradient(circle at 22% 18%, rgb(180 206 218 / 0.12), transparent 24rem),
+    radial-gradient(circle at 70% 8%, rgb(120 160 180 / 0.1), transparent 26rem),
+    linear-gradient(180deg, rgb(180 210 220 / 0.06), transparent 42%);
+  animation: focus-window-breathe 7s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+
+.scene-effects--mist::before {
+  inset: -24% -18%;
+  background:
+    radial-gradient(ellipse at 22% 48%, rgb(215 236 232 / 0.16), transparent 34%),
+    radial-gradient(ellipse at 76% 34%, rgb(185 214 211 / 0.13), transparent 32%),
+    linear-gradient(90deg, transparent, rgb(220 242 238 / 0.08), transparent);
+  filter: blur(18px);
+  animation: focus-mist-drift 18s ease-in-out infinite alternate;
+}
+
+.scene-effects--night::before {
+  inset: 0;
+  background:
+    radial-gradient(circle at 38% 17%, rgb(235 242 255 / 0.22) 0 1px, transparent 2px),
+    radial-gradient(circle at 72% 24%, rgb(235 242 255 / 0.16) 0 1px, transparent 2px),
+    radial-gradient(circle at 82% 12%, rgb(235 242 255 / 0.2) 0 1px, transparent 2px),
+    radial-gradient(circle at 52% 34%, rgb(155 183 255 / 0.14), transparent 28rem);
+  background-size: 320px 220px, 280px 260px, 420px 240px, auto;
+  animation: focus-night-twinkle 6.5s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+
+.scene-effects--warm-dust::before,
+.scene-effects--calm::before {
+  inset: 0;
+  background:
+    radial-gradient(circle at 28% 36%, rgb(255 205 128 / 0.18), transparent 22rem),
+    radial-gradient(circle at 76% 58%, rgb(255 178 95 / 0.1), transparent 24rem);
+  animation: focus-window-breathe 8s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+
+.scene-effects--warm-dust::after {
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgb(255 230 174 / 0.32) 0 1px, transparent 1.5px),
+    radial-gradient(circle, rgb(255 210 140 / 0.2) 0 1px, transparent 1.5px);
+  background-size: 180px 180px, 260px 220px;
+  animation: focus-dust-float 16s linear infinite;
+  opacity: 0.32;
+}
+
+.animated-scene-root {
+  position: fixed;
+  inset: 0;
+  min-height: 100dvh;
+  overflow: hidden;
+  background: #05070d;
+  color: white;
+}
+
+.animated-scene-root--relative {
+  position: relative;
+  inset: auto;
+}
+
+.animated-scene-image {
+  position: absolute;
+  inset: -4%;
+  z-index: 1;
+  background-size: cover;
+  background-position: center;
+  transform: scale(1.06);
+  animation:
+    sceneKenBurns 36s ease-in-out infinite alternate,
+    sceneImageFade 500ms ease both;
+  filter: brightness(0.98) contrast(1.12) saturate(1.12);
+  will-change: transform, opacity;
+}
+
+.animated-scene-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgb(3 6 18 / 0.25), rgb(3 6 18 / 0.78)),
+    radial-gradient(circle at 50% 40%, rgb(255 255 255 / 0.06), transparent 38%);
+}
+
+.animated-scene-vignette {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  pointer-events: none;
+  background: radial-gradient(circle at center, transparent 35%, rgb(0 0 0 / 0.62) 100%);
+}
+
+.animated-scene-content {
+  position: relative;
+  z-index: 20;
+  min-height: 100dvh;
+}
+
+.scene-rain-layer {
+  position: absolute;
+  inset: -20%;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0.16;
+  background-image:
+    linear-gradient(112deg, transparent 0 48%, rgb(205 226 245 / 0.28) 49%, transparent 50% 100%),
+    linear-gradient(112deg, transparent 0 72%, rgb(205 226 245 / 0.18) 73%, transparent 74% 100%);
+  background-size: 118px 190px, 172px 260px;
+  animation: rainFall 1.55s linear infinite;
+  filter: blur(0.45px);
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+
+.scene-window-rain {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  opacity: 0.1;
+  background-image:
+    radial-gradient(circle at 18% 24%, rgb(235 246 255 / 0.2) 0 1px, transparent 2px),
+    radial-gradient(circle at 72% 38%, rgb(235 246 255 / 0.16) 0 1px, transparent 2px),
+    linear-gradient(100deg, transparent 0 46%, rgb(255 255 255 / 0.08) 47%, transparent 48% 100%);
+  background-size: 240px 310px, 320px 420px, 210px 360px;
+  animation: rainGlass 14s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+
+.scene-fire-glow {
+  position: absolute;
+  right: -8%;
+  bottom: -16%;
+  z-index: 5;
+  width: 55vw;
+  height: 55vw;
+  pointer-events: none;
+  background:
+    radial-gradient(circle, rgb(255 129 36 / 0.55) 0%, rgb(255 116 28 / 0.22) 28%, transparent 68%);
+  animation: firePulse 2.4s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+  will-change: transform, opacity;
+}
+
+.scene-ember-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  opacity: 0.38;
+  background-image:
+    radial-gradient(circle, rgb(255 185 98 / 0.95) 0 1px, transparent 2px),
+    radial-gradient(circle, rgb(255 96 40 / 0.8) 0 1px, transparent 2px);
+  background-size: 180px 220px, 260px 280px;
+  animation: emberFloat 12s linear infinite;
+  will-change: background-position;
+}
+
+.scene-mist-layer {
+  position: absolute;
+  inset: -10%;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.35;
+  background:
+    radial-gradient(ellipse at 20% 60%, rgb(220 235 255 / 0.22), transparent 48%),
+    radial-gradient(ellipse at 70% 50%, rgb(220 235 255 / 0.18), transparent 52%),
+    radial-gradient(ellipse at 50% 80%, rgb(255 255 255 / 0.14), transparent 48%);
+  filter: blur(22px);
+  animation: mistDrift 28s ease-in-out infinite alternate;
+  will-change: transform;
+}
+
+.scene-cloud-layer {
+  position: absolute;
+  inset: -15%;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0.28;
+  background:
+    radial-gradient(ellipse at 30% 40%, rgb(255 255 255 / 0.22), transparent 42%),
+    radial-gradient(ellipse at 70% 62%, rgb(255 255 255 / 0.16), transparent 45%);
+  filter: blur(30px);
+  animation: cloudDrift 40s linear infinite;
+  will-change: transform;
+}
+
+.scene-city-glow {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  opacity: 0.32;
+  background:
+    radial-gradient(circle at 45% 60%, rgb(80 150 255 / 0.22), transparent 35%),
+    radial-gradient(circle at 72% 52%, rgb(255 198 92 / 0.18), transparent 30%);
+  animation: cityPulse 4s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+  will-change: opacity, filter;
+}
+
+.scene-star-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 6;
+  pointer-events: none;
+  opacity: 0.3;
+  background-image:
+    radial-gradient(circle, rgb(255 255 255 / 0.8) 0 1px, transparent 1.5px);
+  background-size: 120px 120px;
+  animation: starTwinkle 3.8s ease-in-out infinite alternate;
+}
+
+.scene-train-parallax {
+  position: absolute;
+  inset: -8%;
+  z-index: 5;
+  pointer-events: none;
+  background:
+    linear-gradient(90deg, rgb(255 255 255 / 0) 0%, rgb(255 255 255 / 0.14) 48%, rgb(255 255 255 / 0) 100%);
+  transform: translateX(-30%);
+  animation: trainLightSweep 5.5s ease-in-out infinite;
+  mix-blend-mode: screen;
+  opacity: 0.28;
+  will-change: transform, opacity;
+}
+
+.scene-window-glare {
+  position: absolute;
+  inset: 0;
+  z-index: 7;
+  pointer-events: none;
+  background:
+    linear-gradient(115deg, transparent 0%, rgb(255 255 255 / 0.14) 45%, transparent 58%);
+  animation: windowGlare 8s ease-in-out infinite alternate;
+  opacity: 0.25;
+  will-change: transform, opacity;
+}
+
+.scene-firefly-layer {
+  position: absolute;
+  inset: 0;
+  z-index: 8;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    radial-gradient(circle, rgb(255 219 128 / 0.95) 0 1px, transparent 2px);
+  background-size: 170px 190px;
+  animation: fireflyFloat 10s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+
+.animated-scene {
+  --scene-motion-opacity: 0.58;
+}
+
+.animated-scene--low {
+  --scene-motion-opacity: 0.38;
+}
+
+.animated-scene--high {
+  --scene-motion-opacity: 0.76;
+}
+
+.animated-scene__image {
+  z-index: 0;
+  transform: translate3d(0, 0, 0) scale(1.035);
+  animation:
+    scene-pan 46s ease-in-out infinite alternate,
+    scene-fade 560ms ease both;
+  will-change: transform, opacity;
+}
+
+.animated-scene--train .animated-scene__image {
+  animation:
+    train-drift 42s ease-in-out infinite alternate,
+    scene-fade 560ms ease both;
+}
+
+.animated-scene__shade {
+  z-index: 1;
+  background:
+    linear-gradient(180deg, rgb(3 4 3 / 0.08), rgb(3 4 3 / 0.28)),
+    radial-gradient(circle at 50% 28%, transparent 0%, rgb(3 4 3 / 0.16) 72%, rgb(3 4 3 / 0.42) 100%);
+}
+
+.animated-scene__color-wash,
+.animated-scene__glow,
+.animated-scene__horizon,
+.animated-scene__bottom-fade,
+.animated-scene__vignette {
+  z-index: 2;
+  pointer-events: none;
+}
+
+.animated-scene__glow {
+  opacity: 0.68;
+  animation: glow-pulse 9s ease-in-out infinite alternate;
+  will-change: opacity, transform;
+}
+
+.animated-scene__motion-layer {
+  position: absolute;
+  inset: -18%;
+  z-index: 3;
+  pointer-events: none;
+  opacity: var(--scene-motion-opacity);
+  will-change: transform, opacity;
+}
+
+.animated-scene__motion-layer--rain {
+  background-image:
+    linear-gradient(112deg, transparent 0 43%, rgb(210 226 235 / 0.34) 44% 45%, transparent 46% 100%),
+    linear-gradient(112deg, transparent 0 68%, rgb(210 226 235 / 0.2) 69% 70%, transparent 71% 100%);
+  background-size: 92px 160px, 138px 220px;
+  animation: rain-fall 1.22s linear infinite;
+  filter: blur(0.2px);
+  opacity: 0.42;
+}
+
+.animated-scene__motion-layer--window-glow {
+  inset: 0;
+  background:
+    radial-gradient(circle at 22% 18%, rgb(180 206 218 / 0.13), transparent 24rem),
+    radial-gradient(circle at 70% 8%, rgb(120 160 180 / 0.1), transparent 26rem),
+    linear-gradient(180deg, rgb(180 210 220 / 0.06), transparent 42%);
+  animation: glow-pulse 8s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+
+.animated-scene__motion-layer--fireplace {
+  inset: 0;
+  background:
+    radial-gradient(circle at 24% 78%, rgb(255 156 68 / 0.24), transparent 24rem),
+    radial-gradient(circle at 75% 70%, rgb(255 205 118 / 0.12), transparent 28rem);
+  animation: glow-pulse 3.8s ease-in-out infinite alternate;
+  mix-blend-mode: screen;
+}
+
+.animated-scene__motion-layer--forest-mist,
+.animated-scene__motion-layer--mist,
+.animated-scene__motion-layer--mist-secondary {
+  background:
+    radial-gradient(ellipse at 22% 48%, rgb(215 236 232 / 0.16), transparent 34%),
+    radial-gradient(ellipse at 76% 34%, rgb(185 214 211 / 0.13), transparent 32%),
+    linear-gradient(90deg, transparent, rgb(220 242 238 / 0.08), transparent);
+  filter: blur(18px);
+  animation: mist-drift 22s ease-in-out infinite alternate;
+}
+
+.animated-scene__motion-layer--mist-secondary {
+  inset: -26%;
+  opacity: 0.32;
+  animation-direction: alternate-reverse;
+  animation-duration: 34s;
+}
+
+.animated-scene__motion-layer--dust {
+  inset: 0;
+  background-image:
+    radial-gradient(circle, rgb(255 230 174 / 0.28) 0 1px, transparent 1.5px),
+    radial-gradient(circle, rgb(255 210 140 / 0.18) 0 1px, transparent 1.5px);
+  background-size: 180px 180px, 260px 220px;
+  animation: particle-float 18s linear infinite;
+  opacity: 0.28;
+}
+
+.animated-scene--low .animated-scene__motion-layer--rain {
+  opacity: 0.28;
+}
+
+.animated-scene--high .animated-scene__motion-layer--rain {
+  opacity: 0.55;
+}
+
+.animated-scene--low .animated-scene__motion-layer--dust {
+  opacity: 0.18;
+}
+
+.animated-scene--high .animated-scene__motion-layer--dust {
+  opacity: 0.36;
+}
+
+.animated-scene__motion-layer--city {
+  inset: 0;
+  background:
+    radial-gradient(circle at 70% 30%, rgb(155 183 255 / 0.18), transparent 28rem),
+    radial-gradient(circle at 34% 72%, rgb(255 198 120 / 0.12), transparent 22rem),
+    linear-gradient(110deg, transparent 34%, rgb(255 255 255 / 0.08) 50%, transparent 66%);
+  background-size: auto, auto, 220% 100%;
+  animation:
+    glow-pulse 7s ease-in-out infinite alternate,
+    wave-shimmer 16s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
+.animated-scene__motion-layer--train-frame {
+  inset: 0;
+  border-inline: clamp(1.5rem, 5vw, 5rem) solid rgb(0 0 0 / 0.18);
+  background:
+    linear-gradient(90deg, rgb(0 0 0 / 0.3), transparent 16%, transparent 84%, rgb(0 0 0 / 0.3)),
+    radial-gradient(circle at 50% 12%, rgb(255 255 255 / 0.08), transparent 26rem);
+}
+
+.animated-scene__motion-layer--waves {
+  inset: 0;
+  background:
+    linear-gradient(110deg, transparent 30%, rgb(185 220 230 / 0.12) 44%, transparent 58%),
+    radial-gradient(ellipse at 50% 78%, rgb(145 205 220 / 0.12), transparent 34rem);
+  background-size: 220% 100%, auto;
+  animation: wave-shimmer 14s ease-in-out infinite;
+  mix-blend-mode: screen;
+}
+
 .ambient-glow {
   position: relative;
 }
@@ -669,6 +1117,148 @@ a {
   100% { background-position: 200% 0; }
 }
 
+@keyframes focus-rain-fall {
+  from { transform: translate3d(0, -9%, 0); }
+  to { transform: translate3d(-5%, 9%, 0); }
+}
+
+@keyframes focus-window-breathe {
+  from { opacity: 0.42; transform: scale(1); }
+  to { opacity: 0.72; transform: scale(1.025); }
+}
+
+@keyframes focus-mist-drift {
+  from { opacity: 0.36; transform: translate3d(-4%, 1%, 0) scale(1.02); }
+  to { opacity: 0.62; transform: translate3d(5%, -2%, 0) scale(1.08); }
+}
+
+@keyframes focus-night-twinkle {
+  from { opacity: 0.28; filter: brightness(0.9); }
+  to { opacity: 0.58; filter: brightness(1.2); }
+}
+
+@keyframes focus-dust-float {
+  from { transform: translate3d(0, 8%, 0); }
+  to { transform: translate3d(-4%, -8%, 0); }
+}
+
+@keyframes scene-pan {
+  from { transform: translate3d(-1.2%, -0.8%, 0) scale(1.035); }
+  to { transform: translate3d(1.2%, 0.8%, 0) scale(1.08); }
+}
+
+@keyframes scene-fade {
+  from { opacity: 0; filter: blur(10px) brightness(0.88) contrast(1.08) saturate(1.04); }
+  to { opacity: 1; filter: blur(0) brightness(0.98) contrast(1.12) saturate(1.14); }
+}
+
+@keyframes rain-fall {
+  from { transform: translate3d(0, -9%, 0); }
+  to { transform: translate3d(-5%, 9%, 0); }
+}
+
+@keyframes mist-drift {
+  from { opacity: 0.36; transform: translate3d(-4%, 1%, 0) scale(1.02); }
+  to { opacity: 0.62; transform: translate3d(5%, -2%, 0) scale(1.08); }
+}
+
+@keyframes glow-pulse {
+  from { opacity: 0.42; }
+  to { opacity: 0.72; }
+}
+
+@keyframes particle-float {
+  from { transform: translate3d(0, 8%, 0); }
+  to { transform: translate3d(-4%, -8%, 0); }
+}
+
+@keyframes train-drift {
+  from { transform: translate3d(-1.8%, -0.6%, 0) scale(1.045); }
+  to { transform: translate3d(2.6%, 0.6%, 0) scale(1.075); }
+}
+
+@keyframes wave-shimmer {
+  from { background-position: 220% 0, center; opacity: 0.3; }
+  to { background-position: -40% 0, center; opacity: 0.58; }
+}
+
+@keyframes sceneKenBurns {
+  0% { transform: scale(1.04) translate3d(-1.2%, -0.8%, 0); }
+  100% { transform: scale(1.1) translate3d(1.2%, 0.8%, 0); }
+}
+
+@keyframes sceneImageFade {
+  from { opacity: 0; filter: blur(10px) brightness(0.9) contrast(1.08) saturate(1.04); }
+  to { opacity: 1; filter: blur(0) brightness(0.98) contrast(1.12) saturate(1.12); }
+}
+
+@keyframes rainFall {
+  from { transform: translate3d(0, -8%, 0); }
+  to { transform: translate3d(-6%, 8%, 0); }
+}
+
+@keyframes rainGlass {
+  from { transform: translateY(-2%); }
+  to { transform: translateY(2%); }
+}
+
+@keyframes firePulse {
+  0% { opacity: 0.45; transform: scale(0.96); }
+  100% { opacity: 0.78; transform: scale(1.06); }
+}
+
+@keyframes emberFloat {
+  from { background-position: 0 120px, 80px 180px; }
+  to { background-position: 0 -260px, 120px -320px; }
+}
+
+@keyframes mistDrift {
+  0% { transform: translate3d(-4%, 1%, 0) scale(1); }
+  100% { transform: translate3d(4%, -1%, 0) scale(1.08); }
+}
+
+@keyframes cloudDrift {
+  from { transform: translate3d(-8%, 0, 0); }
+  to { transform: translate3d(8%, 0, 0); }
+}
+
+@keyframes cityPulse {
+  from { opacity: 0.2; filter: saturate(1); }
+  to { opacity: 0.45; filter: saturate(1.35); }
+}
+
+@keyframes starTwinkle {
+  from { opacity: 0.18; }
+  to { opacity: 0.42; }
+}
+
+@keyframes trainLightSweep {
+  0% { transform: translateX(-45%); opacity: 0; }
+  35% { opacity: 0.32; }
+  100% { transform: translateX(45%); opacity: 0; }
+}
+
+@keyframes windowGlare {
+  from { transform: translateX(-8%); opacity: 0.12; }
+  to { transform: translateX(8%); opacity: 0.32; }
+}
+
+@keyframes fireflyFloat {
+  from { transform: translate3d(-1%, 1%, 0); opacity: 0.22; }
+  to { transform: translate3d(1%, -1%, 0); opacity: 0.44; }
+}
+
+@media (max-width: 768px) {
+  .scene-rain-layer {
+    opacity: 0.1;
+  }
+
+  .scene-ember-layer,
+  .scene-firefly-layer {
+    opacity: 0.22;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
@@ -681,6 +1271,21 @@ a {
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
     scroll-behavior: auto !important;
+  }
+
+  .animated-scene-image,
+  .scene-rain-layer,
+  .scene-window-rain,
+  .scene-fire-glow,
+  .scene-ember-layer,
+  .scene-mist-layer,
+  .scene-cloud-layer,
+  .scene-city-glow,
+  .scene-star-layer,
+  .scene-train-parallax,
+  .scene-window-glare,
+  .scene-firefly-layer {
+    animation: none !important;
   }
 }
 
