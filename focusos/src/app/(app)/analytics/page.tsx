@@ -2,9 +2,10 @@
 
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Clock, Layers3, Sparkles, Target } from "lucide-react";
+import { BarChart3, Clock, Download, Layers3, RefreshCw, Sparkles, Target } from "lucide-react";
 import { analyticsApi } from "@/services/analytics.api";
 import { AmbientScene } from "@/components/ambient/AmbientScene";
+import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
@@ -13,10 +14,16 @@ import { DistractionSourcesChart } from "@/components/features/analytics/Distrac
 import { TimeHeatmap } from "@/components/features/analytics/TimeHeatmap";
 import { SessionBreakdownChart } from "@/components/features/analytics/SessionBreakdownChart";
 import { WeeklyProgressSnapshot } from "@/components/features/analytics/WeeklyProgressSnapshot";
-import type { DateRange } from "@/types/analytics.types";
+import type { DateRange, ReportExportFormat, ReportExportJob } from "@/types/analytics.types";
 
 export default function AnalyticsPage() {
   const [dateRange, setDateRange] = React.useState<DateRange>("7d");
+  const [exportFormat, setExportFormat] = React.useState<ReportExportFormat>("json");
+  const [isExporting, setIsExporting] = React.useState(false);
+  const [isRefreshingExport, setIsRefreshingExport] = React.useState(false);
+  const [exportJob, setExportJob] = React.useState<ReportExportJob | null>(null);
+  const [exportError, setExportError] = React.useState("");
+  const [exportMessage, setExportMessage] = React.useState("");
 
   const { data: stats, isLoading: statsLoading, isError: statsError } = useQuery({
     queryKey: ["dashboard-stats", dateRange],
@@ -82,6 +89,44 @@ export default function AnalyticsPage() {
       }
     : null;
 
+  const handleExport = async () => {
+    setIsExporting(true);
+    setExportError("");
+    setExportMessage("");
+
+    try {
+      const job = await analyticsApi.exportReport({
+        dateRange,
+        format: exportFormat,
+        range: dateRange === "30d" ? "30d" : "7d",
+      });
+      setExportJob(job);
+      handleReportDownload(job);
+      setExportMessage(statusMessage(job));
+    } catch (error) {
+      setExportError(getErrorMessage(error, "Could not create report export"));
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
+  const refreshExportJob = async () => {
+    if (!exportJob) return;
+    setIsRefreshingExport(true);
+    setExportError("");
+
+    try {
+      const job = await analyticsApi.getReportExportJob(exportJob.jobId);
+      setExportJob(job);
+      handleReportDownload(job);
+      setExportMessage(statusMessage(job));
+    } catch (error) {
+      setExportError(getErrorMessage(error, "Could not refresh export status"));
+    } finally {
+      setIsRefreshingExport(false);
+    }
+  };
+
   if (isLoading) {
     return (
       <AmbientScene variant="minimal" intensity="low" className="min-h-[60dvh] rounded-[2rem]">
@@ -114,6 +159,9 @@ export default function AnalyticsPage() {
             onValueChange={(value) => {
               if (value === "7d" || value === "30d" || value === "all") {
                 setDateRange(value);
+                if (value === "all" && exportFormat === "pdf") {
+                  setExportFormat("json");
+                }
               }
             }}
             className="w-full sm:w-auto"
@@ -133,6 +181,19 @@ export default function AnalyticsPage() {
             </p>
           </Card>
         )}
+
+        <ReportExportPanel
+          dateRange={dateRange}
+          format={exportFormat}
+          onFormatChange={setExportFormat}
+          onExport={handleExport}
+          onRefresh={refreshExportJob}
+          isExporting={isExporting}
+          isRefreshing={isRefreshingExport}
+          job={exportJob}
+          error={exportError}
+          message={exportMessage}
+        />
 
         {totalSessions === 0 && (
           <Card className="rounded-3xl p-6">
@@ -216,4 +277,178 @@ function QuietStat({
       </div>
     </Card>
   );
+}
+
+function ReportExportPanel({
+  dateRange,
+  format,
+  onFormatChange,
+  onExport,
+  onRefresh,
+  isExporting,
+  isRefreshing,
+  job,
+  error,
+  message,
+}: {
+  dateRange: DateRange;
+  format: ReportExportFormat;
+  onFormatChange: (format: ReportExportFormat) => void;
+  onExport: () => void;
+  onRefresh: () => void;
+  isExporting: boolean;
+  isRefreshing: boolean;
+  job: ReportExportJob | null;
+  error: string;
+  message: string;
+}) {
+  const isPending = job?.status === "pending" || job?.status === "processing";
+
+  return (
+    <Card className="rounded-3xl p-5">
+      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <p className="text-sm text-text-muted">Report export</p>
+          <h2 className="mt-2 text-xl font-light text-text-primary">Export focus report</h2>
+          <p className="mt-2 max-w-[42rem] text-sm font-light leading-relaxed text-text-secondary">
+            Export the current {dateRange} analytics range. JSON and HTML are returned immediately when ready; PDF may be generated as a background job.
+          </p>
+        </div>
+
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <label className="sr-only" htmlFor="report-export-format">
+            Report format
+          </label>
+          <select
+            id="report-export-format"
+            value={format}
+            onChange={(event) => onFormatChange(event.target.value as ReportExportFormat)}
+            disabled={isExporting}
+            className="h-11 rounded-full border border-white/10 bg-white/[0.045] px-4 text-sm text-text-primary outline-none transition-colors focus:border-primary/45 focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+          >
+            <option value="json">JSON</option>
+            <option value="html">HTML</option>
+            <option value="pdf" disabled={dateRange === "all"}>PDF</option>
+          </select>
+          <Button
+            type="button"
+            variant="session"
+            onClick={onExport}
+            disabled={isExporting}
+            className="rounded-full px-5"
+          >
+            <Download className="mr-2 h-4 w-4 stroke-[1.6]" aria-hidden="true" />
+            {isExporting ? "Exporting" : "Export report"}
+          </Button>
+          {isPending && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onRefresh}
+              disabled={isRefreshing}
+              className="rounded-full px-5"
+            >
+              <RefreshCw className="mr-2 h-4 w-4 stroke-[1.6]" aria-hidden="true" />
+              {isRefreshing ? "Checking" : "Check status"}
+            </Button>
+          )}
+        </div>
+      </div>
+
+      {job && (
+        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+          <div className="flex flex-col gap-2 text-sm text-text-secondary sm:flex-row sm:items-center sm:justify-between">
+            <span>Job {job.jobId}</span>
+            <span className="font-mono text-xs uppercase tracking-[0.16em] text-text-muted">
+              {job.status} · {job.progress}%
+            </span>
+          </div>
+          {job.errorMessage && (
+            <p className="mt-2 text-sm text-urgency-coral">{job.errorMessage}</p>
+          )}
+        </div>
+      )}
+
+      {message && (
+        <p className="mt-3 text-sm font-light text-primary">{message}</p>
+      )}
+      {error && (
+        <p role="alert" className="mt-3 text-sm font-light text-urgency-coral">
+          {error}
+        </p>
+      )}
+    </Card>
+  );
+}
+
+function handleReportDownload(job: ReportExportJob) {
+  if (typeof window === "undefined") return;
+
+  if (job.downloadUrl) {
+    window.open(resolveDownloadUrl(job.downloadUrl), "_blank", "noopener,noreferrer");
+    return;
+  }
+
+  if (job.status !== "ready" && job.status !== "completed") return;
+  if (job.format === "json") {
+    downloadBlob(
+      JSON.stringify(job.payload, null, 2),
+      `focusos-report-${job.dateRange || "range"}.json`,
+      "application/json"
+    );
+    return;
+  }
+
+  if (job.format === "html") {
+    const html = typeof job.payload.html === "string"
+      ? job.payload.html
+      : `<pre>${escapeHtml(JSON.stringify(job.payload, null, 2))}</pre>`;
+    downloadBlob(
+      html,
+      `focusos-report-${job.dateRange || "range"}.html`,
+      "text/html"
+    );
+  }
+}
+
+function downloadBlob(content: string, filename: string, type: string) {
+  const blob = new Blob([content], { type });
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  URL.revokeObjectURL(url);
+}
+
+function statusMessage(job: ReportExportJob) {
+  if (job.status === "pending" || job.status === "processing") {
+    return "Report export has been queued. Use Check status to refresh the job.";
+  }
+  if (job.status === "failed") {
+    return "";
+  }
+  if (job.status === "expired") {
+    return "This export has expired. Create a new export to download it again.";
+  }
+  return "Report export is ready.";
+}
+
+function escapeHtml(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function resolveDownloadUrl(url: string) {
+  if (/^https?:\/\//i.test(url)) return url;
+  return new URL(url, process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000").toString();
 }

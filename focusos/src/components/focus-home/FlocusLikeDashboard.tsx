@@ -2,48 +2,45 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { Settings, UserRound } from "lucide-react";
+import { UserRound } from "lucide-react";
 import { AmbientWorkspaceBackground } from "./AmbientWorkspaceBackground";
 import { CenterFocusClock } from "./CenterFocusClock";
 import { CompactSoundscapeWidget } from "./CompactSoundscapeWidget";
 import { FloatingFocusDock, type FlocusDockPanel } from "./FloatingFocusDock";
-import { PriorityFocusTask } from "./PriorityFocusTask";
 import { StatsBottomSheet } from "./StatsBottomSheet";
 import type { DashboardStats } from "@/types/analytics.types";
 import type { Session, SessionMode } from "@/types/session.types";
 
 export interface FlocusLikeDashboardProps {
   displayName: string;
-  goal: string;
-  lastGoal?: string | null;
   durationMinutes: number;
   mode: SessionMode;
   stats?: DashboardStats | null;
   statsError?: boolean;
   streakCount: number;
   recentSessions: Session[];
-  onGoalChange: (value: string) => void;
   onDurationChange: (minutes: number) => void;
   onModeChange: (mode: SessionMode) => void;
   onStart: () => void;
   onRetryStats?: () => void;
+  isStarting?: boolean;
+  startError?: string | null;
 }
 
 export function FlocusLikeDashboard({
   displayName,
-  goal,
-  lastGoal,
   durationMinutes,
   mode,
   stats,
   statsError = false,
   streakCount,
   recentSessions,
-  onGoalChange,
   onDurationChange,
   onModeChange,
   onStart,
   onRetryStats,
+  isStarting = false,
+  startError,
 }: FlocusLikeDashboardProps) {
   const [activePanel, setActivePanel] = React.useState<FlocusDockPanel>(null);
 
@@ -64,13 +61,6 @@ export function FlocusLikeDashboard({
           </button>
         )}
         <Link
-          href="/settings"
-          className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/15 text-text-secondary backdrop-blur-xl transition-colors hover:bg-white/[0.08] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label="Open settings"
-        >
-          <Settings className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
-        </Link>
-        <Link
           href="/settings/profile"
           className="flex h-10 w-10 items-center justify-center rounded-full border border-white/10 bg-black/15 text-text-secondary backdrop-blur-xl transition-colors hover:bg-white/[0.08] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-label="Open profile"
@@ -87,8 +77,9 @@ export function FlocusLikeDashboard({
           onStart={onStart}
           onDurationChange={onDurationChange}
           onModeChange={onModeChange}
+          isStarting={isStarting}
+          startError={startError}
         />
-        <PriorityFocusTask goal={goal} lastGoal={lastGoal} onGoalChange={onGoalChange} />
       </main>
 
       <CompactSoundscapeWidget
@@ -102,7 +93,7 @@ export function FlocusLikeDashboard({
         isOpen={activePanel === "stats"}
         onClose={() => setActivePanel(null)}
       />
-      <FloatingFocusDock activePanel={activePanel} onPanelChange={setActivePanel} onFocus={onStart} />
+      <FloatingFocusDock activePanel={activePanel} onPanelChange={setActivePanel} />
     </AmbientWorkspaceBackground>
   );
 }

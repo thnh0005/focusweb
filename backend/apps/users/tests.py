@@ -1,7 +1,9 @@
 import json
+import re
 from datetime import timedelta
 from unittest.mock import patch
 
+from django.core import mail
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
@@ -186,6 +188,60 @@ class AuthApiTests(APITestCase):
         self.assertEqual(blocked.status_code, status.HTTP_403_FORBIDDEN)
         self.assertEqual(allowed.status_code, status.HTTP_200_OK)
         self.assertEqual(allowed.data["displayName"], "Allowed")
+
+    def test_password_reset_request_and_confirm_match_frontend_contract(self):
+        user = User.objects.create_user(email="reset@example.com", password=PASSWORD)
+        new_password = "C9!ResetPass$"
+
+        request_reset = self.client.post(
+            "/api/auth/password-reset/",
+            {"email": "reset@example.com"},
+            format="json",
+        )
+        missing_user = self.client.post(
+            "/api/auth/password-reset/",
+            {"email": "missing@example.com"},
+            format="json",
+        )
+
+        self.assertEqual(request_reset.status_code, status.HTTP_200_OK)
+        self.assertEqual(missing_user.status_code, status.HTTP_200_OK)
+        self.assertEqual(len(mail.outbox), 1)
+        token = re.search(r"token=(\S+)", mail.outbox[0].body).group(1)
+
+        confirm = self.client.post(
+            "/api/auth/password-reset/confirm/",
+            {
+                "token": token,
+                "new_password": new_password,
+                "new_password_confirm": new_password,
+            },
+            format="json",
+        )
+        reuse = self.client.post(
+            "/api/auth/password-reset/confirm/",
+            {
+                "token": token,
+                "new_password": "D9!AnotherPass$",
+                "new_password_confirm": "D9!AnotherPass$",
+            },
+            format="json",
+        )
+        invalid_reuse = self.client.post(
+            "/api/auth/password-reset/confirm/",
+            {
+                "token": "invalid",
+                "new_password": new_password,
+                "new_password_confirm": new_password,
+            },
+            format="json",
+        )
+
+        self.assertEqual(confirm.status_code, status.HTTP_200_OK)
+        self.assertEqual(reuse.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(invalid_reuse.status_code, status.HTTP_400_BAD_REQUEST)
+        user.refresh_from_db()
+        self.assertTrue(user.check_password(new_password))
 
 
 class UserApiTests(APITestCase):
@@ -384,6 +440,9 @@ class UserApiTests(APITestCase):
         self.assertEqual(str(export.data["jobId"]), str(export_job.id))
         self.assertEqual(export_job.status, AccountDataExportJob.Status.PENDING)
         export_delay.assert_called_once_with(str(export_job.id))
+        export_status = self.client.get(f"/api/account/export-data/{export_job.id}/")
+        self.assertEqual(export_status.status_code, status.HTTP_200_OK)
+        self.assertEqual(export_status.data["jobId"], str(export_job.id))
 
         with patch("apps.users.views.delete_account_data_task.delay") as delete_delay:
             with self.captureOnCommitCallbacks(execute=True):
@@ -399,6 +458,21 @@ class UserApiTests(APITestCase):
         self.assertEqual(str(delete.data["jobId"]), str(deletion_job.id))
         self.assertTrue(deletion_job.confirmed)
         delete_delay.assert_called_once_with(str(deletion_job.id))
+        self.client.force_authenticate(self.user)
+        delete_status = self.client.get(f"/api/account/delete/{deletion_job.id}/")
+        self.assertEqual(delete_status.status_code, status.HTTP_200_OK)
+        self.assertEqual(delete_status.data["jobId"], str(deletion_job.id))
+
+    def test_account_job_status_is_owner_scoped(self):
+        other_user = User.objects.create_user(email="job-other@example.com", password=PASSWORD)
+        export_job = AccountDataExportJob.objects.create(user=other_user)
+        delete_job = AccountDeletionJob.objects.create(user=other_user)
+
+        export_status = self.client.get(f"/api/account/export-data/{export_job.id}/")
+        delete_status = self.client.get(f"/api/account/delete/{delete_job.id}/")
+
+        self.assertEqual(export_status.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(delete_status.status_code, status.HTTP_404_NOT_FOUND)
 
 
 class MusicPreferenceDay24Tests(APITestCase):

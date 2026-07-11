@@ -132,12 +132,7 @@ class BehaviorRuleEvaluator:
             for signal in signals
             for reason_code in signal.get("reason_codes", [])
         ]
-        mode_value = str(mode or "").strip().lower()
-        should_warn = bool(
-            mode_value == FocusSession.Mode.NORMAL
-            and blacklist_match
-            and blacklist_signal["risk_level"] != RISK_LOW
-        )
+        should_warn = bool(blacklist_match and blacklist_signal["risk_level"] != RISK_LOW)
 
         return {
             "risk_level": overall_risk,

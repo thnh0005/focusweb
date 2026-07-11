@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "FocusOS Browser Bridge",
+  "description": "Tracks active-tab context during FocusOS sessions and surfaces blacklist warnings.",
+  "version": "0.1.0",
+  "action": {
+    "default_title": "FocusOS",
+    "default_popup": "index.html"
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"],
+      "js": ["content.js"],
+      "run_at": "document_start"
+    }
+  ],
+  "permissions": ["tabs", "activeTab", "storage", "alarms", "idle"],
+  "host_permissions": [
+    "http://localhost:3000/*",
+    "http://127.0.0.1:3000/*",
+    "http://localhost:8000/*",
+    "http://127.0.0.1:8000/*"
+  ],
+  "externally_connectable": {
+    "matches": ["http://localhost:3000/*", "http://127.0.0.1:3000/*"]
+  }
+}

@@ -7,9 +7,10 @@ from django.db import connection
 from django.test import TestCase
 from django.test.utils import CaptureQueriesContext
 
+from apps.ai.models import AIAnalysisResult
 from apps.ai.services.ai_client import AIClient
 from apps.sessions.models import FocusSession
-from apps.tracking.models import WarningEvent
+from apps.tracking.models import BrowserEvent, WarningEvent
 
 from .models import FocusScore, ScoreComponent
 from .services import (
@@ -138,6 +139,107 @@ class ScoreCalculatorTests(TestCase):
         self.assertEqual(first.components.count(), 4)
         self.assertEqual(session.focus_score, 100)
         self.assertEqual(session.focus_state, FocusScore.State.DEEP_FOCUS)
+
+    def test_final_score_without_tracking_uses_duration_fallback(self):
+        user = User.objects.create_user(email="fallback@example.com", password=PASSWORD)
+        session = FocusSession.objects.create(
+            user=user,
+            mode=FocusSession.Mode.NORMAL,
+            status=FocusSession.Status.COMPLETED,
+            target_duration_seconds=100,
+            actual_duration_seconds=50,
+        )
+
+        result = self.calculator.calculate_final_score(session)
+
+        self.assertEqual(result["metadata"]["source"], "duration_fallback")
+        self.assertFalse(result["metadata"]["hasTrackingSignals"])
+        self.assertEqual(
+            result["components"][ScoreComponent.Key.FOCUS_CONTINUITY],
+            50,
+        )
+
+    def test_final_score_uses_browser_events_for_light_distraction(self):
+        user = User.objects.create_user(email="browser-score@example.com", password=PASSWORD)
+        session = FocusSession.objects.create(
+            user=user,
+            mode=FocusSession.Mode.NORMAL,
+            status=FocusSession.Status.COMPLETED,
+            target_duration_seconds=300,
+            actual_duration_seconds=300,
+        )
+        for _ in range(3):
+            BrowserEvent.objects.create(
+                session_id=session.id,
+                event_type="url_change",
+                domain="docs.example.com",
+                active_seconds=60,
+                idle_seconds=0,
+                tab_switch_count=1,
+            )
+
+        result = self.calculator.calculate_final_score(session)
+
+        self.assertEqual(result["metadata"]["source"], "tracking_signals")
+        self.assertTrue(result["metadata"]["hasBrowserEvents"])
+        self.assertLess(result["components"][ScoreComponent.Key.TAB_STABILITY], 100)
+        self.assertLess(result["total"], 100)
+
+    def test_final_score_many_warnings_reduce_score_clearly(self):
+        user = User.objects.create_user(email="warning-score@example.com", password=PASSWORD)
+        session = FocusSession.objects.create(
+            user=user,
+            mode=FocusSession.Mode.NORMAL,
+            status=FocusSession.Status.COMPLETED,
+            target_duration_seconds=300,
+            actual_duration_seconds=300,
+        )
+        for _ in range(3):
+            WarningEvent.objects.create(
+                session_id=session.id,
+                warning_level=3,
+                warning_type=WarningEvent.WarningType.DEEP_WORK_AI,
+                decision_state="DISTRACTED",
+                decision_source="HYBRID",
+                decision_score=90,
+                domain="video.example.com",
+            )
+
+        result = self.calculator.calculate_final_score(session)
+
+        self.assertEqual(result["metadata"]["source"], "tracking_signals")
+        self.assertTrue(result["metadata"]["hasWarningEvents"])
+        self.assertLess(
+            result["components"][ScoreComponent.Key.DISTRACTION_PENALTY],
+            60,
+        )
+        self.assertLess(result["total"], 95)
+
+    def test_final_score_uses_semantic_relevance_when_available(self):
+        user = User.objects.create_user(email="semantic-score@example.com", password=PASSWORD)
+        session = FocusSession.objects.create(
+            user=user,
+            mode=FocusSession.Mode.DEEP_WORK,
+            status=FocusSession.Status.COMPLETED,
+            target_duration_seconds=300,
+            actual_duration_seconds=300,
+        )
+        AIAnalysisResult.objects.create(
+            session_id=session.id,
+            provider="test",
+            model_name="semantic-test",
+            relevance_score=35,
+            is_relevant=False,
+            focus_state=AIAnalysisResult.FocusState.DISTRACTED,
+        )
+
+        result = self.calculator.calculate_final_score(session)
+
+        self.assertTrue(result["metadata"]["hasSemanticAi"])
+        self.assertEqual(
+            result["components"][ScoreComponent.Key.CONTENT_RELEVANCE],
+            35,
+        )
 
     def test_database_rejects_out_of_range_scores_and_components(self):
         user = User.objects.create_user(email="constraints@example.com", password=PASSWORD)

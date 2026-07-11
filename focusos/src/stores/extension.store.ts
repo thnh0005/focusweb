@@ -37,7 +37,11 @@ export const useExtensionStore = create<ExtensionState>((set) => ({
   },
 
   setConnected: (connected) => {
-    set({ connected });
+    set({
+      connected,
+      installed: connected,
+      lastHeartbeat: connected ? new Date() : null,
+    });
   },
 
   setSyncStatus: (status) => {

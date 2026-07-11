@@ -11,6 +11,7 @@ import type {
   BlacklistPayload,
 } from "@/types/extension.types";
 import type { SessionMode } from "@/types/session.types";
+import { API_BASE_URL } from "@/services/client";
 
 // Extension ID would be set during build from environment
 const EXTENSION_ID = process.env.NEXT_PUBLIC_EXTENSION_ID ?? "";
@@ -35,7 +36,9 @@ export async function sendExtensionMessage<T = unknown>(
   payload?: ExtensionMessage["payload"]
 ): Promise<T | null> {
   if (!isExtensionAvailable() || !EXTENSION_ID) {
-    console.warn("[ExtensionBridge] Extension not available or ID not configured");
+    if (process.env.NODE_ENV !== "production") {
+      console.warn("[ExtensionBridge] Extension not available or ID not configured");
+    }
     return null;
   }
 
@@ -54,7 +57,9 @@ export async function sendExtensionMessage<T = unknown>(
         }
       );
     } catch (err) {
-      console.warn("[ExtensionBridge] sendMessage failed:", err);
+      if (process.env.NODE_ENV !== "production") {
+        console.warn("[ExtensionBridge] sendMessage failed:", err);
+      }
       resolve(null);
     }
   });
@@ -75,13 +80,17 @@ export async function notifySessionStart(
   sessionId: string,
   goal: string | undefined,
   mode: SessionMode,
-  blacklist: BlacklistPayload[]
+  blacklist: BlacklistPayload[],
+  plannedDurationMinutes?: number
 ): Promise<void> {
   const payload: ExtensionSessionStartPayload = {
     sessionId,
     goal,
     mode,
     blacklist,
+    backendApiUrl: API_BASE_URL,
+    appUrl: typeof window !== "undefined" ? window.location.origin : undefined,
+    plannedDurationMinutes,
   };
   await sendExtensionMessage("SESSION_START", payload);
 }
@@ -124,6 +133,8 @@ export function listenForExtensionEvents(
   handler: (event: ExtensionEvent) => void
 ): () => void {
   function messageHandler(event: MessageEvent) {
+    if (typeof window === "undefined") return;
+
     // Validate origin and source
     if (event.source !== window) return;
 

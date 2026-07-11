@@ -22,7 +22,7 @@ def debug_ai_worker_task():
     return {
         "status": "ok",
         "worker": "ai",
-        "provider": "mock",
+        "provider": "celery_debug",
     }
 
 

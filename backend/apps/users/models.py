@@ -275,6 +275,8 @@ class AccountDeletionJob(models.Model):
     scheduled_for = models.DateTimeField(null=True, blank=True)
     started_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    status_token_hash = models.CharField(max_length=64, blank=True)
+    status_token_expires_at = models.DateTimeField(null=True, blank=True)
     error_code = models.CharField(max_length=64, blank=True)
     error_message = models.CharField(max_length=255, blank=True)
     deletion_version = models.CharField(max_length=16, default="day26-v1")
@@ -287,6 +289,7 @@ class AccountDeletionJob(models.Model):
         indexes = [
             models.Index(fields=["user", "status"]),
             models.Index(fields=["status", "scheduled_for"]),
+            models.Index(fields=["status_token_expires_at"]),
         ]
         constraints = [
             models.UniqueConstraint(

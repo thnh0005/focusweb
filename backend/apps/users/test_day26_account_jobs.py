@@ -12,7 +12,7 @@ from django.core.files.base import ContentFile
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from apps.ai.models import (
     AIAnalysisResult,
@@ -24,9 +24,15 @@ from apps.ai.models import (
 from apps.analytics.models import ReportExportJob
 from apps.notifications.models import Notification
 from apps.sessions.models import FocusSession
-from apps.tracking.models import BrowserEvent, WarningEvent
+from apps.tracking.models import BrowserEvent, EventBatch, WarningCycle, WarningEvent
 
-from .account_deletion import AccountDeletionError, AccountDeletionService
+from .account_deletion import (
+    AccountDeletionError,
+    AccountDeletionService,
+    cleanup_expired_account_deletion_receipts,
+    hash_deletion_status_token,
+    rotate_deletion_status_token,
+)
 from .account_export import (
     AccountDataExportService,
     cleanup_expired_account_exports,
@@ -122,8 +128,22 @@ class AccountDataExportServiceTests(Day26Base):
             domain="docs.example.com",
             page_title="Docs",
         )
+        cycle = WarningCycle.objects.create(
+            session_id=session.id,
+            source_event=event,
+            idempotency_key=f"test-cycle:{session.id}",
+            mode=session.mode,
+            status=WarningCycle.Status.WARNING_1_SENT,
+            current_level=1,
+            decision_state="DISTRACTED",
+            decision_source="RULE_ONLY",
+            decision_score=80,
+            reason_codes=["BLACKLIST_HIGH"],
+            domain="docs.example.com",
+        )
         WarningEvent.objects.create(
             session_id=session.id,
+            warning_cycle=cycle,
             browser_event=event,
             warning_level=1,
             warning_type=WarningEvent.WarningType.MANUAL,
@@ -156,6 +176,9 @@ class AccountDataExportServiceTests(Day26Base):
         sessions = json.loads(archive.read("focusos-account-export/sessions.json"))
         documents = json.loads(archive.read("focusos-account-export/documents.json"))
         flashcards = json.loads(archive.read("focusos-account-export/flashcards.json"))
+        warning_cycles = json.loads(
+            archive.read("focusos-account-export/warning_cycles.json")
+        )
         ai = json.loads(archive.read("focusos-account-export/ai_insights.json"))
         payload = "\n".join(archive.read(name).decode("utf-8") for name in names)
 
@@ -167,6 +190,9 @@ class AccountDataExportServiceTests(Day26Base):
         self.assertEqual(sessions[0]["goal"], "Export du lieu tieng Viet")
         self.assertEqual(documents[0]["id"], str(document.id))
         self.assertEqual(flashcards["cards"][0]["answer"], "Cau tra loi")
+        self.assertEqual(warning_cycles[0]["id"], str(cycle.id))
+        self.assertEqual(warning_cycles[0]["session_id"], str(session.id))
+        self.assertEqual(warning_cycles[0]["domain"], "docs.example.com")
         self.assertEqual(ai["analysis_results"][0]["provider"], "test")
         self.assertNotIn("password", payload.lower())
         self.assertNotIn(self.user.password, payload)
@@ -253,10 +279,76 @@ class AccountDeletionServiceTests(Day26Base):
             event_type="url_change",
             url="https://delete.example.com",
         )
+        event = BrowserEvent.objects.create(
+            session_id=session.id,
+            event_type="tab_switch",
+            url="https://warn.example.com",
+            domain="warn.example.com",
+        )
+        EventBatch.objects.create(session_id=session.id, batch_size=2)
+        cycle = WarningCycle.objects.create(
+            session_id=session.id,
+            source_event=event,
+            idempotency_key=f"delete-cycle:{session.id}",
+            mode=session.mode,
+            status=WarningCycle.Status.WARNING_1_SENT,
+            current_level=1,
+            decision_state="DISTRACTED",
+            decision_source="RULE_ONLY",
+            decision_score=75,
+            reason_codes=["BLACKLIST_MEDIUM"],
+            domain="warn.example.com",
+        )
+        WarningEvent.objects.create(
+            session_id=session.id,
+            warning_cycle=cycle,
+            browser_event=event,
+            warning_level=1,
+            warning_type=WarningEvent.WarningType.NORMAL_BLACKLIST,
+            decision_state="DISTRACTED",
+            decision_source="RULE_ONLY",
+            decision_score=75,
+            domain="warn.example.com",
+        )
+        AIAnalysisResult.objects.create(
+            session_id=session.id,
+            browser_event_id=event.id,
+            provider="test",
+            model_name="test-model",
+        )
         BrowserEvent.objects.create(
             session_id=other_session.id,
             event_type="url_change",
             url="https://other.example.com",
+        )
+        other_event = BrowserEvent.objects.create(
+            session_id=other_session.id,
+            event_type="tab_switch",
+            url="https://other-warn.example.com",
+        )
+        EventBatch.objects.create(session_id=other_session.id, batch_size=1)
+        other_cycle = WarningCycle.objects.create(
+            session_id=other_session.id,
+            source_event=other_event,
+            idempotency_key=f"delete-cycle:{other_session.id}",
+            mode=other_session.mode,
+            status=WarningCycle.Status.WARNING_1_SENT,
+            current_level=1,
+            domain="other-warn.example.com",
+        )
+        WarningEvent.objects.create(
+            session_id=other_session.id,
+            warning_cycle=other_cycle,
+            browser_event=other_event,
+            warning_level=1,
+            warning_type=WarningEvent.WarningType.NORMAL_BLACKLIST,
+            domain="other-warn.example.com",
+        )
+        AIAnalysisResult.objects.create(
+            session_id=other_session.id,
+            browser_event_id=other_event.id,
+            provider="other",
+            model_name="other-model",
         )
         self.create_auth_session(self.user)
         self.create_auth_session(self.other_user)
@@ -280,7 +372,20 @@ class AccountDeletionServiceTests(Day26Base):
         self.assertFalse(FocusSession.objects.filter(pk=session.pk).exists())
         self.assertTrue(FocusSession.objects.filter(pk=other_session.pk).exists())
         self.assertFalse(BrowserEvent.objects.filter(session_id=session.id).exists())
+        self.assertFalse(EventBatch.objects.filter(session_id=session.id).exists())
+        self.assertFalse(WarningEvent.objects.filter(session_id=session.id).exists())
+        self.assertFalse(WarningCycle.objects.filter(session_id=session.id).exists())
+        self.assertFalse(AIAnalysisResult.objects.filter(session_id=session.id).exists())
         self.assertTrue(BrowserEvent.objects.filter(session_id=other_session.id).exists())
+        self.assertTrue(EventBatch.objects.filter(session_id=other_session.id).exists())
+        self.assertTrue(WarningEvent.objects.filter(session_id=other_session.id).exists())
+        self.assertTrue(WarningCycle.objects.filter(session_id=other_session.id).exists())
+        self.assertTrue(AIAnalysisResult.objects.filter(session_id=other_session.id).exists())
+        self.assertGreaterEqual(result.audit_summary["deleted_counts"]["browser_events"], 2)
+        self.assertEqual(result.audit_summary["deleted_counts"]["event_batches"], 1)
+        self.assertEqual(result.audit_summary["deleted_counts"]["warning_events"], 1)
+        self.assertEqual(result.audit_summary["deleted_counts"]["warning_cycles"], 1)
+        self.assertEqual(result.audit_summary["deleted_counts"]["ai_analysis_results"], 1)
         self.assertEqual(Session.objects.count(), 1)
         self.assertNotIn("day26@example.com", json.dumps(result.audit_summary))
         self.assertFalse(export_job.file.storage.exists(export_name))
@@ -300,8 +405,15 @@ class AccountDeletionEndpointTests(Day26Base):
         job = AccountDeletionJob.objects.get()
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(response.data["jobId"], str(job.id))
+        self.assertIn("statusToken", response.data)
+        self.assertIn("statusExpiresAt", response.data)
         self.assertTrue(job.confirmed)
         self.assertEqual(job.user, self.user)
+        self.assertEqual(
+            job.status_token_hash,
+            hash_deletion_status_token(response.data["statusToken"]),
+        )
+        self.assertNotEqual(job.status_token_hash, response.data["statusToken"])
         delay.assert_called_once_with(str(job.id))
 
     def test_delete_endpoint_rejects_wrong_password_without_job(self):
@@ -313,3 +425,224 @@ class AccountDeletionEndpointTests(Day26Base):
 
         self.assertEqual(response.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertFalse(AccountDeletionJob.objects.exists())
+
+    def test_authenticated_owner_and_receipt_can_poll_before_deletion(self):
+        with patch("apps.users.views.delete_account_data_task.delay"):
+            with self.captureOnCommitCallbacks(execute=True):
+                delete = self.client.delete(
+                    "/api/account/delete/",
+                    {"currentPassword": PASSWORD},
+                    format="json",
+                )
+        job = AccountDeletionJob.objects.get()
+        token = delete.data["statusToken"]
+
+        self.client.force_authenticate(self.user)
+        owner_detail = self.client.get(f"/api/account/delete/{job.id}/")
+        owner_status = self.client.get(f"/api/account/delete/{job.id}/status/")
+        receipt_status = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+
+        self.assertEqual(owner_detail.status_code, status.HTTP_200_OK)
+        self.assertEqual(owner_status.status_code, status.HTTP_200_OK)
+        self.assertEqual(receipt_status.status_code, status.HTTP_200_OK)
+        self.assertEqual(receipt_status.data["jobId"], str(job.id))
+
+    def test_another_user_missing_invalid_expired_and_cross_job_tokens_are_safe_404(self):
+        job = AccountDeletionJob.objects.create(
+            user=self.user,
+            user_identifier_snapshot="snapshot",
+            confirmed=True,
+        )
+        other_job = AccountDeletionJob.objects.create(
+            user=self.other_user,
+            user_identifier_snapshot="other-snapshot",
+            confirmed=True,
+        )
+        token = rotate_deletion_status_token(job)
+        other_client = APIClient()
+        other_client.force_authenticate(self.other_user)
+
+        owner_route = other_client.get(f"/api/account/delete/{job.id}/")
+        status_no_token = other_client.get(f"/api/account/delete/{job.id}/status/")
+        invalid = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN="not-the-token",
+        )
+        cross_job = APIClient().get(
+            f"/api/account/delete/{other_job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+        AccountDeletionJob.objects.filter(pk=job.pk).update(
+            status_token_expires_at=timezone.now() - timedelta(seconds=1)
+        )
+        expired = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+        missing_job = APIClient().get(
+            "/api/account/delete/00000000-0000-0000-0000-000000000000/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+
+        for response in [owner_route, status_no_token, invalid, cross_job, expired, missing_job]:
+            self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+            self.assertIn("not found", str(response.data).lower())
+
+    def test_token_rotation_invalidates_old_receipt(self):
+        job = AccountDeletionJob.objects.create(
+            user=self.user,
+            user_identifier_snapshot="snapshot",
+            confirmed=True,
+        )
+        old_token = rotate_deletion_status_token(job)
+        job.refresh_from_db()
+        new_token = rotate_deletion_status_token(job)
+
+        old_response = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=old_token,
+        )
+        new_response = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=new_token,
+        )
+
+        self.assertEqual(old_response.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(new_response.status_code, status.HTTP_200_OK)
+
+    def test_receipt_can_poll_after_user_deleted_and_payload_is_minimal(self):
+        session = self.create_session()
+        BrowserEvent.objects.create(
+            session_id=session.id,
+            event_type="url_change",
+            url="https://delete.example.com",
+        )
+        job = AccountDeletionJob.objects.create(
+            user=self.user,
+            user_identifier_snapshot="snapshot",
+            confirmed=True,
+        )
+        token = rotate_deletion_status_token(job)
+
+        AccountDeletionService().run(job.id)
+        response = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+        job.refresh_from_db()
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], AccountDeletionJob.Status.COMPLETED)
+        self.assertIsNone(job.user_id)
+        self.assertTrue(AccountDeletionJob.objects.filter(pk=job.pk).exists())
+        self.assertEqual(
+            set(response.data.keys()),
+            {
+                "jobId",
+                "status",
+                "createdAt",
+                "startedAt",
+                "completedAt",
+                "statusExpiresAt",
+                "errorCode",
+                "errorMessage",
+            },
+        )
+        payload = json.dumps(response.data, default=str)
+        self.assertNotIn("day26@example.com", payload)
+        self.assertNotIn("snapshot", payload)
+        self.assertNotIn("audit", payload.lower())
+
+    def test_failed_receipt_payload_does_not_expose_internal_error_text(self):
+        job = AccountDeletionJob.objects.create(
+            user=self.user,
+            user_identifier_snapshot="snapshot",
+            confirmed=True,
+            status=AccountDeletionJob.Status.FAILED,
+            error_code="DATABASE_TRACEBACK",
+            error_message="Traceback: C:/secret/path celery args password=123",
+            completed_at=timezone.now(),
+        )
+        token = rotate_deletion_status_token(job)
+
+        response = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["errorCode"], "DATABASE_TRACEBACK")
+        self.assertEqual(response.data["errorMessage"], "Account deletion failed.")
+        payload = json.dumps(response.data)
+        self.assertNotIn("Traceback", payload)
+        self.assertNotIn("secret", payload)
+        self.assertNotIn("celery", payload.lower())
+
+    def test_repeated_deletion_task_execution_is_idempotent_and_keeps_receipt(self):
+        job = AccountDeletionJob.objects.create(
+            user=self.user,
+            user_identifier_snapshot="snapshot",
+            confirmed=True,
+        )
+        token = rotate_deletion_status_token(job)
+
+        first = AccountDeletionService().run(job.id)
+        second = AccountDeletionService().run(job.id)
+        response = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(second.status, AccountDeletionJob.Status.COMPLETED)
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+
+    def test_user_session_is_not_authenticated_after_successful_deletion(self):
+        client = APIClient()
+        self.assertTrue(client.login(email=self.user.email, password=PASSWORD))
+        with patch("apps.users.views.delete_account_data_task.delay"):
+            delete = client.delete(
+                "/api/account/delete/",
+                {"currentPassword": PASSWORD},
+                format="json",
+            )
+        job = AccountDeletionJob.objects.get()
+
+        AccountDeletionService().run(job.id)
+        me = client.get("/api/auth/me/")
+        receipt_status = client.get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=delete.data["statusToken"],
+        )
+
+        self.assertEqual(delete.status_code, status.HTTP_202_ACCEPTED)
+        self.assertIn(me.status_code, [status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN])
+        self.assertEqual(receipt_status.status_code, status.HTTP_200_OK)
+
+    def test_cleanup_clears_expired_receipt_hash_without_deleting_job(self):
+        job = AccountDeletionJob.objects.create(
+            user=None,
+            user_identifier_snapshot="snapshot",
+            confirmed=True,
+            status=AccountDeletionJob.Status.COMPLETED,
+            completed_at=timezone.now(),
+        )
+        token = rotate_deletion_status_token(job)
+        AccountDeletionJob.objects.filter(pk=job.pk).update(
+            status_token_expires_at=timezone.now() - timedelta(seconds=1)
+        )
+
+        cleaned = cleanup_expired_account_deletion_receipts()
+        job.refresh_from_db()
+        response = APIClient().get(
+            f"/api/account/delete/{job.id}/status/",
+            HTTP_X_DELETION_STATUS_TOKEN=token,
+        )
+
+        self.assertEqual(cleaned, 1)
+        self.assertEqual(job.status_token_hash, "")
+        self.assertTrue(AccountDeletionJob.objects.filter(pk=job.pk).exists())
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)

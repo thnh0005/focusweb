@@ -3,11 +3,12 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AmbientWorkspaceBackground, FlocusLikeDashboard } from "@/components/focus-home";
+import { AmbientWorkspaceBackground, DeepWorkModal, FlocusLikeDashboard } from "@/components/focus-home";
 import { Spinner } from "@/components/ui/Spinner";
 import { analyticsApi } from "@/services/analytics.api";
 import { sessionsApi } from "@/services/sessions.api";
 import { useAuthStore } from "@/stores/auth.store";
+import { useSessionStore } from "@/stores/session.store";
 import { useUserStore } from "@/stores/user.store";
 import { requestFocusFullscreen } from "@/lib/utils/fullscreen";
 import type { SessionMode } from "@/types/session.types";
@@ -32,10 +33,14 @@ function FocusHomeSkeleton() {
 export default function DashboardPage() {
   const router = useRouter();
   const { user } = useAuthStore();
+  const { startSession } = useSessionStore();
   const { streak, fetchProfile } = useUserStore();
   const [durationMinutes, setDurationMinutes] = React.useState(25);
   const [mode, setMode] = React.useState<SessionMode>("normal");
-  const [goal, setGoal] = React.useState("");
+  const [deepWorkModalOpen, setDeepWorkModalOpen] = React.useState(false);
+  const [isStarting, setIsStarting] = React.useState(false);
+  const [startError, setStartError] = React.useState<string | null>(null);
+  const startInFlightRef = React.useRef(false);
 
   React.useEffect(() => {
     fetchProfile().catch((err) => console.warn("Failed to load user profile on dashboard:", err));
@@ -70,31 +75,106 @@ export default function DashboardPage() {
   const displayName = user?.displayName ?? user?.email?.split("@")[0] ?? "Hieu";
   const isLoading = statsLoading && sessionsLoading;
 
-  const handleStartFocus = React.useCallback(() => {
-    void requestFocusFullscreen();
-    router.push("/session");
-  }, [router]);
+  const getErrorMessage = React.useCallback((err: unknown) => {
+    return err instanceof Error ? err.message : "Could not start session. Please try again.";
+  }, []);
+
+  const startFocusSession = React.useCallback(
+    async (config: { mode: SessionMode; goal?: string }) => {
+      if (startInFlightRef.current) return false;
+
+      startInFlightRef.current = true;
+      setIsStarting(true);
+      setStartError(null);
+
+      try {
+        void requestFocusFullscreen();
+        await startSession({
+          mode: config.mode,
+          durationMinutes,
+          goal: config.goal,
+          tags: [],
+        });
+        router.push("/session/active");
+        return true;
+      } catch (err) {
+        setStartError(getErrorMessage(err));
+        throw err;
+      } finally {
+        startInFlightRef.current = false;
+        setIsStarting(false);
+      }
+    },
+    [durationMinutes, getErrorMessage, router, startSession]
+  );
+
+  const handleStart = React.useCallback(() => {
+    setStartError(null);
+
+    if (mode === "normal") {
+      void startFocusSession({ mode: "normal" }).catch(() => undefined);
+      return;
+    }
+
+    if (mode === "deep-work") {
+      setDeepWorkModalOpen(true);
+    }
+  }, [mode, startFocusSession]);
+
+  const handleModeChange = React.useCallback((nextMode: SessionMode) => {
+    setMode(nextMode);
+    setStartError(null);
+    if (nextMode !== "deep-work") {
+      setDeepWorkModalOpen(false);
+    }
+  }, []);
+
+  const handleConfirmDeepWork = React.useCallback(
+    async (goal: string) => {
+      try {
+        const didStart = await startFocusSession({ mode: "deep-work", goal });
+        if (didStart) {
+          setDeepWorkModalOpen(false);
+        }
+      } catch {
+        // Keep the modal open and render the error from startError.
+      }
+    },
+    [startFocusSession]
+  );
 
   if (isLoading) {
     return <FocusHomeSkeleton />;
   }
 
   return (
-    <FlocusLikeDashboard
-      displayName={displayName}
-      goal={goal}
-      lastGoal={lastGoal}
-      durationMinutes={durationMinutes}
-      mode={mode}
-      stats={stats}
-      statsError={statsError}
-      streakCount={streak}
-      recentSessions={recentSessions}
-      onGoalChange={setGoal}
-      onDurationChange={setDurationMinutes}
-      onModeChange={setMode}
-      onStart={handleStartFocus}
-      onRetryStats={() => void refetchStats()}
-    />
+    <>
+      <FlocusLikeDashboard
+        displayName={displayName}
+        durationMinutes={durationMinutes}
+        mode={mode}
+        stats={stats}
+        statsError={statsError}
+        streakCount={streak}
+        recentSessions={recentSessions}
+        onDurationChange={setDurationMinutes}
+        onModeChange={handleModeChange}
+        onStart={handleStart}
+        onRetryStats={() => void refetchStats()}
+        isStarting={isStarting}
+        startError={mode === "normal" ? startError : null}
+      />
+      {mode === "deep-work" && (
+        <DeepWorkModal
+          open={deepWorkModalOpen}
+          durationMinutes={durationMinutes}
+          lastGoal={lastGoal}
+          isSubmitting={isStarting}
+          error={startError}
+          onOpenChange={setDeepWorkModalOpen}
+          onConfirm={handleConfirmDeepWork}
+        />
+      )}
+    </>
   );
 }

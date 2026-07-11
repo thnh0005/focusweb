@@ -1,6 +1,6 @@
 from datetime import datetime, time, timedelta
 
-from django.db.models import Avg, Count, Q, Sum
+from django.db.models import Avg, Count, Max, Q, Sum
 from django.db.models.functions import Coalesce, ExtractHour, ExtractWeekDay, TruncDate
 from django.db import transaction
 from django.utils import timezone
@@ -12,6 +12,7 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.response import Response
 
 from apps.sessions.models import FocusSession
+from apps.tracking.models import WarningEvent
 from apps.recommendations.weekly_report_service import WeeklyFocusReportService
 
 from .models import ReportExportJob
@@ -373,14 +374,64 @@ class DistractionAnalyticsView(GenericAPIView):
     )
     def get(self, request):
         date_range = validate_date_range(request)
+        sessions = sessions_for_range(request.user, date_range, request.query_params.get("tag"))
+        session_ids = list(sessions.values_list("id", flat=True))
+        warnings = WarningEvent.objects.filter(session_id__in=session_ids)
+        total_sessions = len(session_ids)
+        total_warnings = warnings.count()
+        rows = (
+            warnings.exclude(domain="")
+            .values("domain")
+            .annotate(
+                warning_count=Count("id"),
+                session_count=Count("session_id", distinct=True),
+                max_level=Max("warning_level"),
+            )
+            .order_by("-warning_count", "domain")[:5]
+        )
+        top_sources = [
+            {
+                "domain": row["domain"],
+                "warningCount": row["warning_count"],
+                "sessionCount": row["session_count"],
+                "percentageOfSessions": round(
+                    row["session_count"] / total_sessions * 100,
+                    2,
+                )
+                if total_sessions
+                else 0,
+                "severity": self.severity(row["max_level"], row["warning_count"]),
+            }
+            for row in rows
+        ]
+        daily_counts = [
+            item["count"]
+            for item in (
+                warnings.annotate(day=TruncDate("created_at"))
+                .values("day")
+                .annotate(count=Count("id"))
+                .order_by("day")
+            )
+        ]
+        trend, _percentage = trend_values(daily_counts)
         data = {
-            "topSources": [],
-            "totalWarnings": 0,
-            "averageWarningsPerSession": 0,
-            "warningTrend": "neutral",
+            "topSources": top_sources,
+            "totalWarnings": total_warnings,
+            "averageWarningsPerSession": round(total_warnings / total_sessions, 2)
+            if total_sessions
+            else 0,
+            "warningTrend": trend,
             "dateRange": date_range,
         }
         return Response(DistractionAnalyticsSerializer(data).data)
+
+    @staticmethod
+    def severity(max_level, warning_count):
+        if max_level == 3 or warning_count >= 5:
+            return "high"
+        if max_level == 2 or warning_count >= 2:
+            return "medium"
+        return "low"
 
 
 class SessionBreakdownView(GenericAPIView):

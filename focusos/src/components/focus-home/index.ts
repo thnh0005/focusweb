@@ -8,7 +8,7 @@ export * from "./AmbientWorkspaceBackground";
 export * from "./AnimatedSceneBackground";
 export * from "./SceneSwitcher";
 export * from "./CenterFocusClock";
-export * from "./PriorityFocusTask";
+export * from "./DeepWorkModal";
 export * from "./FloatingFocusDock";
 export * from "./CompactSoundscapeWidget";
 export * from "./StatsBottomSheet";

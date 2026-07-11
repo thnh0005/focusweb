@@ -921,6 +921,11 @@ class FlashcardGenerationDay21Tests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
         self.assertEqual(response.data["status"], FlashcardDeck.Status.PENDING)
+        self.assertFalse(response.data["cached"])
+        self.assertEqual(response.data["document_id"], str(document.id))
+        self.assertEqual(str(response.data["deck"]["documentId"]), str(document.id))
+        self.assertEqual(response.data["deck"]["status"], FlashcardDeck.Status.PENDING)
+        self.assertEqual(response.data["deck"]["cards"], [])
         self.assertNotIn("custom", str(response.data))
         self.assertNotIn("raw", str(response.data))
         complete_json.assert_not_called()
@@ -941,6 +946,11 @@ class FlashcardGenerationDay21Tests(APITestCase):
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertTrue(response.data["cached"])
+        self.assertEqual(response.data["status"], FlashcardDeck.Status.COMPLETED)
+        self.assertEqual(response.data["document_id"], str(document.id))
+        self.assertEqual(str(response.data["deck"]["documentId"]), str(document.id))
+        self.assertEqual(response.data["deck"]["status"], FlashcardDeck.Status.COMPLETED)
+        self.assertEqual(len(response.data["deck"]["cards"]), 2)
         delay.assert_not_called()
 
     def test_post_generate_rejects_preconditions_invalid_config_and_ranges(self):
@@ -965,6 +975,11 @@ class FlashcardGenerationDay21Tests(APITestCase):
                 {"scope": "full_document", "quantity": 0, "difficulty": "easy"},
                 format="json",
             )
+            missing_scope = self.client.post(
+                f"/api/documents/{ready.id}/flashcards/generate/",
+                {"quantity": 5, "difficulty": "easy"},
+                format="json",
+            )
             invalid_range = self.client.post(
                 f"/api/documents/{ready.id}/flashcards/generate/",
                 {"scope": "page_range", "page_start": 2, "page_end": 99, "quantity": 5, "difficulty": "easy"},
@@ -975,6 +990,8 @@ class FlashcardGenerationDay21Tests(APITestCase):
         self.assertEqual(not_ready.data["error"]["code"], "EXTRACTION_NOT_READY")
         self.assertEqual(invalid_scope.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(invalid_quantity.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(missing_scope.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("scope", missing_scope.data)
         self.assertEqual(invalid_range.status_code, status.HTTP_400_BAD_REQUEST)
         complete_json.assert_not_called()
 
@@ -1138,7 +1155,7 @@ class SessionInsightParserAndFallbackTests(APITestCase):
         self.assertIn("Return valid JSON only", system_prompt)
         self.assertIn("non-judgmental", system_prompt)
         self.assertIn("observations", system_prompt)
-        self.assertNotIn("snippet", system_prompt.lower())
+        self.assertIn("snippets", system_prompt.lower())
         self.assertNotIn("content_snippet", user_prompt)
 
     def test_fallback_is_deterministic_bounded_and_neutral(self):
@@ -1159,12 +1176,16 @@ class SessionInsightParserAndFallbackTests(APITestCase):
 
         first = fallback.build(payload)
         second = fallback.build(payload)
+        first_observations = SessionInsightService.observations_from_analysis(first)
 
         self.assertEqual(first, second)
-        self.assertLessEqual(len(first), 4)
-        self.assertGreaterEqual(len(first), 1)
-        self.assertTrue(any("not closely related" in item for item in first))
-        self.assertTrue(all("lazy" not in item.lower() for item in first))
+        self.assertLessEqual(len(first_observations), 4)
+        self.assertGreaterEqual(len(first_observations), 1)
+        self.assertIn("summary", first)
+        self.assertTrue("not closely related" in first["summary"])
+        self.assertTrue(
+            all("lazy" not in item.lower() for item in first_observations)
+        )
 
 
 class AIClientTests(APITestCase):

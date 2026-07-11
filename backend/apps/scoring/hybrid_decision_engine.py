@@ -81,9 +81,13 @@ class HybridDecisionEngine:
         return self.build_hybrid_decision(rule, semantic)
 
     def build_hybrid_decision(self, rule: dict, semantic: dict) -> dict:
-        state = DEEP_WORK_DECISION_MATRIX[
-            (semantic["classification"], rule["risk_level"])
-        ]
+        state = (
+            STATE_DISTRACTED
+            if rule["should_warn"]
+            else DEEP_WORK_DECISION_MATRIX[
+                (semantic["classification"], rule["risk_level"])
+            ]
+        )
         semantic_distraction_score = 100 - semantic["relevance_score"]
         decision_score = self.clamp_int(
             semantic_distraction_score * self.config.semantic_weight
@@ -111,8 +115,13 @@ class HybridDecisionEngine:
         )
 
     def build_rule_only_decision(self, rule: dict) -> dict:
+        state = (
+            STATE_DISTRACTED
+            if rule["should_warn"]
+            else RULE_ONLY_STATE_BY_RISK[rule["risk_level"]]
+        )
         return self.build_result(
-            state=RULE_ONLY_STATE_BY_RISK[rule["risk_level"]],
+            state=state,
             decision_score=rule["risk_score"],
             confidence=self.rule_confidence(rule["risk_level"]),
             decision_source=DECISION_SOURCE_RULE_ONLY,
@@ -128,8 +137,13 @@ class HybridDecisionEngine:
         rule: dict,
         ai_error_code: str | None = None,
     ) -> dict:
+        state = (
+            STATE_DISTRACTED
+            if rule["should_warn"]
+            else DEEP_WORK_SEMANTIC_UNAVAILABLE_STATE_BY_RISK[rule["risk_level"]]
+        )
         return self.build_result(
-            state=DEEP_WORK_SEMANTIC_UNAVAILABLE_STATE_BY_RISK[rule["risk_level"]],
+            state=state,
             decision_score=rule["risk_score"],
             confidence=self.rule_confidence(rule["risk_level"]),
             decision_source=DECISION_SOURCE_RULE_ONLY_FALLBACK,
@@ -191,6 +205,7 @@ class HybridDecisionEngine:
             "risk_score": self.clamp_int(rule_evaluation.get("risk_score")),
             "reason_codes": list(reason_codes),
             "signals": deepcopy(signals),
+            "should_warn": bool(rule_evaluation.get("should_warn")),
         }
 
     def normalize_semantic_analysis(self, semantic_analysis: dict | None) -> dict | None:

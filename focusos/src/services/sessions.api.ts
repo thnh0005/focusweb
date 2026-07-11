@@ -8,6 +8,11 @@ import type {
   CreateSessionPayload,
   UpdateSessionPayload,
   EndSessionPayload,
+  SessionAIInsight,
+  SessionAIInsightRetry,
+  SessionStatus,
+  BackendRealtimeScore,
+  SessionWarningsResponse,
 } from "@/types/session.types";
 
 interface ActiveSessionLookupResponse {
@@ -62,6 +67,22 @@ export const sessionsApi = {
     return apiClient.get<SessionSummary>(`/sessions/${id}/summary/`);
   },
 
+  getSessionAIInsight(id: string): Promise<SessionAIInsight> {
+    return apiClient.get<SessionAIInsight>(`/sessions/${id}/ai-insight/`);
+  },
+
+  retrySessionAIInsight(id: string): Promise<SessionAIInsightRetry> {
+    return apiClient.post<SessionAIInsightRetry>(`/sessions/${id}/ai-insight/retry/`);
+  },
+
+  getRealtimeScore(id: string): Promise<BackendRealtimeScore> {
+    return apiClient.get<BackendRealtimeScore>(`/sessions/${id}/score/realtime/`);
+  },
+
+  getSessionWarnings(id: string): Promise<SessionWarningsResponse> {
+    return apiClient.get<SessionWarningsResponse>(`/sessions/${id}/warnings/`);
+  },
+
   /**
    * Fetch the user's pre-seeded and custom goal templates.
    */
@@ -82,6 +103,7 @@ export const sessionsApi = {
   getSessions(params?: {
     page?: number;
     mode?: string;
+    status?: SessionStatus;
     tag?: string;
     limit?: number;
   }): Promise<{ results: Session[]; count: number; nextPage: number | null }> {

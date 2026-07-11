@@ -58,6 +58,7 @@ class SessionSerializer(serializers.ModelSerializer):
     userId = serializers.UUIDField(source="user_id", read_only=True)
     tags = serializers.SlugRelatedField(many=True, slug_field="name", read_only=True)
     note = serializers.SerializerMethodField()
+    elapsedActiveSeconds = serializers.SerializerMethodField()
     targetDurationSeconds = serializers.IntegerField(
         source="target_duration_seconds",
         read_only=True,
@@ -84,6 +85,7 @@ class SessionSerializer(serializers.ModelSerializer):
             "note",
             "targetDurationSeconds",
             "actualDurationSeconds",
+            "elapsedActiveSeconds",
             "focusScore",
             "focusState",
             "status",
@@ -98,10 +100,14 @@ class SessionSerializer(serializers.ModelSerializer):
         except SessionNote.DoesNotExist:
             return ""
 
+    def get_elapsedActiveSeconds(self, instance) -> int:
+        return instance.calculate_actual_duration()
+
 
 class ActiveSessionSerializer(serializers.ModelSerializer):
     userId = serializers.UUIDField(source="user_id", read_only=True)
     tags = serializers.SlugRelatedField(many=True, slug_field="name", read_only=True)
+    elapsedActiveSeconds = serializers.SerializerMethodField()
     targetDurationSeconds = serializers.IntegerField(
         source="target_duration_seconds",
         read_only=True,
@@ -117,9 +123,13 @@ class ActiveSessionSerializer(serializers.ModelSerializer):
             "goal",
             "tags",
             "targetDurationSeconds",
+            "elapsedActiveSeconds",
             "startedAt",
             "status",
         ]
+
+    def get_elapsedActiveSeconds(self, instance) -> int:
+        return instance.calculate_actual_duration()
 
 
 class CreateSessionSerializer(serializers.Serializer):
@@ -259,8 +269,17 @@ class SessionSummarySerializer(serializers.Serializer):
     aiInsights = serializers.ListField(child=serializers.CharField())
     distractionEvents = serializers.ListField(child=serializers.DictField())
     warningLog = serializers.ListField(child=serializers.DictField())
+    topDistractionDomains = serializers.ListField(
+        child=serializers.DictField(),
+        required=False,
+    )
+    browserEventCount = serializers.IntegerField(required=False)
     recommendation = serializers.CharField()
     isAiInsightReady = serializers.BooleanField()
+    aiInsightStatus = serializers.CharField(required=False, allow_null=True)
+    aiInsightSource = serializers.CharField(required=False, allow_null=True)
+    aiInsightErrorCode = serializers.CharField(required=False, allow_null=True)
+    aiInsightGeneratedAt = serializers.DateTimeField(required=False, allow_null=True)
 
 
 class RealtimeScoreResponseSerializer(serializers.Serializer):
@@ -274,6 +293,9 @@ class RealtimeScoreResponseSerializer(serializers.Serializer):
     event_count = serializers.IntegerField()
     data_quality = serializers.CharField()
     stale = serializers.BooleanField()
+    source = serializers.CharField(required=False)
+    warning_count = serializers.IntegerField(required=False)
+    active_warning_cycle_count = serializers.IntegerField(required=False)
     ai_status = serializers.CharField(required=False)
     ai_error_code = serializers.CharField(allow_null=True, required=False)
     calculated_at = serializers.DateTimeField(required=False)

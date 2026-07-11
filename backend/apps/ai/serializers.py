@@ -125,6 +125,7 @@ class DocumentSummarySerializer(serializers.ModelSerializer):
             "input_checksum",
             "model_name",
             "provider",
+            "source",
             "prompt_version",
             "source_character_count",
             "source_word_count",

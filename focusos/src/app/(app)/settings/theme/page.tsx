@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { ImagePlus, Moon, Palette, Trash2 } from "lucide-react";
+import { userApi } from "@/services/user.api";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -10,8 +11,34 @@ import {
   readWorkspaceBackground,
   saveWorkspaceBackground,
 } from "@/lib/preferences/background";
+import type { AppTheme } from "@/types/user.types";
 
-const THEME_OPTIONS = [
+type ThemeOption = {
+  id: AppTheme;
+  label: string;
+  description: string;
+  swatches: string[];
+};
+
+const THEME_OPTIONS: ThemeOption[] = [
+  {
+    id: "cyber",
+    label: "Cyber",
+    description: "High-contrast neon focus shell.",
+    swatches: ["#05070d", "#24d3ee", "#b9f64d"],
+  },
+  {
+    id: "minimal",
+    label: "Minimal",
+    description: "Reduced contrast for quiet planning.",
+    swatches: ["#0b0c0d", "#d7d2c6", "#6f766d"],
+  },
+  {
+    id: "forest",
+    label: "Forest",
+    description: "Original green workspace.",
+    swatches: ["#071008", "#355b3a", "#9dbb7f"],
+  },
   {
     id: "minimal-dark",
     label: "Minimal Dark",
@@ -46,12 +73,49 @@ const ACCENT_COLORS = [
 
 export default function ThemeSettingsPage() {
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [theme, setTheme] = React.useState("forest-calm");
+  const [theme, setTheme] = React.useState<AppTheme>("forest-calm");
   const [accentColor, setAccentColor] = React.useState("moss");
   const [backgroundImage, setBackgroundImage] = React.useState(() => readWorkspaceBackground());
   const [backgroundError, setBackgroundError] = React.useState("");
+  const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
+  const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadThemePreferences() {
+      setIsLoading(true);
+      setError("");
+      try {
+        const currentTheme = await userApi.getThemePreferences();
+        if (!isMounted) return;
+        setTheme(currentTheme.theme);
+        setAccentColor(currentTheme.themeAccent || "moss");
+
+        if (currentTheme.workspaceBackgroundUrl) {
+          saveWorkspaceBackground(currentTheme.workspaceBackgroundUrl);
+          setBackgroundImage(currentTheme.workspaceBackgroundUrl);
+        } else {
+          setBackgroundImage(readWorkspaceBackground());
+        }
+      } catch (loadError) {
+        if (!isMounted) return;
+        setError(getErrorMessage(loadError, "Failed to load theme settings"));
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadThemePreferences();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const handleBackgroundUpload = (file: File | undefined) => {
     setBackgroundError("");
@@ -97,11 +161,18 @@ export default function ThemeSettingsPage() {
   const handleSave = async () => {
     setIsSaving(true);
     setSaveSuccess(false);
+    setError("");
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      await userApi.updateThemePreferences({
+        theme,
+        themeAccent: accentColor,
+        workspaceBackgroundUrl: isHttpUrl(backgroundImage) ? backgroundImage : "",
+      });
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
+    } catch (saveError) {
+      setError(getErrorMessage(saveError, "Failed to save theme settings"));
     } finally {
       setIsSaving(false);
     }
@@ -113,7 +184,7 @@ export default function ThemeSettingsPage() {
         <p className="text-sm text-text-muted">Theme</p>
         <h1 className="mt-2 text-4xl font-light text-text-primary">Ambient appearance</h1>
         <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-text-secondary">
-          Preview the visual language used across FocusOS. Saving keeps the existing local preference flow.
+          Preview the visual language used across FocusOS. Theme and accent are saved to your account.
         </p>
       </header>
 
@@ -128,6 +199,7 @@ export default function ThemeSettingsPage() {
               key={option.id}
               type="button"
               onClick={() => setTheme(option.id)}
+              disabled={isLoading || isSaving}
               className={`rounded-3xl border p-4 text-left transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 theme === option.id
                   ? "border-primary/45 bg-primary/10"
@@ -158,6 +230,7 @@ export default function ThemeSettingsPage() {
               key={accent.id}
               type="button"
               onClick={() => setAccentColor(accent.id)}
+              disabled={isLoading || isSaving}
               className={`rounded-2xl border p-4 transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
                 accentColor === accent.id
                   ? "border-text-primary bg-white/[0.06]"
@@ -187,6 +260,7 @@ export default function ThemeSettingsPage() {
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
+            disabled={isSaving}
             className="flex min-h-40 flex-col items-center justify-center rounded-3xl border border-dashed border-white/14 bg-white/[0.035] p-6 text-center transition-all duration-fast hover:border-primary/40 hover:bg-white/[0.055] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           >
             <input
@@ -238,6 +312,9 @@ export default function ThemeSettingsPage() {
 
       <Card className="rounded-[2rem] p-6 sm:p-7">
         <h2 className="text-xl font-light text-text-primary">Display</h2>
+        <p className="mt-2 text-sm font-light text-text-secondary">
+          These display controls do not have backend support yet.
+        </p>
         <div className="mt-4 space-y-3 text-sm">
           <StaticToggle label="Reduce motion" />
           <StaticToggle label="Compact mode" />
@@ -250,20 +327,36 @@ export default function ThemeSettingsPage() {
         </div>
       )}
 
-      <Button type="button" onClick={handleSave} disabled={isSaving} variant="session" className="rounded-full px-6">
-        {isSaving ? "Saving" : "Save theme"}
+      {error && (
+        <div role="alert" className="rounded-2xl border border-urgency-coral/25 bg-urgency-coral/10 p-3">
+          <p className="text-sm font-light text-urgency-coral">{error}</p>
+        </div>
+      )}
+
+      <Button type="button" onClick={handleSave} disabled={isLoading || isSaving} variant="session" className="rounded-full px-6">
+        {isLoading ? "Loading" : isSaving ? "Saving" : "Save theme"}
       </Button>
     </div>
   );
+}
+
+function isHttpUrl(value: string) {
+  return value.startsWith("http://") || value.startsWith("https://");
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }
 
 function StaticToggle({ label }: { label: string }) {
   return (
     <div className="flex items-center justify-between border-b border-white/10 py-3 last:border-0">
       <span className="text-text-secondary">{label}</span>
+      <span className="ml-auto mr-3 text-xs font-light text-text-muted">Coming soon</span>
       <span
         role="switch"
         aria-checked={false}
+        aria-disabled={true}
         aria-label={label}
         className="inline-flex h-7 w-12 items-center rounded-full border border-white/10 bg-white/[0.055]"
       >

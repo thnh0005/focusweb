@@ -166,3 +166,36 @@ export interface PatternInsights {
   sessionsAnalyzed: number;
   generatedAt: string;
 }
+
+export type ReportExportFormat = "json" | "html" | "pdf";
+
+export interface ReportExportPayload {
+  dateRange?: DateRange;
+  range?: "7d" | "30d";
+  date_from?: string;
+  date_to?: string;
+  format?: ReportExportFormat;
+  tag?: string;
+}
+
+export interface ReportExportJob {
+  jobId: string;
+  status: "pending" | "processing" | "completed" | "ready" | "failed" | "expired";
+  format: ReportExportFormat;
+  dateRange: string;
+  dateFrom: string | null;
+  dateTo: string | null;
+  requestedTimezone: string;
+  payload: Record<string, unknown>;
+  downloadUrl: string;
+  downloadReady: boolean;
+  fileSize: number;
+  checksum: string;
+  progress: number;
+  errorCode: string;
+  errorMessage: string;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  expiresAt: string | null;
+}

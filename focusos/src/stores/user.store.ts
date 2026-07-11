@@ -13,6 +13,7 @@ export interface UserState {
   fetchProfile: () => Promise<void>;
   setProfile: (profile: UserProfile) => void;
   updateProfile: (payload: { displayName?: string; avatarUrl?: string }) => Promise<void>;
+  fetchPreferences: () => Promise<void>;
   updatePreferences: (prefs: Partial<UserPreferences>) => Promise<void>;
   fetchStreak: () => Promise<void>;
   incrementStreak: () => void;
@@ -54,6 +55,17 @@ export const useUserStore = create<UserState>((set, get) => ({
     try {
       const updatedProfile = await userApi.updateProfile(payload);
       set({ profile: updatedProfile, isLoading: false });
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  fetchPreferences: async () => {
+    set({ isLoading: true });
+    try {
+      const preferences = await userApi.getPreferences();
+      set({ preferences, isLoading: false });
     } catch (error) {
       set({ isLoading: false });
       throw error;

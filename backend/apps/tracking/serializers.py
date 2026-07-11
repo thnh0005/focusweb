@@ -1,3 +1,6 @@
+from datetime import timedelta
+
+from django.utils import timezone
 from rest_framework import serializers
 
 from .privacy import ALLOWED_EVENT_FIELDS
@@ -8,6 +11,8 @@ class BrowserEventIngestSerializer(serializers.Serializer):
     EVENT_TYPES = ["url_change", "tab_switch", "idle", "active", "warning"]
 
     event_type = serializers.ChoiceField(choices=EVENT_TYPES)
+    client_event_id = serializers.UUIDField(required=False, allow_null=True)
+    occurred_at = serializers.DateTimeField(required=False, allow_null=True)
     url = serializers.URLField(required=False, allow_blank=True, max_length=2048)
     domain = serializers.CharField(required=False, allow_blank=True, max_length=255)
     page_title = serializers.CharField(required=False, allow_blank=True, max_length=500)
@@ -32,6 +37,14 @@ class BrowserEventIngestSerializer(serializers.Serializer):
         max_value=10000,
     )
 
+    def to_internal_value(self, data):
+        data = dict(data)
+        if "clientEventId" in data and "client_event_id" not in data:
+            data["client_event_id"] = data.pop("clientEventId")
+        if "occurredAt" in data and "occurred_at" not in data:
+            data["occurred_at"] = data.pop("occurredAt")
+        return super().to_internal_value(data)
+
     def validate(self, attrs):
         sanitized = PrivacyValidator.validate_browser_payload(self.initial_data)
         unknown_fields = {
@@ -46,6 +59,11 @@ class BrowserEventIngestSerializer(serializers.Serializer):
                         f"Unsupported fields: {', '.join(sorted(unknown_fields))}."
                     ]
                 }
+            )
+        occurred_at = attrs.get("occurred_at")
+        if occurred_at and occurred_at > timezone.now() + timedelta(minutes=5):
+            raise serializers.ValidationError(
+                {"occurred_at": ["Occurrence timestamp cannot be in the future."]}
             )
         return attrs
 
@@ -78,6 +96,7 @@ class EventBatchIngestResponseSerializer(serializers.Serializer):
     batch_id = serializers.UUIDField()
     accepted_count = serializers.IntegerField()
     rejected_count = serializers.IntegerField()
+    duplicate_count = serializers.IntegerField(required=False)
     rule_evaluations = serializers.ListField(
         child=serializers.DictField(),
         required=False,

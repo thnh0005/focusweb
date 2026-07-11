@@ -1,5 +1,9 @@
 ALLOWED_EVENT_FIELDS = {
     "event_type",
+    "client_event_id",
+    "clientEventId",
+    "occurred_at",
+    "occurredAt",
     "url",
     "domain",
     "page_title",
@@ -8,6 +12,11 @@ ALLOWED_EVENT_FIELDS = {
     "active_seconds",
     "idle_seconds",
     "tab_switch_count",
+}
+
+EVENT_FIELD_ALIASES = {
+    "clientEventId": "client_event_id",
+    "occurredAt": "occurred_at",
 }
 
 DISALLOWED_EVENT_FIELDS = {
@@ -79,11 +88,12 @@ def sanitize_event_payload(payload: dict) -> dict:
     if not isinstance(payload, dict):
         return {}
 
-    return {
-        key: value
-        for key, value in payload.items()
-        if normalize_field_name(key) in ALLOWED_EVENT_FIELDS
-    }
+    sanitized = {}
+    for key, value in payload.items():
+        canonical_key = EVENT_FIELD_ALIASES.get(key, normalize_field_name(key))
+        if canonical_key in ALLOWED_EVENT_FIELDS:
+            sanitized[canonical_key] = value
+    return sanitized
 
 
 def validate_event_privacy(payload: dict) -> tuple[bool, dict, list[str]]:
@@ -95,7 +105,11 @@ def validate_event_privacy(payload: dict) -> tuple[bool, dict, list[str]]:
         return False, sanitize_event_payload(payload), disallowed_fields
 
     sanitized = sanitize_event_payload(payload)
-    unknown_fields = sorted(set(payload) - set(sanitized))
+    unknown_fields = sorted(
+        key
+        for key in payload
+        if EVENT_FIELD_ALIASES.get(key, normalize_field_name(key)) not in sanitized
+    )
     if unknown_fields:
         return False, sanitized, unknown_fields
 

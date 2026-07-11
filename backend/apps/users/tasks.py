@@ -1,6 +1,7 @@
 from celery import shared_task
 
 from .account_deletion import AccountDeletionError, AccountDeletionService
+from .account_deletion import cleanup_expired_account_deletion_receipts
 from .account_export import (
     AccountDataExportService,
     AccountExportError,
@@ -46,3 +47,8 @@ def delete_account_data_task(self, job_id):
 @shared_task
 def cleanup_expired_account_exports_task():
     return cleanup_expired_account_exports()
+
+
+@shared_task
+def cleanup_expired_account_deletion_receipts_task():
+    return cleanup_expired_account_deletion_receipts()

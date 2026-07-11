@@ -81,8 +81,9 @@ function relTime(date: Date | string): string {
   return `${days}d ago`;
 }
 
-// ─── Default demo notifications ───────────────────────────────────────────────
+// ─── Unused notification examples ─────────────────────────────────────────────
 
+/*
 const DEFAULT_NOTIFICATIONS: Notification[] = [
   {
     id: "n1",
@@ -111,6 +112,7 @@ const DEFAULT_NOTIFICATIONS: Notification[] = [
     createdAt: new Date(Date.now() - 24 * 60 * 60_000),
   },
 ];
+*/
 
 // ─── Single notification item ─────────────────────────────────────────────────
 
@@ -222,7 +224,7 @@ function NotificationItem({
 export function NotificationCenter({
   isOpen,
   onClose,
-  notifications = DEFAULT_NOTIFICATIONS,
+  notifications = [],
   onMarkAllRead,
   onMarkRead,
   onDismiss,
@@ -354,7 +356,7 @@ export function NotificationCenter({
                   You&apos;re all caught up
                 </p>
                 <p className="text-[11px] text-text-muted font-light">
-                  No notifications yet. Start a focus session to generate insights.
+                  Notification history is not available from the backend yet.
                 </p>
               </motion.div>
             )}

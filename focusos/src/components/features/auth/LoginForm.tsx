@@ -60,7 +60,8 @@ export function LoginForm() {
 
     try {
       await login({ email, password });
-      router.push("/dashboard");
+      const { onboardingComplete } = useAuthStore.getState();
+      router.push(onboardingComplete ? "/dashboard" : "/onboarding");
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Invalid email or password";
       setSubmitError(errorMsg);

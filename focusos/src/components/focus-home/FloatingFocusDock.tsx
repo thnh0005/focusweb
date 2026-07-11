@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import Link from "next/link";
-import { BarChart3, FileText, Home, Music2, Settings, TimerReset } from "lucide-react";
+import { BarChart3, FileText, Music2, Settings, TimerReset } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
 export type FlocusDockPanel = "sounds" | "stats" | null;
@@ -10,13 +10,11 @@ export type FlocusDockPanel = "sounds" | "stats" | null;
 export interface FloatingFocusDockProps {
   activePanel: FlocusDockPanel;
   onPanelChange: (panel: FlocusDockPanel) => void;
-  onFocus: () => void;
 }
 
 export function FloatingFocusDock({
   activePanel,
   onPanelChange,
-  onFocus,
 }: FloatingFocusDockProps) {
   return (
     <nav
@@ -24,12 +22,11 @@ export function FloatingFocusDock({
       aria-label="Focus workspace"
     >
       <div className="flex max-w-full items-center gap-1 rounded-full border border-white/10 bg-[rgb(10_13_10/0.62)] p-1.5 shadow-[0_20px_80px_rgba(0,0,0,0.42)] backdrop-blur-2xl">
-        <DockLink href="/dashboard" icon={Home} label="Home" />
         <DockButton
           icon={TimerReset}
           label="Focus"
-          active={false}
-          onClick={onFocus}
+          active={activePanel === null}
+          onClick={() => onPanelChange(null)}
         />
         <DockButton
           icon={Music2}

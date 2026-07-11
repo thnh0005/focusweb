@@ -1,8 +1,13 @@
+from django.conf import settings
 from django.contrib.auth import authenticate
 from django.contrib.auth.password_validation import validate_password
+from django.contrib.auth.tokens import default_token_generator
+from django.core import signing
 from django.core.exceptions import ValidationError as DjangoValidationError
 from django.db import transaction
 from django.utils import timezone
+from django.utils.encoding import force_str
+from django.utils.http import urlsafe_base64_decode
 from rest_framework import serializers
 
 from .models import (
@@ -88,6 +93,74 @@ class LoginSerializer(serializers.Serializer):
             raise serializers.ValidationError("Invalid credentials.")
         attrs["user"] = user
         return attrs
+
+
+class PasswordResetRequestSerializer(serializers.Serializer):
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.lower()
+
+    def get_user(self):
+        return User.objects.filter(
+            email__iexact=self.validated_data["email"],
+            is_active=True,
+        ).first()
+
+
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    token = serializers.CharField(write_only=True, trim_whitespace=False)
+    uid = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    uidb64 = serializers.CharField(required=False, write_only=True, allow_blank=True)
+    new_password = serializers.CharField(write_only=True, trim_whitespace=False)
+    new_password_confirm = serializers.CharField(write_only=True, trim_whitespace=False)
+
+    def validate(self, attrs):
+        if attrs["new_password"] != attrs["new_password_confirm"]:
+            raise serializers.ValidationError(
+                {"new_password_confirm": ["Passwords do not match."]}
+            )
+
+        user = self.get_user_from_signed_token(attrs["token"])
+        if user is None:
+            user = self.get_user_from_django_token(attrs)
+        if user is None or not user.is_active:
+            raise serializers.ValidationError({"token": ["Reset token is invalid or expired."]})
+
+        try:
+            validate_password(attrs["new_password"], user=user)
+        except DjangoValidationError as exc:
+            raise serializers.ValidationError({"new_password": list(exc.messages)}) from exc
+
+        attrs["user"] = user
+        return attrs
+
+    @staticmethod
+    def get_user_from_signed_token(token):
+        signer = signing.TimestampSigner(salt="focusos.password-reset")
+        max_age = getattr(settings, "PASSWORD_RESET_TIMEOUT", 60 * 60 * 24)
+        try:
+            user_id = signer.unsign(token, max_age=max_age)
+        except (signing.BadSignature, signing.SignatureExpired):
+            return None
+        return User.objects.filter(pk=user_id).first()
+
+    @staticmethod
+    def get_user_from_django_token(attrs):
+        uid = attrs.get("uidb64") or attrs.get("uid")
+        token = attrs["token"]
+        if not uid and ":" in token:
+            uid, token = token.split(":", 1)
+        if not uid:
+            return None
+        try:
+            user_id = force_str(urlsafe_base64_decode(uid))
+            user = User.objects.filter(pk=user_id).first()
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if user and default_token_generator.check_token(user, token):
+            return user
+        return None
 
 
 class ProfileSerializer(serializers.ModelSerializer):
@@ -719,6 +792,69 @@ class AccountDeletionJobSerializer(serializers.ModelSerializer):
             "startedAt",
             "completedAt",
         ]
+
+
+class AccountDeletionReceiptSerializer(serializers.ModelSerializer):
+    jobId = serializers.UUIDField(source="id", read_only=True)
+    statusToken = serializers.SerializerMethodField()
+    statusExpiresAt = serializers.DateTimeField(
+        source="status_token_expires_at",
+        read_only=True,
+    )
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    startedAt = serializers.DateTimeField(source="started_at", read_only=True)
+    completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+
+    class Meta:
+        model = AccountDeletionJob
+        fields = [
+            "jobId",
+            "status",
+            "statusToken",
+            "createdAt",
+            "startedAt",
+            "completedAt",
+            "statusExpiresAt",
+        ]
+
+    def get_statusToken(self, obj):
+        return self.context.get("status_token", "")
+
+
+class AccountDeletionStatusSerializer(serializers.ModelSerializer):
+    jobId = serializers.UUIDField(source="id", read_only=True)
+    createdAt = serializers.DateTimeField(source="created_at", read_only=True)
+    startedAt = serializers.DateTimeField(source="started_at", read_only=True)
+    completedAt = serializers.DateTimeField(source="completed_at", read_only=True)
+    statusExpiresAt = serializers.DateTimeField(
+        source="status_token_expires_at",
+        read_only=True,
+    )
+    errorCode = serializers.SerializerMethodField()
+    errorMessage = serializers.SerializerMethodField()
+
+    class Meta:
+        model = AccountDeletionJob
+        fields = [
+            "jobId",
+            "status",
+            "createdAt",
+            "startedAt",
+            "completedAt",
+            "statusExpiresAt",
+            "errorCode",
+            "errorMessage",
+        ]
+
+    def get_errorCode(self, obj):
+        if obj.status == AccountDeletionJob.Status.FAILED:
+            return obj.error_code or "ACCOUNT_DELETION_FAILED"
+        return ""
+
+    def get_errorMessage(self, obj):
+        if obj.status == AccountDeletionJob.Status.FAILED:
+            return "Account deletion failed."
+        return ""
 
 
 class StreakSerializer(serializers.Serializer):

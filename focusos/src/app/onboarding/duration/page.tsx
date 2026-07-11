@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
+import { readOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding/storage";
 import { Button } from "@/components/ui/Button";
 
 const durations = [
@@ -26,9 +27,15 @@ const durations = [
 export default function OnboardingDurationPage() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
-  const [selected, setSelected] = React.useState<string>("50");
+  const [selected, setSelected] = React.useState<string>(() => {
+    const draft = readOnboardingDraft();
+    return draft.preferredDurationMinutes ? String(draft.preferredDurationMinutes) : "50";
+  });
 
   const handleContinue = () => {
+    saveOnboardingDraft({
+      preferredDurationMinutes: Number(selected),
+    });
     router.push("/onboarding/extension");
   };
 

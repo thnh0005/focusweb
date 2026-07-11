@@ -23,7 +23,11 @@ export function RealtimeFocusScore({
     <div
       className={cn("flex flex-col items-center gap-2", className)}
       role="status"
-      aria-label={`Focus score: ${score} out of 100, ${displayLabel}`}
+      aria-label={
+        score === null
+          ? `Focus score: ${displayLabel}`
+          : `Focus score: ${score} out of 100, ${displayLabel}`
+      }
       aria-live="polite"
     >
       {/* Score value with color */}
@@ -44,7 +48,7 @@ export function RealtimeFocusScore({
             transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
             aria-hidden="true"
           >
-            {score}
+            {score === null ? "--" : score}
           </motion.span>
         </AnimatePresence>
 

@@ -21,12 +21,15 @@ export type FocusStateLabel =
   | "distracted"
   | "highly-distracted";
 
+export type LiveFocusStateLabel = FocusStateLabel | "unknown";
+
 export type FocusStateLabelDisplay =
   | "Deep Focus"
   | "Focused"
   | "Average"
   | "Distracted"
-  | "Highly Distracted";
+  | "Highly Distracted"
+  | "Gathering Data";
 
 export type WarningLevel = 1 | 2 | 3;
 
@@ -52,7 +55,8 @@ export interface ActiveSession {
   goal?: string;
   tags: string[];
   targetDurationSeconds: number;
-  startedAt: Date;
+  elapsedActiveSeconds?: number;
+  startedAt: string;
   status: SessionStatus;
 }
 
@@ -68,6 +72,7 @@ export interface Session {
   note?: string;
   targetDurationSeconds: number;
   actualDurationSeconds: number;
+  elapsedActiveSeconds?: number;
   focusScore: number | null;
   focusState: FocusStateLabel | null;
   status: SessionStatus;
@@ -91,9 +96,61 @@ export interface FocusScoreBreakdown {
 }
 
 export interface RealtimeFocusData {
-  score: number;
-  state: FocusStateLabel;
+  score: number | null;
+  state: LiveFocusStateLabel;
   updatedAt: Date;
+}
+
+export interface BackendRealtimeScore {
+  session_id: string;
+  session_status: SessionStatus;
+  score: number | null;
+  label: string | null;
+  components: Record<string, number | null>;
+  weights?: Record<string, number>;
+  window_seconds?: number;
+  event_count: number;
+  data_quality: "INSUFFICIENT" | "PARTIAL" | "SUFFICIENT" | string;
+  stale: boolean;
+  source?: string;
+  warning_count?: number;
+  active_warning_cycle_count?: number;
+  ai_status?: string;
+  ai_error_code?: string | null;
+  calculated_at?: string;
+}
+
+export interface SessionWarningEntry {
+  id: string;
+  cycle_id: string | null;
+  level: WarningLevel;
+  decision_state: string;
+  decision_source?: string;
+  decision_score: number | null;
+  domain: string;
+  reason_codes: string[];
+  auto_pause_required: boolean;
+  triggered_at: string;
+}
+
+export interface SessionWarningCycle {
+  cycle_id: string;
+  status: string;
+  current_level: WarningLevel;
+  decision_source?: string;
+  next_warning_at: string | null;
+  auto_pause_required: boolean;
+  started_at: string;
+  resolved_at: string | null;
+}
+
+export interface SessionWarningsResponse {
+  session_id: string;
+  session_status: SessionStatus;
+  mode: SessionMode;
+  warning_count: number;
+  active_cycle: SessionWarningCycle | null;
+  warnings: SessionWarningEntry[];
 }
 
 // ── Session Summary ───────────────────────────────────────────
@@ -101,10 +158,46 @@ export interface RealtimeFocusData {
 export interface SessionSummary {
   session: Session;
   scoreBreakdown: FocusScoreBreakdown;
+  scoreMetadata?: {
+    source?: string;
+    hasTrackingSignals?: boolean;
+    hasBrowserEvents?: boolean;
+    hasSemanticAi?: boolean;
+    hasWarningEvents?: boolean;
+    browserEventCount?: number;
+    warningCount?: number;
+    warningCycleCount?: number;
+    semanticAnalysisCount?: number;
+    durationRatio?: number;
+    topWarningDomains?: Array<{ domain: string; count: number }>;
+    [key: string]: unknown;
+  };
   aiInsights: string[];
   distractionEvents: DistractionEvent[];
   recommendation?: string;
   isAiInsightReady: boolean;
+  aiInsightStatus?: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  aiInsightSource?: "AI" | "RULE_BASED_FALLBACK" | null;
+  aiInsightErrorCode?: string | null;
+  aiInsightGeneratedAt?: string | null;
+}
+
+export interface SessionAIInsight {
+  session_id: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  observations: string[];
+  source: "AI" | "RULE_BASED_FALLBACK" | null;
+  model: string | null;
+  generated_at: string | null;
+  retry_count: number;
+  error_code: string | null;
+}
+
+export interface SessionAIInsightRetry {
+  session_id: string;
+  status: "PENDING" | "PROCESSING" | "COMPLETED" | "FAILED";
+  message: string;
+  retry_count: number;
 }
 
 export interface DistractionEvent {

@@ -3,7 +3,7 @@
 // Centralized fetch wrapper with auth, CSRF, and error handling
 // ═══════════════════════════════════════════════════════════════
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api";
+export const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000/api";
 
 // ── Custom Error Types ─────────────────────────────────────────
 
@@ -23,6 +23,63 @@ export class NetworkError extends Error {
     super(message);
     this.name = "NetworkError";
   }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function toErrorMessages(value: unknown): string[] {
+  if (typeof value === "string") return [value];
+  if (Array.isArray(value)) {
+    return value
+      .flatMap((item) => toErrorMessages(item))
+      .filter((message) => message.length > 0);
+  }
+  if (isRecord(value)) {
+    return Object.values(value)
+      .flatMap((item) => toErrorMessages(item))
+      .filter((message) => message.length > 0);
+  }
+  return [];
+}
+
+function normalizeErrorBody(body: unknown, fallbackMessage: string) {
+  if (!isRecord(body)) {
+    return { message: fallbackMessage, details: undefined };
+  }
+
+  const error = isRecord(body.error) ? body.error : undefined;
+  const explicitMessage =
+    (typeof body.message === "string" && body.message) ||
+    (typeof body.detail === "string" && body.detail) ||
+    (typeof error?.message === "string" && error.message) ||
+    (typeof error?.code === "string" && error.code) ||
+    undefined;
+
+  const details: Record<string, string[]> = {};
+  const nestedErrors = isRecord(body.errors) ? body.errors : undefined;
+  const detailSource = nestedErrors ?? body;
+
+  for (const [key, value] of Object.entries(detailSource)) {
+    if (["message", "detail", "error", "errors"].includes(key) && !nestedErrors) {
+      continue;
+    }
+    const messages = toErrorMessages(value);
+    if (messages.length > 0) {
+      details[key] = messages;
+    }
+  }
+
+  const firstDetail =
+    details.non_field_errors?.[0] ??
+    details.detail?.[0] ??
+    Object.values(details)[0]?.[0];
+
+  return {
+    message: explicitMessage ?? firstDetail ?? fallbackMessage,
+    details: Object.keys(details).length > 0 ? details : undefined,
+  };
 }
 
 // ── Response Type ─────────────────────────────────────────────
@@ -50,6 +107,24 @@ function getCsrfToken(): string | null {
     if (name === "csrftoken") return decodeURIComponent(value);
   }
   return null;
+}
+
+async function ensureCsrfToken(): Promise<string | null> {
+  let csrf = getCsrfToken();
+  if (csrf || typeof document === "undefined") return csrf;
+
+  try {
+    await fetch(`${API_BASE_URL}/auth/csrf/`, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "include",
+    });
+  } catch {
+    return null;
+  }
+
+  csrf = getCsrfToken();
+  return csrf;
 }
 
 // ── Base Request ──────────────────────────────────────────────
@@ -88,7 +163,7 @@ async function request<T>(
   // Add CSRF token for state-mutating requests
   const method = (fetchOptions.method ?? "GET").toUpperCase();
   if (["POST", "PUT", "PATCH", "DELETE"].includes(method)) {
-    const csrf = getCsrfToken();
+    const csrf = await ensureCsrfToken();
     if (csrf) {
       headers["X-CSRFToken"] = csrf;
     }
@@ -121,15 +196,11 @@ async function request<T>(
   }
 
   if (!response.ok) {
-    const errorBody = body as {
-      message?: string;
-      detail?: string;
-      errors?: Record<string, string[]>;
-    };
+    const { message, details } = normalizeErrorBody(body, `HTTP ${response.status}`);
     throw new ApiError(
       response.status,
-      errorBody.message ?? errorBody.detail ?? `HTTP ${response.status}`,
-      errorBody.errors
+      message,
+      details
     );
   }
 

@@ -2,17 +2,49 @@
 
 import * as React from "react";
 import { LogOut, ShieldCheck, UserRound } from "lucide-react";
+import { userApi } from "@/services/user.api";
 import { useAuthStore } from "@/stores/auth.store";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import { Input } from "@/components/ui/Input";
+import type { UserProfile } from "@/types/user.types";
 
 export default function ProfileSettingsPage() {
   const { user, logout } = useAuthStore();
+  const [profile, setProfile] = React.useState<UserProfile | null>(null);
   const [displayName, setDisplayName] = React.useState(user?.displayName || "");
+  const [isLoading, setIsLoading] = React.useState(true);
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
   const [errors, setErrors] = React.useState<Record<string, string>>({});
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function loadProfile() {
+      setIsLoading(true);
+      setErrors({});
+      try {
+        const currentProfile = await userApi.getProfile();
+        if (!isMounted) return;
+        setProfile(currentProfile);
+        setDisplayName(currentProfile.displayName || "");
+      } catch (error) {
+        if (!isMounted) return;
+        setErrors({ general: getErrorMessage(error, "Failed to load profile") });
+      } finally {
+        if (isMounted) {
+          setIsLoading(false);
+        }
+      }
+    }
+
+    loadProfile();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   const validateForm = () => {
     const newErrors: Record<string, string> = {};
@@ -36,17 +68,35 @@ export default function ProfileSettingsPage() {
 
     setIsSaving(true);
     setSaveSuccess(false);
+    setErrors({});
 
     try {
-      await new Promise((resolve) => setTimeout(resolve, 800));
+      const updatedProfile = await userApi.updateProfile({
+        displayName: displayName.trim(),
+      });
+      setProfile(updatedProfile);
+      setDisplayName(updatedProfile.displayName || "");
+      if (user) {
+        useAuthStore.setState({
+          user: {
+            ...user,
+            displayName: updatedProfile.displayName,
+            avatarUrl: updatedProfile.avatarUrl,
+          },
+        });
+      }
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
-    } catch {
-      setErrors({ general: "Failed to save profile" });
+    } catch (error) {
+      setErrors({ general: getErrorMessage(error, "Failed to save profile") });
     } finally {
       setIsSaving(false);
     }
   };
+
+  const email = profile?.email ?? user?.email;
+  const createdAt = profile?.createdAt ?? user?.createdAt;
+  const savedDisplayName = profile?.displayName ?? user?.displayName ?? "";
 
   return (
     <div className="max-w-3xl space-y-6">
@@ -73,7 +123,7 @@ export default function ProfileSettingsPage() {
           <div>
             <label className="text-sm font-medium text-text-primary">Email address</label>
             <div className="mt-2 rounded-2xl border border-white/10 bg-white/[0.035] p-3 text-sm font-light text-text-secondary">
-              {user?.email || "Not available"}
+              {isLoading ? "Loading..." : email || "Not available"}
             </div>
             <p className="mt-2 text-xs text-text-muted">
               Contact support if you need to change this email.
@@ -117,7 +167,7 @@ export default function ProfileSettingsPage() {
         <Button
           type="button"
           onClick={handleSave}
-          disabled={isSaving || displayName === user?.displayName}
+          disabled={isLoading || isSaving || displayName.trim() === savedDisplayName}
           variant="session"
           className="mt-6 rounded-full px-6 disabled:cursor-not-allowed disabled:opacity-50"
         >
@@ -135,7 +185,7 @@ export default function ProfileSettingsPage() {
             <div className="flex items-center justify-between border-b border-white/10 pb-3">
               <span>Member since</span>
               <span className="font-medium text-text-primary">
-                {user?.createdAt ? new Date(user.createdAt).toLocaleDateString() : "Not available"}
+                {createdAt ? new Date(createdAt).toLocaleDateString() : "Not available"}
               </span>
             </div>
             <div className="flex items-center justify-between">
@@ -168,4 +218,8 @@ export default function ProfileSettingsPage() {
       </div>
     </div>
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }

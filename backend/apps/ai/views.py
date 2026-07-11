@@ -71,6 +71,8 @@ def get_or_create_summary(document, mode):
         defaults={
             "content": build_summary_content(document, mode),
             "status": DocumentSummary.Status.COMPLETED,
+            "source": "rule_based_fallback",
+            "provider": "rule_based",
             "generated_at": timezone.now(),
         },
     )
@@ -86,8 +88,11 @@ def create_fallback_flashcard_deck(document, quantity=5, difficulty="medium", pa
         document=document,
         title=f"{document.original_name} review",
         quantity=len(chunks),
+        generated_quantity=len(chunks),
         difficulty=difficulty,
         page_range=page_range or {},
+        provider="rule_based",
+        prompt_version="rule_based_v1",
     )
     cards = [
         Flashcard(

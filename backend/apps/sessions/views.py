@@ -11,7 +11,7 @@ from apps.ai.services import (
     SessionInsightValidationError,
 )
 from apps.scoring.realtime_score_service import RealtimeScoreService
-from apps.tracking.models import WarningCycle, WarningEvent
+from apps.tracking.models import BrowserEvent, WarningCycle, WarningEvent
 
 from .models import FocusSession, GoalTemplate, SessionNote, SessionTag
 from .serializers import (
@@ -318,15 +318,88 @@ class SessionSummaryView(GenericAPIView):
             raise ValidationError("A summary is available after the session is completed.")
         target_minutes = max(1, session.target_duration_seconds // 60)
         score_breakdown, score_metadata = get_score_breakdown(session)
+        insight = SessionInsight.objects.filter(session=session).first()
+        warnings = list(
+            WarningEvent.objects.filter(session_id=session.id)
+            .select_related("warning_cycle")
+            .order_by("created_at")
+        )
+        browser_events = list(
+            BrowserEvent.objects.filter(session_id=session.id).order_by("created_at")
+        )
+        distraction_events = [
+            {
+                "id": warning.id,
+                "sessionId": session.id,
+                "warningLevel": warning.warning_level,
+                "domain": warning.domain,
+                "triggeredAt": warning.created_at,
+                "resolved": (
+                    warning.warning_cycle is not None
+                    and warning.warning_cycle.status
+                    in {
+                        WarningCycle.Status.RESOLVED,
+                        WarningCycle.Status.COMPLETED,
+                        WarningCycle.Status.CANCELLED,
+                    }
+                ),
+                "warningType": warning.warning_type,
+                "reasonCodes": warning.reason_codes,
+            }
+            for warning in warnings
+        ]
+        warning_log = [
+            {
+                "id": warning.id,
+                "level": warning.warning_level,
+                "type": warning.warning_type,
+                "domain": warning.domain,
+                "decisionState": warning.decision_state,
+                "decisionSource": warning.decision_source,
+                "decisionScore": warning.decision_score,
+                "reasonCodes": warning.reason_codes,
+                "autoPauseRequired": warning.auto_pause_required,
+                "triggeredAt": warning.created_at,
+            }
+            for warning in warnings
+        ]
+        domain_counts = {}
+        for event in browser_events:
+            if event.domain:
+                domain_counts[event.domain] = domain_counts.get(event.domain, 0) + 1
+        top_domains = [
+            {"domain": domain, "eventCount": count}
+            for domain, count in sorted(
+                domain_counts.items(),
+                key=lambda item: (-item[1], item[0]),
+            )[:5]
+        ]
+        recommendation = f"Try another {target_minutes}-minute session."
+        if warnings:
+            recommendation = "Review the top warning domains before your next session."
+        elif insight and insight.observations:
+            recommendation = insight.observations[0]
         data = {
             "session": session,
             "scoreBreakdown": score_breakdown,
             "scoreMetadata": score_metadata,
-            "aiInsights": [],
-            "distractionEvents": [],
-            "warningLog": [],
-            "recommendation": f"Try another {target_minutes}-minute session.",
-            "isAiInsightReady": False,
+            "aiInsights": insight.observations if insight and insight.observations else [],
+            "distractionEvents": distraction_events,
+            "warningLog": warning_log,
+            "topDistractionDomains": top_domains,
+            "browserEventCount": len(browser_events),
+            "recommendation": recommendation,
+            "isAiInsightReady": bool(
+                insight and insight.status == SessionInsight.Status.COMPLETED
+            ),
+            "aiInsightStatus": (
+                insight.status if insight else SessionInsight.Status.PENDING
+            ),
+            "aiInsightSource": insight.source if insight and insight.source else None,
+            "aiInsightErrorCode": (
+                insight.error_code if insight and insight.error_code else None
+            ),
+            "aiInsightGeneratedAt": insight.generated_at if insight else None,
         }
         return Response(SessionSummarySerializer(data).data)
 

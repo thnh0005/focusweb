@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+from celery.schedules import crontab
 from django.core.exceptions import ImproperlyConfigured
 from dotenv import load_dotenv
 
@@ -32,7 +33,7 @@ def env_int(name, default):
         return default
 
 
-DEBUG = env_bool("DJANGO_DEBUG", False)
+DEBUG = env_bool("DJANGO_DEBUG", env_bool("DEBUG", False))
 
 SECRET_KEY = os.getenv("DJANGO_SECRET_KEY")
 if not SECRET_KEY:
@@ -40,12 +41,29 @@ if not SECRET_KEY:
         "DJANGO_SECRET_KEY is required. Set it in the environment or backend/.env."
     )
 
-ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
+ALLOWED_HOSTS = env_list(
+    "DJANGO_ALLOWED_HOSTS",
+    os.getenv("ALLOWED_HOSTS", "localhost,127.0.0.1"),
+)
 
 FRONTEND_URL = os.getenv("FRONTEND_URL", "http://localhost:3000")
-FRONTEND_URLS = env_list(
-    "FRONTEND_URLS",
-    f"{FRONTEND_URL},http://127.0.0.1:3000",
+FRONTEND_URLS_DEFAULT = os.getenv(
+    "FRONTEND_ORIGINS",
+    os.getenv("CORS_ALLOWED_ORIGINS", f"{FRONTEND_URL},http://127.0.0.1:3000"),
+)
+FRONTEND_URLS = env_list("FRONTEND_URLS", FRONTEND_URLS_DEFAULT)
+if FRONTEND_URL not in FRONTEND_URLS:
+    FRONTEND_URLS.insert(0, FRONTEND_URL)
+EXTENSION_ALLOWED_ORIGINS = env_list("EXTENSION_ALLOWED_ORIGINS")
+CSRF_EXTRA_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS")
+TRUSTED_CLIENT_ORIGINS = list(
+    dict.fromkeys(
+        [
+            *FRONTEND_URLS,
+            *EXTENSION_ALLOWED_ORIGINS,
+            *CSRF_EXTRA_TRUSTED_ORIGINS,
+        ]
+    )
 )
 
 
@@ -135,6 +153,7 @@ AI_MAX_RETRIES = env_int("AI_MAX_RETRIES", 1)
 AI_RETRY_BACKOFF_SECONDS = env_int("AI_RETRY_BACKOFF_SECONDS", 1)
 AI_CIRCUIT_FAILURE_THRESHOLD = env_int("AI_CIRCUIT_FAILURE_THRESHOLD", 5)
 AI_CIRCUIT_COOLDOWN_SECONDS = env_int("AI_CIRCUIT_COOLDOWN_SECONDS", 60)
+AI_SEMANTIC_REALTIME_ENABLED = env_bool("AI_SEMANTIC_REALTIME_ENABLED", False)
 SESSION_INSIGHT_TASK_MAX_RETRIES = env_int(
     "SESSION_INSIGHT_TASK_MAX_RETRIES",
     env_int("AI_INSIGHT_MAX_RETRIES", 2),
@@ -149,6 +168,10 @@ SESSION_INSIGHT_MANUAL_RETRY_LIMIT = env_int("SESSION_INSIGHT_MANUAL_RETRY_LIMIT
 SESSION_INSIGHT_STALE_PROCESSING_SECONDS = env_int(
     "SESSION_INSIGHT_STALE_PROCESSING_SECONDS",
     900,
+)
+ACCOUNT_DELETION_STATUS_TOKEN_TTL_HOURS = env_int(
+    "ACCOUNT_DELETION_STATUS_TOKEN_TTL_HOURS",
+    24,
 )
 
 REALTIME_SCORE_WINDOW_SECONDS = env_int("REALTIME_SCORE_WINDOW_SECONDS", 300)
@@ -233,6 +256,48 @@ CACHES = {
 
 CELERY_BROKER_URL = os.getenv("CELERY_BROKER_URL", "redis://localhost:6379/0")
 CELERY_RESULT_BACKEND = os.getenv("CELERY_RESULT_BACKEND", "redis://localhost:6379/1")
+CELERY_TIMEZONE = os.getenv("CELERY_TIMEZONE", "UTC")
+CELERY_BEAT_SCHEDULE = {
+    "process-daily-session-reminders": {
+        "task": "apps.notifications.tasks.process_daily_session_reminders",
+        "schedule": crontab(minute=os.getenv("CELERY_REMINDERS_MINUTE", "*/30")),
+    },
+    "process-weekly-summary-notifications": {
+        "task": "apps.notifications.tasks.process_weekly_summary_notifications",
+        "schedule": crontab(
+            minute=os.getenv("CELERY_WEEKLY_SUMMARY_MINUTE", "0"),
+            hour=os.getenv("CELERY_WEEKLY_SUMMARY_HOUR", "9"),
+            day_of_week=os.getenv("CELERY_WEEKLY_SUMMARY_DAY_OF_WEEK", "mon"),
+        ),
+    },
+    "process-deep-work-suggestions": {
+        "task": "apps.notifications.tasks.process_deep_work_suggestions",
+        "schedule": crontab(
+            minute=os.getenv("CELERY_DEEP_WORK_SUGGESTIONS_MINUTE", "*/30")
+        ),
+    },
+    "cleanup-expired-report-exports": {
+        "task": "apps.analytics.tasks.cleanup_expired_report_exports_task",
+        "schedule": crontab(
+            minute=os.getenv("CELERY_EXPORT_CLEANUP_MINUTE", "15"),
+            hour=os.getenv("CELERY_EXPORT_CLEANUP_HOUR", "3"),
+        ),
+    },
+    "cleanup-expired-account-exports": {
+        "task": "apps.users.tasks.cleanup_expired_account_exports_task",
+        "schedule": crontab(
+            minute=os.getenv("CELERY_ACCOUNT_EXPORT_CLEANUP_MINUTE", "45"),
+            hour=os.getenv("CELERY_ACCOUNT_EXPORT_CLEANUP_HOUR", "3"),
+        ),
+    },
+    "cleanup-expired-account-deletion-receipts": {
+        "task": "apps.users.tasks.cleanup_expired_account_deletion_receipts_task",
+        "schedule": crontab(
+            minute=os.getenv("CELERY_ACCOUNT_DELETION_RECEIPT_CLEANUP_MINUTE", "0"),
+            hour=os.getenv("CELERY_ACCOUNT_DELETION_RECEIPT_CLEANUP_HOUR", "4"),
+        ),
+    },
+}
 
 
 AUTH_PASSWORD_VALIDATORS = [
@@ -261,6 +326,7 @@ USE_TZ = True
 
 
 STATIC_URL = "static/"
+STATIC_ROOT = os.getenv("STATIC_ROOT", BASE_DIR / "staticfiles")
 
 MEDIA_URL = os.getenv("MEDIA_URL", "/media/")
 MEDIA_ROOT = os.getenv("MEDIA_ROOT", BASE_DIR / "media")
@@ -269,10 +335,10 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 AUTH_USER_MODEL = "users.User"
 
-CORS_ALLOWED_ORIGINS = FRONTEND_URLS
+CORS_ALLOWED_ORIGINS = TRUSTED_CLIENT_ORIGINS
 CORS_ALLOW_CREDENTIALS = True
 
-CSRF_TRUSTED_ORIGINS = FRONTEND_URLS
+CSRF_TRUSTED_ORIGINS = TRUSTED_CLIENT_ORIGINS
 
 SESSION_COOKIE_HTTPONLY = True
 SESSION_COOKIE_SAMESITE = "Lax"

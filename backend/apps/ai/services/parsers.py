@@ -104,3 +104,104 @@ class SessionInsightResponseParser:
         if not isinstance(content, dict):
             raise AIInvalidResponse("AI response must be JSON text or object.")
         return content
+
+
+class SessionEndAnalysisResponseParser:
+    ALLOWED_FOCUS_LEVELS = {"EXCELLENT", "GOOD", "FAIR", "POOR"}
+    ALLOWED_SEVERITIES = {"LOW", "MEDIUM", "HIGH"}
+    MAX_ITEMS = 8
+    MAX_TEXT_LENGTH = 240
+
+    def parse(self, content) -> dict:
+        payload = self.parse_payload(content)
+
+        score = round(clamp_number(payload.get("focus_score"), 0, 100, 0))
+        focus_level = str(payload.get("focus_level") or "").strip().upper()
+        if focus_level not in self.ALLOWED_FOCUS_LEVELS:
+            focus_level = self.focus_level_for_score(score)
+
+        summary = self.truncate(payload.get("summary"), self.MAX_TEXT_LENGTH)
+        if not summary:
+            summary = "The session was completed with focus signals recorded."
+
+        main_distractions = []
+        for item in self.ensure_list(payload.get("main_distractions")):
+            if not isinstance(item, dict):
+                continue
+            severity = str(item.get("severity") or "").strip().upper()
+            if severity not in self.ALLOWED_SEVERITIES:
+                severity = "LOW"
+            domain = self.truncate(item.get("domain"), 120)
+            reason = self.truncate(item.get("reason"), self.MAX_TEXT_LENGTH)
+            if domain or reason:
+                main_distractions.append(
+                    {
+                        "domain": domain,
+                        "reason": reason,
+                        "severity": severity,
+                    }
+                )
+            if len(main_distractions) >= self.MAX_ITEMS:
+                break
+
+        tab_switch_payload = payload.get("tab_switch_analysis")
+        if not isinstance(tab_switch_payload, dict):
+            tab_switch_payload = {}
+        total_switches = round(
+            clamp_number(tab_switch_payload.get("total_switches"), 0, 100000, 0)
+        )
+        tab_switch_analysis = {
+            "total_switches": total_switches,
+            "assessment": self.truncate(
+                tab_switch_payload.get("assessment"),
+                self.MAX_TEXT_LENGTH,
+            ),
+        }
+
+        return {
+            "focus_score": score,
+            "focus_level": focus_level,
+            "summary": summary,
+            "main_distractions": main_distractions,
+            "productive_sites": self.clean_string_list(payload.get("productive_sites")),
+            "tab_switch_analysis": tab_switch_analysis,
+            "timeline_observations": self.clean_string_list(
+                payload.get("timeline_observations")
+            ),
+            "recommendations": self.clean_string_list(payload.get("recommendations")),
+        }
+
+    def parse_payload(self, content) -> dict:
+        return (
+            SemanticAIResponseParser().parse_json_text(content)
+            if isinstance(content, str)
+            else SessionInsightResponseParser.validate_object(content)
+        )
+
+    def clean_string_list(self, value) -> list[str]:
+        cleaned = []
+        for item in self.ensure_list(value):
+            text = self.truncate(item, self.MAX_TEXT_LENGTH)
+            if text:
+                cleaned.append(text)
+            if len(cleaned) >= self.MAX_ITEMS:
+                break
+        return cleaned
+
+    @staticmethod
+    def ensure_list(value) -> list:
+        return value if isinstance(value, list) else []
+
+    @staticmethod
+    def truncate(value, limit: int) -> str:
+        return str(value or "").replace("\n", " ").replace("\r", " ").strip()[:limit]
+
+    @staticmethod
+    def focus_level_for_score(score: int) -> str:
+        if score >= 85:
+            return "EXCELLENT"
+        if score >= 70:
+            return "GOOD"
+        if score >= 50:
+            return "FAIR"
+        return "POOR"

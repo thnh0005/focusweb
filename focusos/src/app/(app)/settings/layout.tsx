@@ -10,6 +10,7 @@ import {
   FileText,
   ListX,
   Puzzle,
+  ShieldCheck,
   SlidersHorizontal,
   UserRound,
 } from "lucide-react";
@@ -21,6 +22,7 @@ const SETTINGS_SECTIONS = [
     category: "Account",
     items: [
       { label: "Profile", href: "/settings/profile", icon: UserRound, hint: "Identity" },
+      { label: "Account", href: "/settings/account", icon: ShieldCheck, hint: "Data & deletion" },
       { label: "Preferences", href: "/settings/preferences", icon: SlidersHorizontal, hint: "Defaults" },
     ],
   },

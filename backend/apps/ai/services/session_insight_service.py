@@ -1,3 +1,4 @@
+from collections import Counter, defaultdict
 from datetime import timedelta
 
 from django.conf import settings
@@ -26,6 +27,7 @@ from .exceptions import (
 )
 from .observability import log_ai_event
 from .parsers import SessionInsightResponseParser
+from .parsers import SessionEndAnalysisResponseParser
 from .prompt_builder import PromptBuilder
 
 
@@ -53,11 +55,22 @@ class SessionInsightValidationError(Exception):
 
 
 class SessionInsightDataAggregator:
+    TOP_DOMAIN_LIMIT = 10
+    TOP_TITLE_LIMIT = 20
+
     def aggregate(self, session: FocusSession) -> dict:
         events = list(
             BrowserEvent.objects.filter(session_id=session.id)
             .order_by("created_at")
-            .values("active_seconds", "idle_seconds", "tab_switch_count")
+            .values(
+                "event_type",
+                "domain",
+                "page_title",
+                "active_seconds",
+                "idle_seconds",
+                "tab_switch_count",
+                "created_at",
+            )
         )
         event_stats = BrowserEvent.objects.filter(session_id=session.id).aggregate(
             event_count=Count("id"),
@@ -67,13 +80,29 @@ class SessionInsightDataAggregator:
             events,
             "tab_switch_count",
         )
-        warning_count = WarningEvent.objects.filter(session_id=session.id).count()
+        warnings = list(
+            WarningEvent.objects.filter(session_id=session.id)
+            .order_by("created_at")
+            .values(
+                "warning_type",
+                "warning_level",
+                "decision_state",
+                "decision_score",
+                "reason_codes",
+                "domain",
+                "created_at",
+            )
+        )
+        warning_count = len(warnings)
         focus_score = self.serialize_focus_score(session)
         relevance_stats = self.relevance_stats(session)
         decision_stats = self.decision_stats(session)
+        domain_stats = self.domain_stats(events)
+        warning_summary = self.warning_summary(warnings)
 
         return {
             "session": {
+                "id": str(session.id),
                 "mode": session.mode,
                 "goal": session.goal,
                 "target_duration_minutes": self.seconds_to_minutes(
@@ -90,11 +119,25 @@ class SessionInsightDataAggregator:
                 "tab_switch_count": tab_switch_count,
                 "total_idle_seconds": event_stats["total_idle_seconds"] or 0,
                 "warning_count": warning_count,
+                "blacklist_hit_count": warning_summary["blacklist_hit_count"],
+                "unique_domain_count": len(domain_stats["unique_domains"]),
+                "repeated_rapid_switches": self.repeated_rapid_switches(events),
+                "longest_focused_streak_seconds": self.longest_focused_streak(events),
                 "distracted_event_count": relevance_stats["distracted_event_count"],
                 "potentially_distracted_event_count": relevance_stats[
                     "potentially_distracted_event_count"
                 ],
             },
+            "domains": {
+                "unique_domains": domain_stats["unique_domains"][: self.TOP_DOMAIN_LIMIT],
+                "top_domains": domain_stats["top_domains"],
+                "top_page_titles": domain_stats["top_page_titles"],
+                "productive_looking_domains": relevance_stats[
+                    "productive_looking_domains"
+                ],
+                "unknown_or_neutral_domains": domain_stats["top_domains"],
+            },
+            "warnings": warning_summary,
             "trends": {
                 "average_relevance_score": relevance_stats[
                     "average_relevance_score"
@@ -175,6 +218,14 @@ class SessionInsightDataAggregator:
                 AIAnalysisResult.FocusState.POTENTIALLY_DISTRACTED,
                 0,
             ),
+            "productive_looking_domains": list(
+                analyses.filter(
+                    focus_state=AIAnalysisResult.FocusState.FOCUSED,
+                )
+                .exclude(domain="")
+                .values_list("domain", flat=True)
+                .distinct()[: self.TOP_DOMAIN_LIMIT]
+            ),
         }
 
     def decision_stats(self, session: FocusSession) -> dict:
@@ -191,6 +242,102 @@ class SessionInsightDataAggregator:
             ),
         }
 
+    def domain_stats(self, events: list[dict]) -> dict:
+        domain_counts = Counter()
+        domain_seconds = defaultdict(int)
+        title_counts = Counter()
+        for event in events:
+            domain = str(event.get("domain") or "").strip().lower()[:255]
+            if domain:
+                domain_counts[domain] += 1
+                domain_seconds[domain] += int(max(0, event.get("active_seconds") or 0))
+            title = str(event.get("page_title") or "").strip()[:120]
+            if title:
+                title_counts[title] += 1
+
+        top_domains = [
+            {
+                "domain": domain,
+                "event_count": count,
+                "active_seconds": domain_seconds[domain],
+            }
+            for domain, count in sorted(
+                domain_counts.items(),
+                key=lambda item: (-domain_seconds[item[0]], -item[1], item[0]),
+            )[: self.TOP_DOMAIN_LIMIT]
+        ]
+        top_titles = [
+            {"title": title, "event_count": count}
+            for title, count in title_counts.most_common(self.TOP_TITLE_LIMIT)
+        ]
+        return {
+            "unique_domains": sorted(domain_counts),
+            "top_domains": top_domains,
+            "top_page_titles": top_titles,
+        }
+
+    def warning_summary(self, warnings: list[dict]) -> dict:
+        blacklist_types = {
+            WarningEvent.WarningType.NORMAL_BLACKLIST,
+            WarningEvent.WarningType.DEEP_WORK_AI,
+        }
+        domain_counts = Counter()
+        domain_levels = defaultdict(list)
+        blacklist_hit_count = 0
+        for warning in warnings:
+            domain = str(warning.get("domain") or "").strip().lower()[:255]
+            reason_codes = warning.get("reason_codes") or []
+            is_blacklist = (
+                warning.get("warning_type") in blacklist_types
+                or any(str(code).startswith("BLACKLIST") for code in reason_codes)
+            )
+            if is_blacklist:
+                blacklist_hit_count += 1
+                if domain:
+                    domain_counts[domain] += 1
+                    domain_levels[domain].append(warning.get("warning_level") or 1)
+
+        blacklisted_domains = [
+            {
+                "domain": domain,
+                "count": count,
+                "max_warning_level": max(domain_levels[domain] or [1]),
+            }
+            for domain, count in domain_counts.most_common(self.TOP_DOMAIN_LIMIT)
+        ]
+        return {
+            "total_warnings": len(warnings),
+            "blacklist_hit_count": blacklist_hit_count,
+            "blacklisted_domains": blacklisted_domains,
+        }
+
+    @staticmethod
+    def repeated_rapid_switches(events: list[dict]) -> dict:
+        rapid_events = [
+            event for event in events if int(event.get("tab_switch_count") or 0) >= 5
+        ]
+        return {
+            "event_count": len(rapid_events),
+            "total_switches": sum(
+                int(event.get("tab_switch_count") or 0) for event in rapid_events
+            ),
+        }
+
+    @staticmethod
+    def longest_focused_streak(events: list[dict]) -> int:
+        longest = 0
+        current = 0
+        for event in events:
+            active_seconds = int(max(0, event.get("active_seconds") or 0))
+            idle_seconds = int(max(0, event.get("idle_seconds") or 0))
+            tab_switches = int(max(0, event.get("tab_switch_count") or 0))
+            if active_seconds and idle_seconds < 60 and tab_switches < 5:
+                current += active_seconds
+                longest = max(longest, current)
+            else:
+                current = 0
+        return longest
+
     @staticmethod
     def seconds_to_minutes(seconds) -> int:
         return round(max(0, int(seconds or 0)) / 60)
@@ -201,55 +348,91 @@ class SessionInsightDataAggregator:
 
 
 class RuleBasedSessionInsightFallback:
-    MAX_OBSERVATIONS = 4
+    MAX_RECOMMENDATIONS = 4
 
-    def build(self, payload: dict) -> list[str]:
+    def build(self, payload: dict) -> dict:
         focus = payload.get("focus_score") or {}
         behavior = payload.get("behavior") or {}
         session = payload.get("session") or {}
-        observations = []
+        warnings = payload.get("warnings") or {}
+        domains = payload.get("domains") or {}
+        recommendations = []
 
         relevance = focus.get("content_relevance")
         if relevance is None:
             relevance = (payload.get("trends") or {}).get("average_relevance_score")
         if relevance is not None and relevance >= 75:
-            observations.append(
-                "The viewed content generally stayed aligned with the session goal.",
-            )
+            summary = "The viewed content generally stayed aligned with the session goal."
         elif relevance is not None and relevance < 50:
-            observations.append(
-                "Some content during the session was not closely related to the stated goal.",
-            )
+            summary = "Some session signals suggest parts of the browsing activity were not closely related to the stated goal."
+            recommendations.append("Review the main distraction domains before the next session.")
+        else:
+            summary = "The session was completed with the available focus metrics recorded."
 
         continuity = focus.get("focus_continuity")
         if continuity is not None and continuity < 60:
-            observations.append(
+            recommendations.append(
                 "The session included some interruption or idle time that may have affected continuity.",
             )
 
         tab_stability = focus.get("tab_stability")
         if tab_stability is not None and tab_stability < 70:
-            observations.append(
+            recommendations.append(
                 "Tab switching was relatively frequent during the session.",
             )
 
         if behavior.get("warning_count", 0) >= 2:
-            observations.append(
+            recommendations.append(
                 "The session recorded multiple focus warnings.",
             )
 
         target = session.get("target_duration_minutes") or 0
         actual = session.get("actual_duration_minutes") or 0
         if target > 0 and actual < target * 0.75:
-            observations.append(
+            recommendations.append(
                 "The session ended notably earlier than the planned duration.",
             )
 
-        if not observations:
-            observations.append(
-                "The session was completed with the available focus metrics recorded.",
-            )
-        return observations[: self.MAX_OBSERVATIONS]
+        score = focus.get("overall")
+        if score is None:
+            score = 0
+        score = round(max(0, min(100, float(score))))
+
+        top_distractions = [
+            {
+                "domain": item.get("domain", ""),
+                "reason": "This domain triggered a rule-based warning.",
+                "severity": "HIGH" if item.get("max_warning_level", 1) >= 2 else "MEDIUM",
+            }
+            for item in (warnings.get("blacklisted_domains") or [])[:3]
+        ]
+        if not top_distractions:
+            top_distractions = [
+                {
+                    "domain": item.get("domain", ""),
+                    "reason": "This was one of the most frequent domains in the session.",
+                    "severity": "LOW",
+                }
+                for item in (domains.get("top_domains") or [])[:3]
+            ]
+
+        return {
+            "focus_score": score,
+            "focus_level": SessionEndAnalysisResponseParser.focus_level_for_score(score),
+            "summary": summary,
+            "main_distractions": top_distractions,
+            "productive_sites": domains.get("productive_looking_domains") or [],
+            "tab_switch_analysis": {
+                "total_switches": behavior.get("tab_switch_count", 0),
+                "assessment": (
+                    "Tab switching was frequent."
+                    if (behavior.get("tab_switch_count") or 0) >= 10
+                    else "Tab switching stayed within the available rule-based baseline."
+                ),
+            },
+            "timeline_observations": [],
+            "recommendations": recommendations[: self.MAX_RECOMMENDATIONS],
+        }
 
 
 class SessionInsightService:
@@ -259,13 +442,13 @@ class SessionInsightService:
         self,
         client: AIClient | None = None,
         prompt_builder: PromptBuilder | None = None,
-        parser: SessionInsightResponseParser | None = None,
+        parser: SessionEndAnalysisResponseParser | None = None,
         aggregator: SessionInsightDataAggregator | None = None,
         fallback: RuleBasedSessionInsightFallback | None = None,
     ):
         self.client = client or AIClient(max_retries=0)
         self.prompt_builder = prompt_builder or PromptBuilder()
-        self.parser = parser or SessionInsightResponseParser()
+        self.parser = parser or SessionEndAnalysisResponseParser()
         self.aggregator = aggregator or SessionInsightDataAggregator()
         self.fallback = fallback or RuleBasedSessionInsightFallback()
 
@@ -293,7 +476,9 @@ class SessionInsightService:
 
         payload = self.aggregator.aggregate(session)
         try:
-            observations, model_name = self.generate_ai_observations(payload)
+            analysis, model_name = self.generate_ai_analysis(payload)
+            observations = self.observations_from_analysis(analysis)
+            self.save_analysis_metadata(session, analysis, source=SessionInsight.Source.AI)
             self.mark_completed(
                 insight,
                 observations=observations,
@@ -316,8 +501,14 @@ class SessionInsightService:
         ) as exc:
             self.complete_with_fallback(insight, payload, exc)
         except Exception as exc:
-            observations = self.fallback.build(payload)
+            analysis = self.fallback.build(payload)
+            observations = self.observations_from_analysis(analysis)
             if observations:
+                self.save_analysis_metadata(
+                    session,
+                    analysis,
+                    source=SessionInsight.Source.RULE_BASED_FALLBACK,
+                )
                 self.mark_completed(
                     insight,
                     observations=observations,
@@ -335,7 +526,7 @@ class SessionInsightService:
             return self.serialize(insight)
         return self.serialize(insight)
 
-    def generate_ai_observations(self, payload: dict) -> tuple[list[str], str]:
+    def generate_ai_analysis(self, payload: dict) -> tuple[dict, str]:
         system_prompt, user_prompt = self.prompt_builder.build_session_insight_messages(
             payload,
         )
@@ -441,7 +632,9 @@ class SessionInsightService:
         payload: dict,
         exc: Exception,
     ):
-        observations = self.fallback.build(payload)
+        session = insight.session
+        analysis = self.fallback.build(payload)
+        observations = self.observations_from_analysis(analysis)
         if observations:
             log_ai_event(
                 "ai_session_insight_fallback",
@@ -451,6 +644,11 @@ class SessionInsightService:
                 error_code=self.error_code_for_exception(exc),
                 retryable=getattr(exc, "retryable", False),
                 fallback_applied=True,
+            )
+            self.save_analysis_metadata(
+                session,
+                analysis,
+                source=SessionInsight.Source.RULE_BASED_FALLBACK,
             )
             self.mark_completed(
                 insight,
@@ -518,6 +716,47 @@ class SessionInsightService:
                 ],
             )
             insight.refresh_from_db()
+
+    @staticmethod
+    def observations_from_analysis(analysis: dict) -> list[str]:
+        observations = []
+        summary = str(analysis.get("summary") or "").strip()
+        if summary:
+            observations.append(summary[:240])
+        tab_assessment = (
+            (analysis.get("tab_switch_analysis") or {}).get("assessment") or ""
+        ).strip()
+        if tab_assessment:
+            observations.append(tab_assessment[:240])
+        for item in analysis.get("timeline_observations") or []:
+            text = str(item or "").strip()
+            if text:
+                observations.append(text[:240])
+            if len(observations) >= 4:
+                break
+        for item in analysis.get("recommendations") or []:
+            text = str(item or "").strip()
+            if text:
+                observations.append(text[:240])
+            if len(observations) >= 4:
+                break
+        return observations[:4]
+
+    @staticmethod
+    def save_analysis_metadata(session: FocusSession, analysis: dict, source: str):
+        score = FocusScore.objects.filter(session=session).first()
+        if score is None:
+            return
+        metadata = dict(score.metadata or {})
+        metadata["sessionEndAnalysis"] = {
+            "source": source,
+            "focusScore": analysis.get("focus_score"),
+            "focusLevel": analysis.get("focus_level"),
+            "mainDistractionCount": len(analysis.get("main_distractions") or []),
+            "recommendationCount": len(analysis.get("recommendations") or []),
+        }
+        score.metadata = metadata
+        score.save(update_fields=["metadata", "calculated_at"])
 
     def is_processing_stale(self, insight: SessionInsight) -> bool:
         if insight.status != SessionInsight.Status.PROCESSING or not insight.started_at:

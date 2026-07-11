@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { useAuthStore } from "@/stores/auth.store";
 import { AppLayout } from "@/components/layout/AppLayout";
 import { DashboardLayout } from "@/components/layout/DashboardLayout";
+import { ExtensionBridgeProvider } from "@/components/layout/ExtensionBridgeProvider";
 import { Spinner } from "@/components/ui/Spinner";
 
 export default function AuthenticatedLayout({
@@ -15,7 +16,7 @@ export default function AuthenticatedLayout({
   const pathname = usePathname();
   const router = useRouter();
   
-  const { isAuthenticated, isLoading, refreshUser } = useAuthStore();
+  const { isAuthenticated, isLoading, onboardingComplete, refreshUser } = useAuthStore();
   const [hasAttemptedRefresh, setHasAttemptedRefresh] = React.useState(false);
 
   // Client-side authentication protected route check
@@ -34,6 +35,12 @@ export default function AuthenticatedLayout({
 
     verifyAuth();
   }, [isAuthenticated, refreshUser, router]);
+
+  React.useEffect(() => {
+    if (hasAttemptedRefresh && isAuthenticated && !onboardingComplete) {
+      router.replace("/onboarding");
+    }
+  }, [hasAttemptedRefresh, isAuthenticated, onboardingComplete, router]);
 
   // If loading user info or checking cookie validity, show high-end Sanctuary Loader
   if (isLoading || (!isAuthenticated && !hasAttemptedRefresh)) {
@@ -71,6 +78,10 @@ export default function AuthenticatedLayout({
     return null;
   }
 
+  if (!onboardingComplete) {
+    return null;
+  }
+
   // Session, dashboard, settings, and AI documents are immersive routes that own their full viewport.
   const isSessionRoute = pathname.startsWith("/session");
   const isDashboardRoute = pathname === "/dashboard";
@@ -78,12 +89,14 @@ export default function AuthenticatedLayout({
   const isStudyToolsRoute = pathname.startsWith("/study-tools");
 
   if (isSessionRoute || isDashboardRoute || isSettingsRoute || isStudyToolsRoute) {
-    return <>{children}</>;
+    return <ExtensionBridgeProvider>{children}</ExtensionBridgeProvider>;
   }
 
   return (
-    <AppLayout>
-      <DashboardLayout>{children}</DashboardLayout>
-    </AppLayout>
+    <ExtensionBridgeProvider>
+      <AppLayout>
+        <DashboardLayout>{children}</DashboardLayout>
+      </AppLayout>
+    </ExtensionBridgeProvider>
   );
 }

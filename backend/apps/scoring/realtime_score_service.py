@@ -4,7 +4,7 @@ from django.conf import settings
 from django.utils import timezone
 
 from apps.ai.models import AIAnalysisResult
-from apps.tracking.models import BrowserEvent
+from apps.tracking.models import BrowserEvent, WarningCycle, WarningEvent
 
 from .realtime_score import (
     DECISION_DISTRACTED,
@@ -80,25 +80,61 @@ class RealtimeScoreService:
             for analysis in analyses
             if analysis["focus_state"] in self.AI_FOCUS_STATE_TO_DECISION_STATE
         ]
+        warnings = list(
+            WarningEvent.objects.filter(
+                session_id=session.id,
+                created_at__gte=window_start,
+                created_at__lte=now,
+            ).values(
+                "decision_score",
+                "warning_level",
+                "auto_pause_required",
+            )
+        )
+        active_warning_cycle_count = (
+            WarningCycle.objects.active()
+            .filter(session_id=session.id, started_at__lte=now)
+            .count()
+        )
+        distraction_scores = [
+            self.warning_control_score(warning) for warning in warnings
+        ]
+        distraction_scores = [
+            score for score in distraction_scores if score is not None
+        ]
+        if active_warning_cycle_count and not distraction_scores:
+            distraction_scores.extend([35] * active_warning_cycle_count)
         ai_status = "OK"
         ai_error_code = None
-        if events and not relevance_scores:
+        if events and not relevance_scores and not settings.AI_SEMANTIC_REALTIME_ENABLED:
+            ai_status = "DISABLED"
+            ai_error_code = "REALTIME_AI_DISABLED"
+        elif events and not relevance_scores:
             ai_status = "DEGRADED"
             ai_error_code = "AI_UNAVAILABLE"
         stale = self.is_stale(events, now)
+        source = (
+            "tracking_signals"
+            if events or warnings or active_warning_cycle_count or relevance_scores
+            else "insufficient_tracking"
+        )
         result = self.calculator.calculate(
             events=events,
             relevance_scores=relevance_scores,
             decision_states=decision_states,
+            distraction_scores=distraction_scores,
             stale=stale,
             ai_status=ai_status,
             ai_error_code=ai_error_code,
+            source=source,
         )
         result.update(
             {
                 "session_id": str(session.id),
                 "session_status": session.status,
                 "calculated_at": now,
+                "warning_count": len(warnings),
+                "active_warning_cycle_count": active_warning_cycle_count,
             }
         )
         return result
@@ -108,3 +144,17 @@ class RealtimeScoreService:
             return False
         latest = max(event["created_at"] for event in events)
         return (now - latest).total_seconds() > self.config.stale_seconds
+
+    @staticmethod
+    def warning_control_score(warning: dict) -> int | None:
+        decision_score = warning.get("decision_score")
+        if decision_score is not None:
+            return RealtimeScoreCalculator.clamp_int(100 - decision_score)
+
+        level = warning.get("warning_level")
+        if level is None:
+            return None
+        penalty = int(level) * 20
+        if warning.get("auto_pause_required"):
+            penalty += 20
+        return RealtimeScoreCalculator.clamp_int(100 - penalty)

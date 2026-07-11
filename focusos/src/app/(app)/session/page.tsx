@@ -9,7 +9,6 @@ import { SceneSwitcher } from "@/components/features/focus/SceneSwitcher";
 import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { sessionsApi } from "@/services/sessions.api";
-import { useHeartbeat } from "@/hooks/useHeartbeat";
 import { useExtensionStore } from "@/stores/extension.store";
 import { useSessionStore } from "@/stores/session.store";
 import { cn } from "@/lib/utils/cn";
@@ -38,9 +37,11 @@ export default function SessionConfigPage() {
   const [goal, setGoal] = React.useState<string>("");
   const [customDuration, setCustomDuration] = React.useState<string>("");
 
-  useHeartbeat();
-
-  const { data: templates } = useQuery({
+  const {
+    data: templates,
+    isError: templatesFailed,
+    isFetched: templatesFetched,
+  } = useQuery({
     queryKey: ["goal-templates"],
     queryFn: sessionsApi.getGoalTemplates,
     retry: false,
@@ -56,6 +57,7 @@ export default function SessionConfigPage() {
   const hasValidDuration = Number.isFinite(finalDuration) && finalDuration > 0;
   const requiresGoal = mode === "deep-work";
   const isValid = hasValidDuration && (!requiresGoal || goal.trim().length > 0);
+  const usingFallbackTemplates = !templates?.length;
   const templateLabels = templates?.length
     ? templates.map((template) => template.text)
     : fallbackTemplates;
@@ -181,6 +183,15 @@ export default function SessionConfigPage() {
                     </button>
                   ))}
                 </div>
+                {usingFallbackTemplates && (
+                  <p className="text-xs font-light text-text-muted">
+                    {templatesFailed
+                      ? "Using built-in goal examples because server templates could not load."
+                      : templatesFetched
+                        ? "No server templates yet. Showing built-in goal examples."
+                        : "Loading server goal templates..."}
+                  </p>
+                )}
               </div>
             )}
 

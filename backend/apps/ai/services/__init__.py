@@ -13,6 +13,7 @@ from .exceptions import (
 )
 from .parsers import (
     SemanticAIResponseParser,
+    SessionEndAnalysisResponseParser,
     SessionInsightResponseParser,
     classify_relevance,
 )
@@ -65,6 +66,7 @@ __all__ = [
     "FlashcardGenerationService",
     "FlashcardOutputValidator",
     "SemanticAIResponseParser",
+    "SessionEndAnalysisResponseParser",
     "SemanticAnalysisService",
     "SessionInsightConflict",
     "SessionInsightDataAggregator",

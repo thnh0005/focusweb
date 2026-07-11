@@ -19,13 +19,21 @@ export function useSession() {
 
   const [timeLeft, setTimeLeft] = React.useState<number>(0);
 
+  const getRemainingSeconds = React.useCallback(() => {
+    if (!activeSession) return 0;
+
+    const elapsedSeconds =
+      typeof activeSession.elapsedActiveSeconds === "number"
+        ? activeSession.elapsedActiveSeconds
+        : Math.floor((Date.now() - new Date(activeSession.startedAt).getTime()) / 1000);
+
+    return Math.max(0, activeSession.targetDurationSeconds - elapsedSeconds);
+  }, [activeSession]);
+
   // Initialize remaining time when activeSession starts
   React.useEffect(() => {
-    if (activeSession && sessionStatus === "active") {
-      // If we just started, calculate remaining seconds
-      const startedTime = new Date(activeSession.startedAt).getTime();
-      const elapsedSeconds = Math.floor((Date.now() - startedTime) / 1000);
-      const nextTimeLeft = Math.max(0, activeSession.targetDurationSeconds - elapsedSeconds);
+    if (activeSession) {
+      const nextTimeLeft = getRemainingSeconds();
       const timer = window.setTimeout(() => setTimeLeft(nextTimeLeft), 0);
       return () => window.clearTimeout(timer);
     }
@@ -34,7 +42,7 @@ export function useSession() {
       const timer = window.setTimeout(() => setTimeLeft(0), 0);
       return () => window.clearTimeout(timer);
     }
-  }, [activeSession, sessionStatus]);
+  }, [activeSession, getRemainingSeconds]);
 
   // Timer Tick Interval
   React.useEffect(() => {

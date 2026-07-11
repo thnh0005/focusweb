@@ -1,5 +1,9 @@
 import hashlib
+import hmac
+import secrets
+from datetime import timedelta
 
+from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.db import transaction
 from django.utils import timezone
@@ -8,12 +12,14 @@ from apps.ai.models import AIAnalysisResult
 from apps.analytics.models import ReportExportJob
 from apps.extension.models import ExtensionHeartbeat
 from apps.sessions.models import FocusSession
-from apps.tracking.models import BrowserEvent, EventBatch, WarningEvent
+from apps.tracking.models import BrowserEvent, EventBatch, WarningCycle, WarningEvent
 
 from .models import AccountDataExportJob, AccountDeletionJob
 
 
 DELETION_VERSION = "day26-v1"
+DELETION_STATUS_TOKEN_BYTES = 32
+DELETION_STATUS_TOKEN_HEADER = "HTTP_X_DELETION_STATUS_TOKEN"
 
 
 class AccountDeletionError(Exception):
@@ -32,6 +38,48 @@ def user_identifier_snapshot(user):
 
 def safe_error(message):
     return str(message or "Account deletion failed.")[:255]
+
+
+def deletion_status_token_ttl():
+    return timedelta(
+        hours=getattr(settings, "ACCOUNT_DELETION_STATUS_TOKEN_TTL_HOURS", 24)
+    )
+
+
+def generate_deletion_status_token():
+    return secrets.token_urlsafe(DELETION_STATUS_TOKEN_BYTES)
+
+
+def hash_deletion_status_token(token):
+    return hmac.new(
+        str(settings.SECRET_KEY).encode("utf-8"),
+        str(token).encode("utf-8"),
+        hashlib.sha256,
+    ).hexdigest()
+
+
+def verify_deletion_status_token(job, token, now=None):
+    if not token or not job.status_token_hash or not job.status_token_expires_at:
+        return False
+    now = now or timezone.now()
+    if job.status_token_expires_at <= now:
+        return False
+    candidate_hash = hash_deletion_status_token(token)
+    return hmac.compare_digest(candidate_hash, job.status_token_hash)
+
+
+def rotate_deletion_status_token(job):
+    token = generate_deletion_status_token()
+    job.status_token_hash = hash_deletion_status_token(token)
+    job.status_token_expires_at = timezone.now() + deletion_status_token_ttl()
+    job.save(
+        update_fields=[
+            "status_token_hash",
+            "status_token_expires_at",
+            "updated_at",
+        ]
+    )
+    return token
 
 
 def create_or_reuse_account_deletion_job(user, confirmed=False):
@@ -63,6 +111,17 @@ def create_or_reuse_account_deletion_job(user, confirmed=False):
             ),
             True,
         )
+
+
+def cleanup_expired_account_deletion_receipts(now=None):
+    now = now or timezone.now()
+    expired = AccountDeletionJob.objects.filter(
+        status_token_hash__gt="",
+        status_token_expires_at__lt=now,
+    )
+    count = expired.count()
+    expired.update(status_token_hash="", updated_at=now)
+    return count
 
 
 class SessionRevocationService:
@@ -216,6 +275,9 @@ class AccountDeletionService:
             session_id__in=session_ids
         ).delete()[0]
         counts["warning_events"] = WarningEvent.objects.filter(
+            session_id__in=session_ids
+        ).delete()[0]
+        counts["warning_cycles"] = WarningCycle.objects.filter(
             session_id__in=session_ids
         ).delete()[0]
         counts["ai_analysis_results"] = AIAnalysisResult.objects.filter(

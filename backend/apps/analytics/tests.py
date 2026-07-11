@@ -6,6 +6,7 @@ from rest_framework import status
 from rest_framework.test import APITestCase
 
 from apps.sessions.models import FocusSession, SessionTag
+from apps.tracking.models import WarningEvent
 
 from .models import ReportExportJob
 
@@ -58,6 +59,38 @@ class DashboardStatsApiTests(APITestCase):
         self.assertEqual(response.data["deepWorkSessionCount"], 1)
         self.assertEqual(response.data["completionRate"], 66.67)
         self.assertEqual(response.data["dateRange"], "7d")
+
+    def test_distraction_analytics_uses_real_warning_events_for_user_sessions(self):
+        user_session = self.create_session()
+        self.create_session()
+        other_session = self.create_session(user=self.other_user)
+        WarningEvent.objects.create(
+            session_id=user_session.id,
+            warning_level=2,
+            warning_type=WarningEvent.WarningType.DEEP_WORK_AI,
+            domain="youtube.com",
+        )
+        WarningEvent.objects.create(
+            session_id=user_session.id,
+            warning_level=1,
+            warning_type=WarningEvent.WarningType.TAB_SWITCH,
+            domain="youtube.com",
+        )
+        WarningEvent.objects.create(
+            session_id=other_session.id,
+            warning_level=3,
+            warning_type=WarningEvent.WarningType.DEEP_WORK_AI,
+            domain="private.example",
+        )
+
+        response = self.client.get("/api/analytics/distractions/?range=7d")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["totalWarnings"], 2)
+        self.assertEqual(response.data["averageWarningsPerSession"], 1.0)
+        self.assertEqual(response.data["topSources"][0]["domain"], "youtube.com")
+        self.assertEqual(response.data["topSources"][0]["warningCount"], 2)
+        self.assertEqual(response.data["topSources"][0]["severity"], "medium")
 
     def test_dashboard_overview_returns_week_2_mvp_metrics(self):
         self.create_session(actual_duration_seconds=1500, focus_score=75)

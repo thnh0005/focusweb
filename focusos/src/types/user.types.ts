@@ -43,6 +43,17 @@ export interface UserPreferences {
   customBlacklist: string[];
   soundEnabled: boolean;
   ambientSoundVolume: number; // 0-100
+  musicEnabled: boolean;
+  musicTrack: string;
+  customPlaylistUrl: string;
+  musicAutoplay: boolean;
+  useCustomPlaylist: boolean;
+  customPlaylistProvider: string;
+  ambientEffectEnabled: boolean;
+  ambientEffectIntensity: number;
+  themeAccent: string;
+  workspaceBackgroundUrl: string;
+  autoResumeSession: boolean;
 }
 
 // ── Onboarding ────────────────────────────────────────────────
@@ -60,11 +71,19 @@ export interface OnboardingData {
   learningDomain?: string[];
   preferredDurationMinutes?: number;
   extensionInstalled?: boolean;
+  skipped?: boolean;
 }
 
 // ── Theme & Appearance ────────────────────────────────────────
 
-export type AppTheme = "cyber" | "minimal" | "forest";
+export type AppTheme =
+  | "cyber"
+  | "minimal"
+  | "forest"
+  | "minimal-dark"
+  | "aurora-night"
+  | "forest-calm"
+  | "rain-room";
 
 export type AmbientEffect = "rain" | "snow" | "stars" | "leaves" | null;
 
@@ -88,11 +107,18 @@ export interface StreakData {
 // ── Notification Settings ─────────────────────────────────────
 
 export interface NotificationSettings {
+  notificationsEnabled: boolean;
   sessionReminderEnabled: boolean;
   sessionReminderTime: string | null;
   weeklySummaryEnabled: boolean;
   deepWorkSuggestionEnabled: boolean;
-  browserPermissionGranted: boolean;
+  browserPermissionGranted?: boolean;
+}
+
+export interface ThemePreferences {
+  theme: AppTheme;
+  themeAccent: string;
+  workspaceBackgroundUrl: string;
 }
 
 // ── Blacklist Entry ───────────────────────────────────────────
@@ -105,6 +131,7 @@ export interface BlacklistEntry {
   severity: BlacklistSeverity;
   isDefault: boolean;
   addedAt: string;
+  updatedAt?: string;
 }
 
 // ── API Payloads ──────────────────────────────────────────────
@@ -126,6 +153,31 @@ export interface UpdatePreferencesPayload {
   deepWorkSuggestionEnabled?: boolean;
   soundEnabled?: boolean;
   ambientSoundVolume?: number;
+  musicEnabled?: boolean;
+  musicTrack?: string;
+  customPlaylistUrl?: string;
+  musicAutoplay?: boolean;
+  useCustomPlaylist?: boolean;
+  customPlaylistProvider?: string;
+  ambientEffectEnabled?: boolean;
+  ambientEffectIntensity?: number;
+  themeAccent?: string;
+  workspaceBackgroundUrl?: string;
+  autoResumeSession?: boolean;
+}
+
+export interface UpdateNotificationSettingsPayload {
+  notificationsEnabled?: boolean;
+  sessionReminderEnabled?: boolean;
+  sessionReminderTime?: string | null;
+  weeklySummaryEnabled?: boolean;
+  deepWorkSuggestionEnabled?: boolean;
+}
+
+export interface UpdateThemePreferencesPayload {
+  theme?: AppTheme;
+  themeAccent?: string;
+  workspaceBackgroundUrl?: string;
 }
 
 export interface ChangePasswordPayload {
@@ -137,6 +189,62 @@ export interface ChangePasswordPayload {
 export interface AddBlacklistEntryPayload {
   domain: string;
   severity: BlacklistSeverity;
+}
+
+export interface AccountExportJob {
+  jobId: string;
+  status: "pending" | "processing" | "completed" | "failed" | "expired" | "cancelled";
+  format: "zip";
+  downloadUrl: string;
+  downloadReady: boolean;
+  fileSize: number;
+  checksum: string;
+  progress: number;
+  errorCode: string;
+  errorMessage: string;
+  requestedAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  expiresAt: string | null;
+}
+
+export interface AccountDeletionJob {
+  jobId: string;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  confirmed: boolean;
+  errorCode: string;
+  errorMessage: string;
+  requestedAt: string;
+  scheduledFor: string | null;
+  startedAt: string | null;
+  completedAt: string | null;
+}
+
+export interface AccountDeletionReceipt {
+  jobId: string;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  statusToken: string;
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  statusExpiresAt: string;
+}
+
+export interface AccountDeletionStatus {
+  jobId: string;
+  status: "pending" | "processing" | "completed" | "failed" | "cancelled";
+  createdAt: string;
+  startedAt: string | null;
+  completedAt: string | null;
+  statusExpiresAt: string;
+  errorCode: string;
+  errorMessage: string;
+}
+
+export interface StoredAccountDeletionReceipt {
+  jobId: string;
+  statusToken: string;
+  statusExpiresAt: string;
 }
 
 // ── Auth ──────────────────────────────────────────────────────

@@ -7,6 +7,8 @@ class BrowserEvent(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     session_id = models.UUIDField()
     event_type = models.CharField(max_length=64)
+    client_event_id = models.UUIDField(null=True, blank=True)
+    occurred_at = models.DateTimeField(null=True, blank=True)
     url = models.URLField(max_length=2048, blank=True)
     domain = models.CharField(max_length=255, blank=True)
     page_title = models.CharField(max_length=500, blank=True)
@@ -21,8 +23,17 @@ class BrowserEvent(models.Model):
         ordering = ["-created_at"]
         indexes = [
             models.Index(fields=["session_id", "created_at"]),
+            models.Index(fields=["session_id", "occurred_at"]),
             models.Index(fields=["session_id", "event_type"]),
+            models.Index(fields=["session_id", "client_event_id"]),
             models.Index(fields=["domain"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["session_id", "client_event_id"],
+                condition=models.Q(client_event_id__isnull=False),
+                name="unique_browser_event_client_id_per_session",
+            ),
         ]
 
     def __str__(self):

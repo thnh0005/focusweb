@@ -43,6 +43,9 @@ export interface ExtensionSessionStartPayload {
   goal?: string;
   mode: SessionMode;
   blacklist: BlacklistPayload[];
+  backendApiUrl?: string;
+  appUrl?: string;
+  plannedDurationMinutes?: number;
 }
 
 export interface BlacklistPayload {
@@ -112,21 +115,23 @@ export type ExtensionEventPayload =
 
 export interface BrowserEvent {
   id: string;
+  clientEventId: string;
   sessionId: string;
-  type:
-    | "page_visit"
+  event_type:
+    | "url_change"
     | "tab_switch"
-    | "idle_start"
-    | "idle_end"
-    | "content_change"
-    | "warning_triggered"
-    | "warning_dismissed";
+    | "idle"
+    | "active"
+    | "warning";
   url?: string;
   domain?: string;
-  pageTitle?: string;
-  durationSeconds?: number;
-  metadata?: Record<string, unknown>;
-  timestamp: number;
+  page_title?: string;
+  meta_description?: string;
+  content_snippet?: string;
+  active_seconds?: number;
+  idle_seconds?: number;
+  tab_switch_count?: number;
+  occurredAt: string;
 }
 
 // ── Content Extraction ────────────────────────────────────────

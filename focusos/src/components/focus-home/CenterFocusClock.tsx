@@ -13,6 +13,8 @@ export interface CenterFocusClockProps {
   onStart: () => void;
   onDurationChange: (minutes: number) => void;
   onModeChange: (mode: SessionMode) => void;
+  isStarting?: boolean;
+  startError?: string | null;
   className?: string;
 }
 
@@ -23,9 +25,12 @@ export function CenterFocusClock({
   onStart,
   onDurationChange,
   onModeChange,
+  isStarting = false,
+  startError,
   className,
 }: CenterFocusClockProps) {
   const [greeting] = React.useState(() => getGreeting());
+  const startLabel = mode === "deep-work" ? "Start Deep Work" : "Start Focus";
 
   return (
     <div className={cn("flex flex-col items-center text-center", className)}>
@@ -50,12 +55,14 @@ export function CenterFocusClock({
             key={minutes}
             type="button"
             onClick={() => onDurationChange(minutes)}
+            disabled={isStarting}
             aria-pressed={durationMinutes === minutes}
             className={cn(
               "rounded-full px-4 py-2 text-sm transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               durationMinutes === minutes
                 ? "bg-white/[0.16] text-text-primary shadow-[0_10px_40px_rgba(0,0,0,0.22)]"
-                : "bg-white/[0.055] text-text-secondary hover:bg-white/[0.09] hover:text-text-primary"
+                : "bg-white/[0.055] text-text-secondary hover:bg-white/[0.09] hover:text-text-primary",
+              isStarting && "cursor-not-allowed opacity-50"
             )}
           >
             {minutes}m
@@ -66,18 +73,20 @@ export function CenterFocusClock({
       <div className="mt-3 flex rounded-full border border-white/10 bg-white/[0.055] p-1 backdrop-blur-md">
         {[
           { id: "normal" as const, label: "Focus" },
-          { id: "deep-work" as const, label: "Deep work" },
+          { id: "deep-work" as const, label: "Deep Work" },
         ].map((option) => (
           <button
             key={option.id}
             type="button"
             onClick={() => onModeChange(option.id)}
+            disabled={isStarting}
             aria-pressed={mode === option.id}
             className={cn(
               "rounded-full px-4 py-2 text-xs transition-all duration-fast focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               mode === option.id
                 ? "bg-white/[0.16] text-text-primary"
-                : "text-text-muted hover:text-text-primary"
+                : "text-text-muted hover:text-text-primary",
+              isStarting && "cursor-not-allowed opacity-50"
             )}
           >
             {option.label}
@@ -89,11 +98,18 @@ export function CenterFocusClock({
         type="button"
         variant="session"
         onClick={onStart}
+        disabled={isStarting}
+        aria-busy={isStarting}
         className="mt-7 h-[52px] rounded-full px-8 text-base shadow-[0_20px_70px_rgba(0,0,0,0.36)]"
       >
         <Play className="mr-2 h-4 w-4 fill-current stroke-[1.6]" aria-hidden="true" />
-        Start Focus
+        {isStarting ? "Starting..." : startLabel}
       </Button>
+      {startError && (
+        <p role="alert" className="mt-4 max-w-md text-sm text-urgency-coral">
+          {startError}
+        </p>
+      )}
     </div>
   );
 }

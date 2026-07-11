@@ -40,6 +40,14 @@ export default function SessionSummaryPage() {
   } = useQuery({
     queryKey: ["session-summary", sessionId],
     queryFn: () => sessionsApi.getSessionSummary(sessionId),
+    refetchInterval: (query) => {
+      const summary = query.state.data;
+      if (!summary) return 3000;
+      if (summary.aiInsightStatus === "COMPLETED" || summary.aiInsightStatus === "FAILED") {
+        return false;
+      }
+      return 3000;
+    },
   });
 
   if (isLoading) {
@@ -86,6 +94,16 @@ export default function SessionSummaryPage() {
   const focusStateLabel = getFocusStateLabel(focusScoreValue, sess.focusState);
   const scoreBreakdown = session.scoreBreakdown ?? sess.scoreBreakdown;
   const insights = session.aiInsights?.length ? session.aiInsights : sess.aiInsight ?? [];
+  const insightStatus = session.aiInsightStatus ?? (session.isAiInsightReady ? "COMPLETED" : "PENDING");
+  const insightSource = session.aiInsightSource;
+  const insightLabel =
+    insightStatus === "FAILED"
+      ? "Analysis failed"
+      : insightStatus === "COMPLETED" && insightSource === "AI"
+        ? "AI-generated analysis"
+        : insightStatus === "COMPLETED" && insightSource === "RULE_BASED_FALLBACK"
+          ? "Rule-based fallback"
+          : "Final analysis processing";
   const recommendation =
     session.recommendation || `Try another ${targetDurationMinutes || 50}-minute session`;
 
@@ -167,7 +185,7 @@ export default function SessionSummaryPage() {
                 <div>
                   <h2 className="text-xl font-light text-text-primary">AI insight</h2>
                   <p className="text-sm text-text-muted">
-                    {session.isAiInsightReady ? "Observation ready" : "Still preparing"}
+                    {insightLabel}
                   </p>
                 </div>
               </div>
@@ -184,7 +202,9 @@ export default function SessionSummaryPage() {
                 </div>
               ) : (
                 <p className="text-sm font-light leading-relaxed text-text-secondary">
-                  No AI observation is available yet. The session details are still saved.
+                  {insightStatus === "FAILED"
+                    ? "Final analysis could not be generated. The session details and deterministic score are still saved."
+                    : "Final analysis is still processing. The session details and deterministic score are already saved."}
                 </p>
               )}
             </div>

@@ -49,8 +49,8 @@ export function RegisterForm() {
     if (!password) {
       setPasswordError("Password is required");
       isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+    } else if (password.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
       isValid = false;
     }
 
@@ -80,7 +80,7 @@ export function RegisterForm() {
         onboardingComplete: response.user.onboardingComplete,
       });
 
-      router.push("/dashboard");
+      router.push(response.user.onboardingComplete ? "/dashboard" : "/onboarding");
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : "Registration failed. Please try again.";
       setSubmitError(errorMsg);
@@ -136,7 +136,7 @@ export function RegisterForm() {
             <Input
               type="password"
               label="Password"
-              placeholder="At least 6 characters"
+              placeholder="At least 8 characters"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={passwordError}

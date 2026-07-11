@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.apps import apps
 from django.db import transaction
 from rest_framework.exceptions import APIException, NotFound, PermissionDenied
@@ -84,14 +85,55 @@ class EventIngestService:
                 session_id=session_id,
                 batch_size=len(events) + rejected_count,
             )
+            client_event_ids = [
+                event["client_event_id"]
+                for event in events
+                if event.get("client_event_id") is not None
+            ]
+            existing_client_event_ids = set(
+                BrowserEvent.objects.filter(
+                    session_id=session_id,
+                    client_event_id__in=client_event_ids,
+                ).values_list("client_event_id", flat=True)
+            )
+            deduped_events = []
+            seen_client_event_ids = set()
+            duplicate_count = 0
+            for event in events:
+                client_event_id = event.get("client_event_id")
+                if client_event_id is not None and (
+                    client_event_id in existing_client_event_ids
+                    or client_event_id in seen_client_event_ids
+                ):
+                    duplicate_count += 1
+                    continue
+                if client_event_id is not None:
+                    seen_client_event_ids.add(client_event_id)
+                deduped_events.append(event)
             browser_events = [
                 BrowserEvent(
                     session_id=session_id,
                     **event,
                 )
-                for event in events
+                for event in deduped_events
             ]
-            BrowserEvent.objects.bulk_create(browser_events)
+            BrowserEvent.objects.bulk_create(browser_events, ignore_conflicts=True)
+            inserted_event_ids = set(
+                BrowserEvent.objects.filter(
+                    id__in=[browser_event.id for browser_event in browser_events]
+                ).values_list("id", flat=True)
+            )
+            if len(inserted_event_ids) != len(browser_events):
+                duplicate_count += len(browser_events) - len(inserted_event_ids)
+                deduped_pairs = [
+                    (event, browser_event)
+                    for event, browser_event in zip(deduped_events, browser_events)
+                    if browser_event.id in inserted_event_ids
+                ]
+                deduped_events = [event for event, _browser_event in deduped_pairs]
+                browser_events = [
+                    browser_event for _event, browser_event in deduped_pairs
+                ]
 
         rule_engine = BehaviorRuleEngine()
         rule_evaluations = [
@@ -104,21 +146,37 @@ class EventIngestService:
                     mode=getattr(session, "mode", ""),
                 ),
             }
-            for index, event in enumerate(events)
+            for index, event in enumerate(deduped_events)
         ]
-        semantic_service = SemanticAnalysisService()
-        semantic_evaluations = [
-            {
-                "event_index": index,
-                "event_type": browser_event.event_type,
-                "result": semantic_service.analyze_event_safe(
-                    user=user,
-                    session=session,
-                    browser_event=browser_event,
-                ),
-            }
-            for index, browser_event in enumerate(browser_events)
-        ]
+        if settings.AI_SEMANTIC_REALTIME_ENABLED:
+            semantic_service = SemanticAnalysisService()
+            semantic_evaluations = [
+                {
+                    "event_index": index,
+                    "event_type": browser_event.event_type,
+                    "result": semantic_service.analyze_event_safe(
+                        user=user,
+                        session=session,
+                        browser_event=browser_event,
+                    ),
+                }
+                for index, browser_event in enumerate(browser_events)
+            ]
+        else:
+            semantic_evaluations = [
+                {
+                    "event_index": index,
+                    "event_type": browser_event.event_type,
+                    "result": {
+                        "status": "skipped",
+                        "available": False,
+                        "reason": "realtime_ai_disabled",
+                        "source": "DISABLED",
+                        "error_code": "REALTIME_AI_DISABLED",
+                    },
+                }
+                for index, browser_event in enumerate(browser_events)
+            ]
         ai_metadata = cls.build_ai_metadata(semantic_evaluations)
         hybrid_engine = HybridDecisionEngine()
         hybrid_decisions = [
@@ -154,8 +212,9 @@ class EventIngestService:
         return {
             "status": "ok",
             "batch_id": batch.id,
-            "accepted_count": len(events),
+            "accepted_count": len(browser_events),
             "rejected_count": rejected_count,
+            "duplicate_count": duplicate_count,
             "rule_evaluations": rule_evaluations,
             "semantic_evaluations": semantic_evaluations,
             "hybrid_decisions": hybrid_decisions,
@@ -187,9 +246,13 @@ class EventIngestService:
     def build_ai_metadata(semantic_evaluations: list[dict]) -> dict:
         success_count = 0
         fallback_count = 0
+        disabled_count = 0
         for item in semantic_evaluations:
             result = item.get("result") or {}
-            if result.get("available") is True or result.get("status") in {
+            if result.get("source") == "DISABLED":
+                disabled_count += 1
+                fallback_count += 1
+            elif result.get("available") is True or result.get("status") in {
                 "ok",
                 "existing",
             }:
@@ -197,7 +260,12 @@ class EventIngestService:
             elif result.get("source") == "UNAVAILABLE":
                 fallback_count += 1
         return {
-            "status": "DEGRADED" if fallback_count else "OK",
+            "status": (
+                "DISABLED"
+                if disabled_count and disabled_count == len(semantic_evaluations)
+                else "DEGRADED" if fallback_count else "OK"
+            ),
             "success_count": success_count,
             "fallback_count": fallback_count,
+            "disabled_count": disabled_count,
         }

@@ -97,6 +97,57 @@ class GoalTemplateApiTests(APITestCase):
         self.assertEqual(delete.status_code, status.HTTP_403_FORBIDDEN)
 
 
+class SessionSummaryDataTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="summary@example.com", password=PASSWORD)
+        self.client.force_authenticate(self.user)
+
+    def test_summary_uses_persisted_insight_warnings_and_browser_events(self):
+        session = FocusSession.objects.create(
+            user=self.user,
+            mode=FocusSession.Mode.DEEP_WORK,
+            goal="Study contracts",
+            status=FocusSession.Status.COMPLETED,
+            target_duration_seconds=3000,
+            actual_duration_seconds=2400,
+            focus_score=82,
+            ended_at=timezone.now(),
+        )
+        insight = SessionInsight.objects.create(
+            session=session,
+            status=SessionInsight.Status.COMPLETED,
+            observations=["Warnings clustered around video sites."],
+            source=SessionInsight.Source.RULE_BASED_FALLBACK,
+            generated_at=timezone.now(),
+        )
+        event = BrowserEvent.objects.create(
+            session_id=session.id,
+            event_type="url_change",
+            domain="youtube.com",
+        )
+        WarningEvent.objects.create(
+            session_id=session.id,
+            browser_event=event,
+            warning_level=2,
+            warning_type=WarningEvent.WarningType.DEEP_WORK_AI,
+            domain="youtube.com",
+            decision_state="DISTRACTED",
+            decision_source="HYBRID",
+            decision_score=86,
+            reason_codes=["CONTENT_NOT_RELEVANT"],
+        )
+
+        response = self.client.get(f"/api/sessions/{session.id}/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["aiInsights"], insight.observations)
+        self.assertTrue(response.data["isAiInsightReady"])
+        self.assertEqual(response.data["distractionEvents"][0]["domain"], "youtube.com")
+        self.assertEqual(response.data["warningLog"][0]["decisionState"], "DISTRACTED")
+        self.assertEqual(response.data["topDistractionDomains"][0]["domain"], "youtube.com")
+        self.assertEqual(response.data["browserEventCount"], 1)
+
+
 class SessionLifecycleApiTests(APITestCase):
     def setUp(self):
         self.user = User.objects.create_user(email="sessions@example.com", password=PASSWORD)
@@ -321,7 +372,7 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         self.assertEqual(response.data["session"]["id"], session_id)
         self.assertEqual(response.data["scoreBreakdown"]["total"], 70)
-        self.assertEqual(response.data["scoreMetadata"]["source"], "session-duration-fallback")
+        self.assertEqual(response.data["scoreMetadata"]["source"], "duration_fallback")
         self.assertEqual(response.data["warningLog"], [])
         self.assertEqual(response.data["aiInsights"], [])
         self.assertFalse(response.data["isAiInsightReady"])
@@ -674,6 +725,28 @@ class RealtimeScoreApiTests(APITestCase):
         self.assertIn("components", response.data)
         self.assertIn("data_quality", response.data)
         self.assertIn("stale", response.data)
+
+    def test_realtime_score_uses_warning_events_for_distraction_control(self):
+        session = self.create_session()
+        events = self.create_events(session)
+        for event in events:
+            self.create_analysis(session, event, score=90)
+        WarningEvent.objects.create(
+            session_id=session.id,
+            warning_level=3,
+            warning_type=WarningEvent.WarningType.DEEP_WORK_AI,
+            decision_state="DISTRACTED",
+            decision_source="HYBRID",
+            decision_score=90,
+            domain="video.example.com",
+        )
+
+        response = self.client.get(f"/api/sessions/{session.id}/score/realtime/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["source"], "tracking_signals")
+        self.assertEqual(response.data["warning_count"], 1)
+        self.assertLess(response.data["components"]["distraction_control"], 100)
 
     def test_owner_gets_realtime_score_for_paused_session(self):
         session = self.create_session(status=FocusSession.Status.PAUSED)

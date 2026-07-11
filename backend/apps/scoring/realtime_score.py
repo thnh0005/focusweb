@@ -54,13 +54,16 @@ class RealtimeScoreCalculator:
         events: list[dict] | None,
         relevance_scores: list | None = None,
         decision_states: list | None = None,
+        distraction_scores: list | None = None,
         stale: bool = False,
         ai_status: str = "OK",
         ai_error_code: str | None = None,
+        source: str | None = None,
     ) -> dict:
         events = deepcopy(events or [])
         relevance_scores = deepcopy(relevance_scores or [])
         decision_states = deepcopy(decision_states or [])
+        distraction_scores = deepcopy(distraction_scores or [])
         event_count = len(events)
         components = {
             COMPONENT_CONTENT_RELEVANCE: self.average_score(relevance_scores),
@@ -68,6 +71,7 @@ class RealtimeScoreCalculator:
             COMPONENT_TAB_STABILITY: self.calculate_tab_stability(events),
             COMPONENT_DISTRACTION_CONTROL: self.calculate_distraction_control(
                 decision_states,
+                distraction_scores,
             ),
         }
 
@@ -81,6 +85,7 @@ class RealtimeScoreCalculator:
                 stale=stale,
                 ai_status=ai_status,
                 ai_error_code=ai_error_code,
+                source=source or "insufficient_tracking",
             )
 
         score = self.weighted_total(components)
@@ -98,6 +103,7 @@ class RealtimeScoreCalculator:
             stale=stale,
             ai_status=ai_status,
             ai_error_code=ai_error_code,
+            source=source or "tracking_events",
         )
 
     def result(
@@ -110,6 +116,7 @@ class RealtimeScoreCalculator:
         stale,
         ai_status,
         ai_error_code,
+        source,
     ) -> dict:
         return {
             "score": score,
@@ -122,6 +129,7 @@ class RealtimeScoreCalculator:
             "stale": bool(stale),
             "ai_status": ai_status,
             "ai_error_code": ai_error_code,
+            "source": source,
         }
 
     def weighted_total(self, components: dict) -> int | None:
@@ -151,12 +159,17 @@ class RealtimeScoreCalculator:
         tab_switch_count = self.aggregate_counter(events, "tab_switch_count")
         return self.clamp_int(100 - tab_switch_count * self.config.tab_switch_penalty)
 
-    def calculate_distraction_control(self, decision_states: list) -> int | None:
+    def calculate_distraction_control(
+        self,
+        decision_states: list,
+        control_scores: list | None = None,
+    ) -> int | None:
         scores = [
             self.DECISION_CONTROL_SCORES[state]
             for state in decision_states
             if state in self.DECISION_CONTROL_SCORES
         ]
+        scores.extend(control_scores or [])
         return self.average_score(scores)
 
     def average_score(self, values: list) -> int | None:

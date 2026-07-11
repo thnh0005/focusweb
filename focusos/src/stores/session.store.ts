@@ -25,6 +25,8 @@ export interface SessionState {
   // Realtime extension telemetry
   realtimeFocusScore: number | null;
   focusState: FocusStateLabel | null;
+  realtimeScoreUpdatedAt: number | null;
+  realtimeScoreSource: "extension" | "backend" | null;
   warningLevel: 1 | 2 | 3 | null;
   isAutoPaused: boolean;
   tabSwitchCount: number;
@@ -38,6 +40,7 @@ export interface SessionState {
 
   // Actions
   startSession: (config: SessionConfig) => Promise<ActiveSession>;
+  hydrateActiveSession: () => Promise<ActiveSession | null>;
   pauseSession: () => Promise<void>;
   resumeSession: () => Promise<void>;
   endSession: () => Promise<Session>;
@@ -46,14 +49,17 @@ export interface SessionState {
   triggerWarning: (level: 1 | 2 | 3) => void;
   clearWarning: () => void;
   triggerAutoPause: () => void;
+  setTabSwitchCount: (count: number) => void;
   setSessionNote: (note: string) => void;
 }
 
 export const useSessionStore = create<SessionState>((set, get) => ({
   activeSession: null,
   sessionConfig: null,
-  realtimeFocusScore: 100,
-  focusState: "deep-focus" as FocusStateLabel,
+  realtimeFocusScore: null,
+  focusState: null,
+  realtimeScoreUpdatedAt: null,
+  realtimeScoreSource: null,
   warningLevel: null,
   isAutoPaused: false,
   tabSwitchCount: 0,
@@ -104,7 +110,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         activeSession.id,
         config.goal,
         config.mode,
-        blacklistPayloads
+        blacklistPayloads,
+        config.durationMinutes
       );
 
       // 4. Update local state
@@ -112,12 +119,60 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         activeSession,
         sessionConfig: config,
         sessionStatus: "active",
-        realtimeFocusScore: 100,
-        focusState: "deep-focus",
+        realtimeFocusScore: null,
+        focusState: null,
+        realtimeScoreUpdatedAt: null,
+        realtimeScoreSource: null,
         warningLevel: null,
         isAutoPaused: false,
         tabSwitchCount: 0,
         sessionNote: config.note ?? "",
+        isLoading: false,
+      });
+
+      return activeSession;
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
+  hydrateActiveSession: async () => {
+    const existingSession = get().activeSession;
+    if (existingSession) {
+      return existingSession;
+    }
+
+    set({ isLoading: true });
+    try {
+      const activeSession = await sessionsApi.getActiveSession();
+      if (!activeSession) {
+        set({
+          activeSession: null,
+          sessionConfig: null,
+          sessionStatus: "idle",
+          realtimeFocusScore: null,
+          focusState: null,
+          realtimeScoreUpdatedAt: null,
+          realtimeScoreSource: null,
+          warningLevel: null,
+          isAutoPaused: false,
+          isLoading: false,
+        });
+        return null;
+      }
+
+      set({
+        activeSession,
+        sessionConfig: {
+          mode: activeSession.mode,
+          goal: activeSession.goal,
+          durationMinutes: Math.round(activeSession.targetDurationSeconds / 60),
+          tags: activeSession.tags,
+        },
+        sessionStatus: activeSession.status,
+        sessionNote: "",
+        isAutoPaused: activeSession.status === "auto-paused",
         isLoading: false,
       });
 
@@ -133,9 +188,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!session) return;
     set({ isLoading: true });
     try {
-      await sessionsApi.updateSession(session.id, { status: "paused" });
       await notifySessionPause(session.id);
-      set({ sessionStatus: "paused", isLoading: false });
+      const updatedSession = await sessionsApi.updateSession(session.id, { status: "paused" });
+      set({
+        activeSession: {
+          ...session,
+          elapsedActiveSeconds: updatedSession.elapsedActiveSeconds,
+          status: updatedSession.status,
+        },
+        sessionStatus: updatedSession.status,
+        isLoading: false,
+      });
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -147,9 +210,19 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!session) return;
     set({ isLoading: true });
     try {
-      await sessionsApi.updateSession(session.id, { status: "active" });
+      const updatedSession = await sessionsApi.updateSession(session.id, { status: "active" });
       await notifySessionResume(session.id);
-      set({ sessionStatus: "active", isAutoPaused: false, warningLevel: null, isLoading: false });
+      set({
+        activeSession: {
+          ...session,
+          elapsedActiveSeconds: updatedSession.elapsedActiveSeconds,
+          status: updatedSession.status,
+        },
+        sessionStatus: updatedSession.status,
+        isAutoPaused: false,
+        warningLevel: null,
+        isLoading: false,
+      });
     } catch (error) {
       set({ isLoading: false });
       throw error;
@@ -165,17 +238,21 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         (Date.now() - new Date(session.startedAt).getTime()) / 1000
       );
 
+      await notifySessionEnd(session.id);
       const completedSession = await sessionsApi.endSession(session.id, {
         actualDurationSeconds,
         note: get().sessionNote,
       });
 
-      await notifySessionEnd(session.id);
-
       set({
         activeSession: null,
         sessionConfig: null,
         sessionStatus: "completed",
+        realtimeFocusScore: null,
+        focusState: null,
+        realtimeScoreUpdatedAt: null,
+        realtimeScoreSource: null,
+        warningLevel: null,
         isLoading: false,
       });
 
@@ -191,12 +268,17 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     if (!session) return;
     set({ isLoading: true });
     try {
-      await sessionsApi.cancelSession(session.id);
       await notifySessionEnd(session.id); // Cancel also signals tracking stop
+      await sessionsApi.cancelSession(session.id);
       set({
         activeSession: null,
         sessionConfig: null,
         sessionStatus: "cancelled",
+        realtimeFocusScore: null,
+        focusState: null,
+        realtimeScoreUpdatedAt: null,
+        realtimeScoreSource: null,
+        warningLevel: null,
         isLoading: false,
       });
     } catch (error) {
@@ -209,6 +291,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     set({
       realtimeFocusScore: score,
       focusState: state,
+      realtimeScoreUpdatedAt: Date.now(),
+      realtimeScoreSource: "extension",
     });
   },
 
@@ -230,6 +314,10 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       sessionStatus: "auto-paused",
       isAutoPaused: true,
     });
+  },
+
+  setTabSwitchCount: (count) => {
+    set({ tabSwitchCount: Math.max(0, count) });
   },
 
   setSessionNote: (note) => {

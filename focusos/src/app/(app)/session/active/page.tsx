@@ -2,10 +2,13 @@
 
 import * as React from "react";
 import { useRouter } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/hooks/useSession";
 import { useFocusScore } from "@/hooks/useFocusScore";
 import { useSessionStore } from "@/stores/session.store";
 import { useMusicStore } from "@/stores/music.store";
+import { useExtensionStore } from "@/stores/extension.store";
+import { sessionsApi } from "@/services/sessions.api";
 import { FocusTimer } from "@/components/features/focus/FocusTimer";
 import { DistractionWarningOverlay } from "@/components/features/focus/DistractionWarningOverlay";
 import { AutoPauseModal } from "@/components/features/focus/AutoPauseModal";
@@ -25,6 +28,19 @@ import {
   DialogTitle,
 } from "@/components/ui/Dialog";
 import { Button } from "@/components/ui/Button";
+import type { BackendRealtimeScore } from "@/types/session.types";
+
+const BACKEND_POLL_INTERVAL_MS = 15_000;
+const EXTENSION_SCORE_STALE_MS = 30_000;
+
+function scoreLabel(score: BackendRealtimeScore | undefined) {
+  if (!score) return "Checking focus signals";
+  if (score.data_quality === "INSUFFICIENT") return "Insufficient data";
+  if (score.stale) return "Stale backend score";
+  if (score.ai_status === "DISABLED") return "Rule-based score";
+  if (score.data_quality === "PARTIAL") return "Partial score";
+  return "Backend score";
+}
 
 function isEditableTarget(target: EventTarget | null) {
   if (!(target instanceof HTMLElement)) return false;
@@ -57,17 +73,103 @@ export default function ActiveSessionPage() {
     clearWarning,
     tabSwitchCount,
     isLoading,
+    hydrateActiveSession,
+    realtimeScoreUpdatedAt,
   } = useSessionStore();
+  const { connected: extensionConnected } = useExtensionStore();
   const { togglePlay } = useMusicStore();
-  const scoreMetrics = useFocusScore(realtimeFocusScore);
   const [isNoteOpen, setIsNoteOpen] = React.useState(false);
   const [confirmEndOpen, setConfirmEndOpen] = React.useState(false);
+  const [isHydrating, setIsHydrating] = React.useState(!activeSession);
+  const [dismissedBackendCycleId, setDismissedBackendCycleId] = React.useState<string | null>(null);
+  const [nowMs, setNowMs] = React.useState(0);
+
+  const activeSessionId = activeSession?.id;
+  const shouldPollBackend = Boolean(activeSessionId);
+
+  const realtimeScoreQuery = useQuery({
+    queryKey: ["session-realtime-score", activeSessionId],
+    queryFn: () => sessionsApi.getRealtimeScore(activeSessionId as string),
+    enabled: shouldPollBackend,
+    refetchInterval: BACKEND_POLL_INTERVAL_MS,
+    retry: false,
+  });
+
+  const warningsQuery = useQuery({
+    queryKey: ["session-warnings", activeSessionId],
+    queryFn: () => sessionsApi.getSessionWarnings(activeSessionId as string),
+    enabled: shouldPollBackend,
+    refetchInterval: BACKEND_POLL_INTERVAL_MS,
+    retry: false,
+  });
+
+  const extensionScoreIsFresh =
+    realtimeFocusScore !== null &&
+    realtimeScoreUpdatedAt !== null &&
+    nowMs > 0 &&
+    nowMs - realtimeScoreUpdatedAt <= EXTENSION_SCORE_STALE_MS;
+  const useBackendScore =
+    !extensionConnected || !extensionScoreIsFresh || realtimeFocusScore === null;
+  const backendScore =
+    realtimeScoreQuery.data && realtimeScoreQuery.data.data_quality !== "INSUFFICIENT"
+      ? realtimeScoreQuery.data.score
+      : null;
+  const displayedScore = useBackendScore ? backendScore : realtimeFocusScore;
+  const scoreMetrics = useFocusScore(displayedScore);
+  const backendActiveCycle = warningsQuery.data?.active_cycle;
+  const backendWarningLevel =
+    backendActiveCycle && backendActiveCycle.cycle_id !== dismissedBackendCycleId
+      ? backendActiveCycle.current_level
+      : null;
+  const displayedWarningLevel = warningLevel ?? backendWarningLevel;
+  const displayedAutoPaused =
+    isAutoPaused || Boolean(backendActiveCycle?.auto_pause_required);
+  const scoreSourceLabel = useBackendScore
+    ? scoreLabel(realtimeScoreQuery.data)
+    : "Extension score";
+
+  const handleDismissWarning = React.useCallback(() => {
+    if (!warningLevel && backendActiveCycle?.cycle_id) {
+      setDismissedBackendCycleId(backendActiveCycle.cycle_id);
+    }
+    clearWarning();
+  }, [backendActiveCycle, clearWarning, warningLevel]);
 
   React.useEffect(() => {
-    if (!activeSession) {
-      router.push("/session");
+    const intervalId = window.setInterval(() => setNowMs(Date.now()), 5000);
+    return () => window.clearInterval(intervalId);
+  }, []);
+
+  React.useEffect(() => {
+    if (activeSession) {
+      return;
     }
-  }, [activeSession, router]);
+
+    let isMounted = true;
+
+    hydrateActiveSession()
+      .then((session) => {
+        if (!isMounted) return;
+        if (!session) {
+          router.replace("/session");
+        }
+      })
+      .catch((error) => {
+        console.error("Failed to restore active session:", error);
+        if (isMounted) {
+          router.replace("/session");
+        }
+      })
+      .finally(() => {
+        if (isMounted) {
+          setIsHydrating(false);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, [activeSession, hydrateActiveSession, router]);
 
   const handleEndSession = React.useCallback(async () => {
     try {
@@ -134,8 +236,14 @@ export default function ActiveSessionPage() {
       .catch((error) => console.warn("Could not enter fullscreen:", error));
   }, []);
 
-  if (!activeSession) {
-    return null;
+  if (!activeSession || isHydrating) {
+    return (
+      <div className="flex min-h-[100dvh] items-center justify-center bg-background text-text-secondary">
+        <div className="rounded-3xl border border-white/10 bg-white/[0.045] px-5 py-3 text-sm font-light">
+          Restoring focus session...
+        </div>
+      </div>
+    );
   }
 
   const totalDuration = activeSession.targetDurationSeconds;
@@ -159,7 +267,7 @@ export default function ActiveSessionPage() {
             totalDuration={totalDuration}
             progress={progress}
             isActive={isActive}
-            isAutoPaused={isAutoPaused}
+            isAutoPaused={displayedAutoPaused}
             glowColor={scoreMetrics.glowColor}
           />
         }
@@ -167,7 +275,7 @@ export default function ActiveSessionPage() {
           <SessionControlPills
             isActive={isActive}
             isPaused={isPaused}
-            isAutoPaused={isAutoPaused}
+            isAutoPaused={displayedAutoPaused}
             isLoading={isLoading}
             onPause={pauseSession}
             onResume={resumeSession}
@@ -191,18 +299,23 @@ export default function ActiveSessionPage() {
           />
         }
         diagnostics={
-          <div className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-[11px] font-mono text-text-muted backdrop-blur-md">
-            {tabSwitchCount} tab switches
+          <div className="flex flex-wrap items-center justify-center gap-2">
+            <div className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-[11px] font-mono text-text-muted backdrop-blur-md">
+              {tabSwitchCount} tab switches
+            </div>
+            <div className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-[11px] font-mono text-text-muted backdrop-blur-md">
+              {scoreSourceLabel}
+            </div>
           </div>
         }
         overlays={
           <>
             <DistractionWarningOverlay
-              warningLevel={warningLevel}
-              onDismiss={clearWarning}
+              warningLevel={displayedWarningLevel}
+              onDismiss={handleDismissWarning}
             />
             <AutoPauseModal
-              isOpen={isAutoPaused}
+              isOpen={displayedAutoPaused}
               onResume={resumeSession}
               onEnd={() => setConfirmEndOpen(true)}
               isLoading={isLoading}

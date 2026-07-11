@@ -7,10 +7,15 @@ import type {
   OnboardingData,
 } from "@/types/user.types";
 
-const MOCK_AUTH_ENABLED = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
+const MOCK_AUTH_REQUESTED = process.env.NEXT_PUBLIC_MOCK_AUTH === "true";
+const MOCK_AUTH_ENABLED =
+  MOCK_AUTH_REQUESTED && process.env.NODE_ENV !== "production";
 const MOCK_STORAGE_KEY = "focusos.mock.auth";
-const DEFAULT_MOCK_EMAIL = "thnh@gmail.com";
-const DEFAULT_MOCK_PASSWORD = "123456";
+const DEFAULT_MOCK_EMAIL =
+  process.env.NEXT_PUBLIC_MOCK_AUTH_EMAIL || "dev@example.com";
+const DEFAULT_MOCK_PASSWORD =
+  process.env.NEXT_PUBLIC_MOCK_AUTH_PASSWORD || "dev-password";
+let didWarnMockAuth = false;
 
 interface MockAuthRecord {
   user: User;
@@ -46,6 +51,19 @@ function clearMockRecord() {
   window.localStorage.removeItem(MOCK_STORAGE_KEY);
 }
 
+function warnMockAuthState() {
+  if (didWarnMockAuth || typeof window === "undefined") return;
+  didWarnMockAuth = true;
+
+  if (MOCK_AUTH_ENABLED) {
+    console.warn(
+      "[FocusOS] Mock auth is enabled for local development only. Disable NEXT_PUBLIC_MOCK_AUTH for production-like testing."
+    );
+  } else if (MOCK_AUTH_REQUESTED && process.env.NODE_ENV === "production") {
+    console.warn("[FocusOS] NEXT_PUBLIC_MOCK_AUTH is ignored in production builds.");
+  }
+}
+
 function createMockUser(email: string, overrides?: Partial<User>): User {
   const id = typeof crypto !== "undefined" && "randomUUID" in crypto
     ? crypto.randomUUID()
@@ -77,6 +95,7 @@ export const authApi = {
    * Django sets HttpOnly session cookie on success.
    */
   async login(credentials: LoginCredentials): Promise<AuthResponse> {
+    warnMockAuthState();
     if (MOCK_AUTH_ENABLED) {
       if (
         credentials.email === DEFAULT_MOCK_EMAIL &&
@@ -107,6 +126,7 @@ export const authApi = {
    * Register a new user account.
    */
   async register(credentials: RegisterCredentials): Promise<AuthResponse> {
+    warnMockAuthState();
     if (MOCK_AUTH_ENABLED) {
       const user = createMockUser(credentials.email, {
         onboardingComplete: false,
@@ -126,6 +146,7 @@ export const authApi = {
    * Logout — clears server-side session.
    */
   logout(): Promise<void> {
+    warnMockAuthState();
     if (MOCK_AUTH_ENABLED) {
       clearMockRecord();
       return Promise.resolve();
@@ -137,6 +158,7 @@ export const authApi = {
    * Get the currently authenticated user.
    */
   getMe(): Promise<User> {
+    warnMockAuthState();
     if (MOCK_AUTH_ENABLED) {
       const record = readMockRecord();
       if (!record) {
@@ -150,27 +172,34 @@ export const authApi = {
   /**
    * Save onboarding survey data.
    */
-  saveOnboarding(data: OnboardingData): Promise<void> {
+  saveOnboarding(data: OnboardingData): Promise<AuthResponse> {
+    warnMockAuthState();
     if (MOCK_AUTH_ENABLED) {
       const record = readMockRecord();
       if (record) {
+        const updatedUser = {
+          ...record.user,
+          onboardingComplete: true,
+        };
         writeMockRecord({
           ...record,
-          user: {
-            ...record.user,
-            onboardingComplete: true,
-          },
+          user: updatedUser,
+        });
+        return Promise.resolve({
+          user: updatedUser,
+          message: "Onboarding completed.",
         });
       }
-      return Promise.resolve();
+      return Promise.reject(new Error("Not authenticated"));
     }
-    return apiClient.post<void>("/auth/onboarding/", data);
+    return apiClient.post<AuthResponse>("/auth/onboarding/", data);
   },
 
   /**
    * Request password reset email.
    */
   requestPasswordReset(email: string): Promise<void> {
+    warnMockAuthState();
     if (MOCK_AUTH_ENABLED) {
       const record = readMockRecord();
       if (!record || record.user.email !== email) {
@@ -189,6 +218,7 @@ export const authApi = {
     newPassword: string,
     newPasswordConfirm: string
   ): Promise<void> {
+    warnMockAuthState();
     if (MOCK_AUTH_ENABLED) {
       if (newPassword !== newPasswordConfirm) {
         return Promise.reject(new Error("Passwords do not match"));

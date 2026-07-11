@@ -197,13 +197,13 @@ class Dev2Day28IntegrationTests(APITestCase):
             )
         self.assertEqual(focused.status_code, status.HTTP_200_OK)
         self.assertEqual(focused.data["accepted_count"], 1)
-        self.assertEqual(focused.data["ai"]["status"], "OK")
+        self.assertEqual(focused.data["ai"]["status"], "DISABLED")
         self.assertEqual(
             focused.data["hybrid_decisions"][0]["result"]["state"],
             "FOCUSED",
         )
-        complete_json.assert_called_once()
-        self.assertEqual(AIAnalysisResult.objects.filter(session_id=session.id).count(), 1)
+        complete_json.assert_not_called()
+        self.assertEqual(AIAnalysisResult.objects.filter(session_id=session.id).count(), 0)
         self.assertFalse(WarningCycle.objects.exists())
 
         BlacklistEntry.objects.create(
@@ -212,7 +212,7 @@ class Dev2Day28IntegrationTests(APITestCase):
             severity=BlacklistEntry.Severity.HIGH,
         )
 
-        with patch.object(AIClient, "complete_json", return_value=semantic_response()):
+        with patch.object(AIClient, "complete_json") as complete_json:
             with patch.object(WarningCycleService, "schedule_advance"):
                 distracted = self.client.post(
                     f"/api/sessions/{session.id}/events/batch/",
@@ -243,6 +243,7 @@ class Dev2Day28IntegrationTests(APITestCase):
                 )
 
         self.assertEqual(distracted.status_code, status.HTTP_200_OK)
+        complete_json.assert_not_called()
         self.assertEqual(distracted.data["accepted_count"], 1)
         self.assertEqual(distracted.data["rejected_count"], 1)
         self.assertEqual(
@@ -283,7 +284,7 @@ class Dev2Day28IntegrationTests(APITestCase):
 
         self.assertEqual(realtime.status_code, status.HTTP_200_OK)
         self.assertEqual(realtime.data["session_id"], str(session.id))
-        self.assertEqual(realtime.data["ai_status"], "OK")
+        self.assertEqual(realtime.data["ai_status"], "DISABLED")
         self.assertGreaterEqual(realtime.data["score"], 0)
         self.assertLessEqual(realtime.data["score"], 100)
         self.assertIn("content_relevance", realtime.data["components"])
@@ -294,7 +295,7 @@ class Dev2Day28IntegrationTests(APITestCase):
         self.assertEqual(other_warnings.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(other_score.status_code, status.HTTP_404_NOT_FOUND)
 
-    def test_event_ingest_survives_ai_provider_failure_with_rule_fallback(self):
+    def test_event_ingest_uses_rule_fallback_when_realtime_ai_is_disabled(self):
         session = FocusSession.objects.create(
             user=self.user,
             mode=FocusSession.Mode.DEEP_WORK,
@@ -303,7 +304,7 @@ class Dev2Day28IntegrationTests(APITestCase):
             target_duration_seconds=1800,
         )
 
-        with patch.object(AIClient, "complete_json", side_effect=AIProviderError()):
+        with patch.object(AIClient, "complete_json", side_effect=AIProviderError()) as complete_json:
             response = self.client.post(
                 f"/api/sessions/{session.id}/events/batch/",
                 {
@@ -322,8 +323,9 @@ class Dev2Day28IntegrationTests(APITestCase):
             )
 
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        complete_json.assert_not_called()
         self.assertEqual(response.data["accepted_count"], 1)
-        self.assertEqual(response.data["ai"]["status"], "DEGRADED")
+        self.assertEqual(response.data["ai"]["status"], "DISABLED")
         self.assertEqual(response.data["ai"]["fallback_count"], 1)
         self.assertEqual(
             response.data["hybrid_decisions"][0]["result"]["decision_source"],

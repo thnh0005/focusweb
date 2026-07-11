@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { authApi } from "@/services/auth.api";
-import type { User, LoginCredentials } from "@/types/user.types";
+import type { User, LoginCredentials, OnboardingData } from "@/types/user.types";
 
 export interface AuthState {
   user: User | null;
@@ -12,6 +12,7 @@ export interface AuthState {
   login: (credentials: LoginCredentials) => Promise<void>;
   logout: () => Promise<void>;
   refreshUser: () => Promise<void>;
+  completeOnboarding: (data: OnboardingData) => Promise<void>;
   setOnboardingComplete: () => void;
 }
 
@@ -74,7 +75,31 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
   },
 
+  completeOnboarding: async (data) => {
+    set({ isLoading: true });
+    try {
+      const response = await authApi.saveOnboarding(data);
+      set({
+        user: response.user,
+        isAuthenticated: true,
+        onboardingComplete: response.user.onboardingComplete,
+        isLoading: false,
+      });
+    } catch (error) {
+      set({ isLoading: false });
+      throw error;
+    }
+  },
+
   setOnboardingComplete: () => {
-    set({ onboardingComplete: true });
+    set((state) => ({
+      onboardingComplete: true,
+      user: state.user
+        ? {
+            ...state.user,
+            onboardingComplete: true,
+          }
+        : state.user,
+    }));
   },
 }));

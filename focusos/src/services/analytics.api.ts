@@ -7,6 +7,8 @@ import type {
   HeatmapData,
   WeeklySnapshot,
   PatternInsights,
+  ReportExportJob,
+  ReportExportPayload,
 } from "@/types/analytics.types";
 
 export const analyticsApi = {
@@ -56,5 +58,13 @@ export const analyticsApi = {
    */
   getPatternInsights(): Promise<PatternInsights> {
     return apiClient.get<PatternInsights>("/analytics/patterns/");
+  },
+
+  exportReport(payload: ReportExportPayload): Promise<ReportExportJob> {
+    return apiClient.post<ReportExportJob>("/reports/export/", payload);
+  },
+
+  getReportExportJob(jobId: string): Promise<ReportExportJob> {
+    return apiClient.get<ReportExportJob>(`/reports/export/${jobId}/`);
   },
 };

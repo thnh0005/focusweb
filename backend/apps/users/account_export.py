@@ -23,7 +23,7 @@ from apps.extension.models import BlacklistEntry, ExtensionHeartbeat
 from apps.notifications.models import Notification
 from apps.scoring.models import FocusScore
 from apps.sessions.models import FocusSession, GoalTemplate, SessionTag
-from apps.tracking.models import BrowserEvent, WarningEvent
+from apps.tracking.models import BrowserEvent, WarningCycle, WarningEvent
 
 from .models import AccountDataExportJob
 
@@ -78,6 +78,12 @@ def latest_user_data_timestamp(user):
         value = model.objects.filter(**filters).aggregate(latest=Max(field))["latest"]
         if value:
             timestamps.append(value)
+    session_ids = list(FocusSession.objects.filter(user=user).values_list("id", flat=True))
+    warning_cycle_latest = WarningCycle.objects.filter(
+        session_id__in=session_ids
+    ).aggregate(latest=Max("updated_at"))["latest"]
+    if warning_cycle_latest:
+        timestamps.append(warning_cycle_latest)
     return max(timestamps).isoformat()
 
 
@@ -110,6 +116,7 @@ class AccountDataExportBuilder:
             "sessions.json": self.sessions(),
             "scores.json": self.scores(),
             "warnings.json": self.warnings(),
+            "warning_cycles.json": self.warning_cycles(),
             "browser_events.json": self.browser_events(),
             "blacklist.json": self.blacklist(),
             "extension.json": self.extension(),
@@ -282,6 +289,35 @@ class AccountDataExportBuilder:
                 "created_at": warning.created_at,
             }
             for warning in WarningEvent.objects.filter(session_id__in=self.session_ids).iterator()
+        ]
+
+    def warning_cycles(self):
+        return [
+            {
+                "id": str(cycle.id),
+                "session_id": str(cycle.session_id),
+                "source_event_id": str(cycle.source_event_id)
+                if cycle.source_event_id
+                else None,
+                "idempotency_key": cycle.idempotency_key,
+                "mode": cycle.mode,
+                "status": cycle.status,
+                "current_level": cycle.current_level,
+                "decision_state": cycle.decision_state,
+                "decision_source": cycle.decision_source,
+                "decision_score": cycle.decision_score,
+                "reason_codes": cycle.reason_codes,
+                "domain": cycle.domain,
+                "auto_pause_required": cycle.auto_pause_required,
+                "action": cycle.action,
+                "next_warning_at": cycle.next_warning_at,
+                "started_at": cycle.started_at,
+                "resolved_at": cycle.resolved_at,
+                "updated_at": cycle.updated_at,
+            }
+            for cycle in WarningCycle.objects.filter(
+                session_id__in=self.session_ids
+            ).iterator()
         ]
 
     def browser_events(self):

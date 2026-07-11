@@ -24,7 +24,11 @@ export function FocusStatePill({
       )}
       role="status"
       aria-live="polite"
-      aria-label={`Focus state ${metrics.displayLabel}, score ${metrics.score} out of 100`}
+      aria-label={
+        metrics.score === null
+          ? `Focus state ${metrics.displayLabel}`
+          : `Focus state ${metrics.displayLabel}, score ${metrics.score} out of 100`
+      }
     >
       <span
         className={cn(
@@ -40,7 +44,11 @@ export function FocusStatePill({
           {metrics.displayLabel}
         </span>
         <span className="mt-1 text-[11px] font-mono text-text-muted">
-          {metrics.score}/100 {isActive ? "live" : "paused"}
+          {metrics.score === null
+            ? isActive
+              ? "waiting for signals"
+              : "paused"
+            : `${metrics.score}/100 ${isActive ? "live" : "paused"}`}
         </span>
       </span>
     </div>

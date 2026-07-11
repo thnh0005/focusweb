@@ -1,6 +1,7 @@
 from datetime import UTC, datetime, time, timedelta
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.db import IntegrityError, transaction
 from django.utils import timezone
@@ -453,6 +454,30 @@ class NotificationTaskAndModelTests(NotificationTestMixin, APITestCase):
             return_value={"checked": 1, "created": 0},
         ):
             self.assertEqual(process_deep_work_suggestions.run()["checked"], 1)
+
+    def test_celery_beat_schedule_registers_recurring_notification_and_cleanup_tasks(self):
+        schedule = settings.CELERY_BEAT_SCHEDULE
+
+        self.assertEqual(
+            schedule["process-daily-session-reminders"]["task"],
+            "apps.notifications.tasks.process_daily_session_reminders",
+        )
+        self.assertEqual(
+            schedule["process-weekly-summary-notifications"]["task"],
+            "apps.notifications.tasks.process_weekly_summary_notifications",
+        )
+        self.assertEqual(
+            schedule["process-deep-work-suggestions"]["task"],
+            "apps.notifications.tasks.process_deep_work_suggestions",
+        )
+        self.assertEqual(
+            schedule["cleanup-expired-report-exports"]["task"],
+            "apps.analytics.tasks.cleanup_expired_report_exports_task",
+        )
+        self.assertEqual(
+            schedule["cleanup-expired-account-exports"]["task"],
+            "apps.users.tasks.cleanup_expired_account_exports_task",
+        )
 
     def test_dedupe_key_is_unique_and_ownership_choices_are_correct(self):
         Notification.objects.create(

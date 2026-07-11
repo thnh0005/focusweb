@@ -4,6 +4,8 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Bell, EyeOff, ShieldCheck, Waves } from "lucide-react";
+import { clearOnboardingDraft, readOnboardingDraft } from "@/lib/onboarding/storage";
+import { useAuthStore } from "@/stores/auth.store";
 import { Button } from "@/components/ui/Button";
 
 const extensionNotes = [
@@ -27,9 +29,25 @@ const extensionNotes = [
 export default function OnboardingExtensionPage() {
   const router = useRouter();
   const reduceMotion = useReducedMotion();
+  const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
+  const [isSaving, setIsSaving] = React.useState(false);
+  const [error, setError] = React.useState("");
 
-  const handleContinue = () => {
-    router.push("/dashboard");
+  const handleComplete = async (extensionInstalled: boolean) => {
+    setIsSaving(true);
+    setError("");
+    try {
+      await completeOnboarding({
+        ...readOnboardingDraft(),
+        extensionInstalled,
+      });
+      clearOnboardingDraft();
+      router.replace("/dashboard");
+    } catch (completeError) {
+      setError(getErrorMessage(completeError, "Failed to save onboarding"));
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   return (
@@ -100,14 +118,25 @@ export default function OnboardingExtensionPage() {
         <Button
           variant="secondary"
           className="h-12 rounded-2xl"
-          onClick={handleContinue}
+          onClick={() => handleComplete(false)}
+          disabled={isSaving}
         >
-          Set up later
+          {isSaving ? "Saving..." : "Set up later"}
         </Button>
-        <Button onClick={handleContinue} className="h-12 rounded-2xl">
-          Enter dashboard
+        <Button onClick={() => handleComplete(true)} disabled={isSaving} className="h-12 rounded-2xl">
+          {isSaving ? "Saving..." : "Enter dashboard"}
         </Button>
       </div>
+
+      {error && (
+        <div role="alert" className="rounded-2xl border border-urgency-coral/25 bg-urgency-coral/10 p-3 text-sm text-urgency-coral">
+          {error}
+        </div>
+      )}
     </motion.div>
   );
+}
+
+function getErrorMessage(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
 }

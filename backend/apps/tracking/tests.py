@@ -1,3 +1,4 @@
+import uuid
 from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -6,7 +7,7 @@ from django.contrib.auth import get_user_model
 from django.test import override_settings
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from apps.ai.models import AIAnalysisResult
 from apps.ai.services import AIProviderError
@@ -97,6 +98,95 @@ class EventBatchIngestApiTests(APITestCase):
         self.assertEqual(len(response.data["rule_evaluations"]), 2)
         self.assertIn("hybrid_decisions", response.data)
         self.assertEqual(len(response.data["hybrid_decisions"]), 2)
+
+    def test_tracking_alias_accepts_extension_event_batch(self):
+        session = self.create_session()
+
+        response = self.client.post(
+            f"/api/tracking/sessions/{session.id}/events/",
+            {"events": [self.valid_event(domain="m.youtube.com")]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["accepted_count"], 1)
+        self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
+
+    @override_settings(
+        CSRF_TRUSTED_ORIGINS=[
+            "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+        ],
+        CORS_ALLOWED_ORIGINS=[
+            "chrome-extension://abcdefghijklmnopabcdefghijklmnop"
+        ],
+    )
+    def test_tracking_alias_accepts_trusted_extension_origin_with_csrf(self):
+        session = self.create_session()
+        csrf_client = APIClient(enforce_csrf_checks=True)
+        self.assertTrue(
+            csrf_client.login(email=self.user.email, password=PASSWORD)
+        )
+
+        csrf_response = csrf_client.get("/api/auth/csrf/")
+        csrf_token = csrf_response.data["csrfToken"]
+        response = csrf_client.post(
+            f"/api/tracking/sessions/{session.id}/events/",
+            {"events": [self.valid_event(domain="m.youtube.com")]},
+            format="json",
+            HTTP_ORIGIN="chrome-extension://abcdefghijklmnopabcdefghijklmnop",
+            HTTP_X_CSRFTOKEN=csrf_token,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["accepted_count"], 1)
+        self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
+
+    def test_client_event_id_makes_batch_ingest_idempotent(self):
+        session = self.create_session()
+        client_event_id = str(uuid.uuid4())
+        event = self.valid_event(
+            clientEventId=client_event_id,
+            occurredAt=timezone.now().isoformat(),
+        )
+
+        first = self.client.post(
+            f"/api/sessions/{session.id}/events/batch/",
+            {"events": [event, event]},
+            format="json",
+        )
+        replay = self.client.post(
+            f"/api/sessions/{session.id}/events/batch/",
+            {"events": [event]},
+            format="json",
+        )
+
+        self.assertEqual(first.status_code, status.HTTP_200_OK)
+        self.assertEqual(first.data["accepted_count"], 1)
+        self.assertEqual(first.data["duplicate_count"], 1)
+        self.assertEqual(len(first.data["rule_evaluations"]), 1)
+        self.assertEqual(replay.status_code, status.HTTP_200_OK)
+        self.assertEqual(replay.data["accepted_count"], 0)
+        self.assertEqual(replay.data["duplicate_count"], 1)
+        self.assertEqual(len(replay.data["rule_evaluations"]), 0)
+        self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
+
+    def test_future_occurred_at_is_rejected_without_storing_event(self):
+        session = self.create_session()
+        event = self.valid_event(
+            clientEventId=str(uuid.uuid4()),
+            occurredAt=(timezone.now() + timedelta(days=365)).isoformat(),
+        )
+
+        response = self.client.post(
+            f"/api/sessions/{session.id}/events/batch/",
+            {"events": [event]},
+            format="json",
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["accepted_count"], 0)
+        self.assertEqual(response.data["rejected_count"], 1)
+        self.assertFalse(BrowserEvent.objects.filter(session_id=session.id).exists())
 
     def test_invalid_and_sensitive_events_are_rejected_without_storing_them(self):
         session = self.create_session()
@@ -408,10 +498,36 @@ class EventBatchIngestApiTests(APITestCase):
         self.assertFalse(warning_cycle.auto_pause_required)
         self.assertEqual(warning.warning_level, 1)
 
+    def test_deep_work_blacklist_warning_does_not_call_ai_when_realtime_ai_disabled(self):
+        session = self.create_session(mode=FocusSession.Mode.DEEP_WORK)
+        BlacklistEntry.objects.create(
+            user=self.user,
+            domain="youtube.com",
+            severity=BlacklistEntry.Severity.HIGH,
+        )
+
+        with patch.object(AIClient, "complete_json") as complete_json:
+            with patch.object(WarningCycleService, "schedule_advance"):
+                response = self.client.post(
+                    f"/api/sessions/{session.id}/events/batch/",
+                    {"events": [self.valid_event(domain="m.youtube.com")]},
+                    format="json",
+                )
+
+        result = response.data["hybrid_decisions"][0]["result"]
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        complete_json.assert_not_called()
+        self.assertEqual(response.data["ai"]["status"], "DISABLED")
+        self.assertEqual(result["state"], "DISTRACTED")
+        self.assertTrue(result["should_start_warning_cycle"])
+        self.assertEqual(WarningCycle.objects.filter(session_id=session.id).count(), 1)
+        self.assertEqual(WarningEvent.objects.filter(session_id=session.id).count(), 1)
+        self.assertFalse(AIAnalysisResult.objects.exists())
+
     def test_provider_error_does_not_make_event_ingest_return_500(self):
         session = self.create_session(mode=FocusSession.Mode.DEEP_WORK)
 
-        with patch.object(AIClient, "complete_json", side_effect=AIProviderError()):
+        with patch.object(AIClient, "complete_json", side_effect=AIProviderError()) as complete_json:
             response = self.client.post(
                 f"/api/sessions/{session.id}/events/batch/",
                 {"events": [self.valid_event()]},
@@ -420,12 +536,12 @@ class EventBatchIngestApiTests(APITestCase):
 
         semantic_result = response.data["semantic_evaluations"][0]["result"]
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        complete_json.assert_not_called()
         self.assertEqual(response.data["accepted_count"], 1)
-        self.assertEqual(semantic_result["status"], "error")
+        self.assertEqual(semantic_result["status"], "skipped")
         self.assertFalse(semantic_result["available"])
-        self.assertIsNone(semantic_result["relevance_score"])
-        self.assertEqual(semantic_result["error_code"], "AI_PROVIDER_ERROR")
-        self.assertEqual(response.data["ai"]["status"], "DEGRADED")
+        self.assertEqual(semantic_result["error_code"], "REALTIME_AI_DISABLED")
+        self.assertEqual(response.data["ai"]["status"], "DISABLED")
         self.assertEqual(response.data["ai"]["fallback_count"], 1)
         self.assertEqual(
             response.data["hybrid_decisions"][0]["result"]["decision_source"],
@@ -442,7 +558,10 @@ class EventBatchIngestApiTests(APITestCase):
         self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
         self.assertFalse(AIAnalysisResult.objects.exists())
 
-    @override_settings(REALTIME_SCORE_MIN_EVENTS=1)
+    @override_settings(
+        REALTIME_SCORE_MIN_EVENTS=1,
+        AI_SEMANTIC_REALTIME_ENABLED=True,
+    )
     def test_deep_work_ai_success_core_loop_persists_hybrid_warning_and_realtime_score(self):
         session = self.create_session(mode=FocusSession.Mode.DEEP_WORK)
         BlacklistEntry.objects.create(
@@ -508,7 +627,7 @@ class EventBatchIngestApiTests(APITestCase):
             AIClient,
             "complete_json",
             side_effect=RuntimeError("Authorization: Bearer secret-api-key"),
-        ):
+        ) as complete_json:
             response = self.client.post(
                 f"/api/sessions/{session.id}/events/batch/",
                 {"events": [self.valid_event()]},
@@ -517,11 +636,12 @@ class EventBatchIngestApiTests(APITestCase):
 
         semantic_result = response.data["semantic_evaluations"][0]["result"]
         self.assertEqual(response.status_code, status.HTTP_200_OK)
+        complete_json.assert_not_called()
         self.assertEqual(response.data["accepted_count"], 1)
-        self.assertEqual(semantic_result["status"], "error")
+        self.assertEqual(semantic_result["status"], "skipped")
         self.assertFalse(semantic_result["available"])
-        self.assertEqual(semantic_result["error_code"], "AI_UNKNOWN_ERROR")
-        self.assertEqual(response.data["ai"]["status"], "DEGRADED")
+        self.assertEqual(semantic_result["error_code"], "REALTIME_AI_DISABLED")
+        self.assertEqual(response.data["ai"]["status"], "DISABLED")
         self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
         self.assertFalse(AIAnalysisResult.objects.exists())
 
