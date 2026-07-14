@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { AmbientWorkspaceBackground, DeepWorkModal, FlocusLikeDashboard } from "@/components/focus-home";
 import { Spinner } from "@/components/ui/Spinner";
 import { analyticsApi } from "@/services/analytics.api";
@@ -14,6 +15,8 @@ import { requestFocusFullscreen } from "@/lib/utils/fullscreen";
 import type { SessionMode } from "@/types/session.types";
 
 function FocusHomeSkeleton() {
+  const { t } = useTranslation("dashboard");
+
   return (
     <AmbientWorkspaceBackground>
       <div
@@ -23,7 +26,7 @@ function FocusHomeSkeleton() {
       >
         <div className="flex flex-col items-center gap-4">
           <Spinner className="h-7 w-7 text-focus-green" />
-          <p className="text-sm text-text-muted">Preparing focus room</p>
+          <p className="text-sm text-text-muted">{t("loading.focusRoom")}</p>
         </div>
       </div>
     </AmbientWorkspaceBackground>
@@ -31,6 +34,7 @@ function FocusHomeSkeleton() {
 }
 
 export default function DashboardPage() {
+  const { t } = useTranslation("dashboard");
   const router = useRouter();
   const { user } = useAuthStore();
   const { startSession } = useSessionStore();
@@ -70,14 +74,17 @@ export default function DashboardPage() {
   const lastSession = recentSessions[0];
   const lastGoal =
     lastSession?.goal ||
-    (lastSession?.mode === "deep-work" ? "Continue deep work block" : null);
+    (lastSession?.mode === "deep-work" ? t("focusHome.statsSheet.deepWorkGoal") : null);
 
   const displayName = user?.displayName ?? user?.email?.split("@")[0] ?? "Hieu";
   const isLoading = statsLoading && sessionsLoading;
 
-  const getErrorMessage = React.useCallback((err: unknown) => {
-    return err instanceof Error ? err.message : "Could not start session. Please try again.";
-  }, []);
+  const getErrorMessage = React.useCallback(
+    (err: unknown) => {
+      return err instanceof Error ? err.message : t("errors.startSession");
+    },
+    [t]
+  );
 
   const startFocusSession = React.useCallback(
     async (config: { mode: SessionMode; goal?: string }) => {

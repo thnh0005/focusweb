@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 from rest_framework import status
-from rest_framework.test import APITestCase
+from rest_framework.test import APIClient, APITestCase
 
 from apps.sessions.models import FocusSession
 
@@ -128,6 +128,48 @@ class ExtensionApiTests(APITestCase):
             {status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN},
         )
 
+    def test_heartbeat_accepts_extension_session_token_without_cookie_auth(self):
+        session = self.create_session()
+        token = session.ensure_extension_bridge_token()
+        self.client.force_authenticate(user=None)
+
+        response = self.client.post(
+            "/api/extension/heartbeat/",
+            {
+                "extension_version": "1.2.0",
+                "browser": "chrome",
+            },
+            format="json",
+            HTTP_X_FOCUSOS_SESSION_ID=str(session.id),
+            HTTP_X_FOCUSOS_EXTENSION_TOKEN=token,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["connected"])
+        heartbeat = ExtensionHeartbeat.objects.get(user_id=self.user.id)
+        self.assertEqual(heartbeat.extension_version, "1.2.0")
+
+    def test_heartbeat_extension_token_bypasses_session_csrf(self):
+        session = self.create_session()
+        token = session.ensure_extension_bridge_token()
+        csrf_client = APIClient(enforce_csrf_checks=True)
+        self.assertTrue(csrf_client.login(email=self.user.email, password=PASSWORD))
+
+        response = csrf_client.post(
+            "/api/extension/heartbeat/",
+            {
+                "extension_version": "1.3.0",
+                "browser": "chrome",
+            },
+            format="json",
+            HTTP_ORIGIN="chrome-extension://hjjldlnbhofmlndoabaophfnmdmeigne",
+            HTTP_X_FOCUSOS_SESSION_ID=str(session.id),
+            HTTP_X_FOCUSOS_EXTENSION_TOKEN=token,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertTrue(response.data["connected"])
+
 
 class BlacklistApiTests(APITestCase):
     def setUp(self):
@@ -146,7 +188,7 @@ class BlacklistApiTests(APITestCase):
         self.assertEqual(sync.data["version"], "blacklist-v1")
         self.assertEqual(len(sync.data["entries"]), len(response.data))
 
-    def test_custom_blacklist_crud_and_default_protection(self):
+    def test_custom_blacklist_crud_and_sync_payload(self):
         create = self.client.post(
             "/api/blacklist/",
             {"domain": "https://www.example.com/path", "severity": "medium"},
@@ -166,12 +208,13 @@ class BlacklistApiTests(APITestCase):
         self.assertFalse(create.data["isDefault"])
         self.assertEqual(update.data["severity"], "high")
         self.assertIn(
-            {"domain": "example.com", "severity": "high", "source": "custom"},
+            {"domain": "example.com", "severity": "high", "source": "USER", "enabled": True},
             [
                 {
                     "domain": entry["domain"],
                     "severity": entry["severity"],
                     "source": entry["source"],
+                    "enabled": entry["enabled"],
                 }
                 for entry in sync.data["entries"]
             ],
@@ -179,7 +222,7 @@ class BlacklistApiTests(APITestCase):
         self.assertEqual(delete.status_code, status.HTTP_204_NO_CONTENT)
         self.assertFalse(BlacklistEntry.objects.filter(pk=entry_id).exists())
 
-    def test_default_entries_cannot_be_changed_or_deleted(self):
+    def test_default_entries_can_be_changed_or_removed_per_user(self):
         self.client.get("/api/blacklist/")
         default = BlacklistEntry.objects.filter(is_default=True).first()
 
@@ -189,9 +232,12 @@ class BlacklistApiTests(APITestCase):
             format="json",
         )
         delete = self.client.delete(f"/api/blacklist/{default.pk}/")
+        list_after_delete = self.client.get("/api/blacklist/")
 
-        self.assertEqual(update.status_code, status.HTTP_403_FORBIDDEN)
-        self.assertEqual(delete.status_code, status.HTTP_403_FORBIDDEN)
+        self.assertEqual(update.status_code, status.HTTP_200_OK)
+        self.assertEqual(update.data["severity"], "medium")
+        self.assertEqual(delete.status_code, status.HTTP_204_NO_CONTENT)
+        self.assertNotIn(default.domain, [entry["domain"] for entry in list_after_delete.data])
 
     def test_anonymous_user_is_denied(self):
         self.client.force_authenticate(user=None)

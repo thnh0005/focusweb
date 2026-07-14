@@ -1,0 +1,101 @@
+{
+  "title": "Analytics",
+  "backHome": "Back",
+  "headline": "Focus reflection",
+  "description": "Patterns from recent sessions, softened into signals you can act on.",
+  "loading": "Loading focus reflection",
+  "ranges": {
+    "7d": "7 days",
+    "30d": "30 days",
+    "all": "All time"
+  },
+  "errors": {
+    "load": "Analytics could not refresh. Existing charts will reappear once the connection recovers.",
+    "exportCreate": "Could not create report export",
+    "exportRefresh": "Could not refresh export status"
+  },
+  "empty": {
+    "title": "Complete a few sessions to reveal patterns",
+    "description": "Focus trends, heatmaps, and distraction sources become useful after several completed sessions.",
+    "weekly": "No weekly snapshot is available yet.",
+    "trend": "Complete more sessions to see the trend line.",
+    "distractions": "No distraction warnings recorded yet.",
+    "sessions": "No sessions yet",
+    "heatmap": "No time-of-day data available yet."
+  },
+  "metrics": {
+    "top": "Top focus metrics",
+    "totalFocusHours": "Total focus hours",
+    "averageScore": "Average score",
+    "sessions": "Sessions",
+    "deepWorkShare": "Deep work share",
+    "totalHours": "Total Hours",
+    "avgScore": "Avg Score",
+    "deepWork": "Deep Work"
+  },
+  "charts": {
+    "focusTrend": "Focus trend",
+    "focusTrendDescription": "Average score across completed sessions",
+    "improving": "Improving",
+    "drifting": "Drifting",
+    "stable": "Stable",
+    "distractionSources": "Distraction sources",
+    "warningCountByDomain": "Warning count by domain",
+    "sessionBreakdown": "Session breakdown",
+    "normalMode": "Normal Mode",
+    "deepWork": "Deep Work",
+    "ofTotal": "{{value}}% of total",
+    "peakHours": "Peak focus hours",
+    "peakHoursDescription": "Higher opacity means stronger average focus. Each cell includes a text tooltip.",
+    "noData": "No data",
+    "heatmapCell": "{{day}} at {{hour}}h: {{value}}",
+    "sessionsPercent": "{{value}}% of sessions"
+  },
+  "weekly": {
+    "title": "Weekly progress",
+    "description": "This week compared with last week",
+    "focus": "This week's focus"
+  },
+  "recommendations": {
+    "best_duration_bucket": "Use the session length that has produced your strongest average focus score.",
+    "no_clear_mode_preference": "Keep both normal and Deep Work modes available until the data shows a clearer pattern.",
+    "deep_work_outperforms_normal": "Deep Work is currently performing better for you. Prefer it for the next focused session.",
+    "normal_outperforms_deep_work": "Normal mode is currently performing better. Use it when you want a steadier session.",
+    "recommended_break_after_session": "Add a short break after the next session so the next block starts cleaner.",
+    "best_focus_time": "Plan the next important session inside your strongest focus time window.",
+    "high_warning_domain": "Review the main distracting domain before your next session.",
+    "high_tab_switch_frequency": "Reduce tab switching before starting the next block.",
+    "warnings_in_last_third": "Shorten the next session slightly or add a break before the final third.",
+    "no_previous_week_baseline": "Keep this week as the baseline; comparisons will become clearer after another week.",
+    "focus_time_increased": "Your total focus time increased this week. Keep the current rhythm.",
+    "focus_time_decreased": "Your total focus time decreased this week. Start with a smaller next session.",
+    "focus_score_improved": "Your average focus score improved this week. Repeat the conditions that helped.",
+    "focus_score_declined": "Your average focus score declined this week. Review distractions before the next session.",
+    "warnings_reduced": "Distraction warnings decreased this week. Keep the same setup.",
+    "warnings_increased": "Distraction warnings increased this week. Clean up the main distraction source first.",
+    "insufficient_weekly_data": "There is not enough weekly history yet. Complete a few more sessions to sharpen the signal."
+  },
+  "export": {
+    "eyebrow": "Report export",
+    "title": "Export focus report",
+    "description": "Export the current {{range}} analytics range. JSON and HTML are returned immediately when ready; PDF may be generated as a background job.",
+    "format": "Report format",
+    "exporting": "Exporting",
+    "export": "Export report",
+    "checking": "Checking",
+    "checkStatus": "Check status",
+    "job": "Job {{id}}",
+    "queued": "Report export has been queued. Use Check status to refresh the job.",
+    "expired": "This export has expired. Create a new export to download it again.",
+    "ready": "Report export is ready."
+  },
+  "days": {
+    "mon": "Mon",
+    "tue": "Tue",
+    "wed": "Wed",
+    "thu": "Thu",
+    "fri": "Fri",
+    "sat": "Sat",
+    "sun": "Sun"
+  }
+}

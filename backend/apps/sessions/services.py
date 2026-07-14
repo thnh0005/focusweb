@@ -56,6 +56,8 @@ def transition_session(
     target_status,
     note=None,
     tags=None,
+    reason="",
+    metadata=None,
     allowed_from_statuses=None,
 ):
     """Chuyển trạng thái session bằng một lần ghi DB có khóa.
@@ -102,6 +104,10 @@ def transition_session(
         locked.actual_duration_seconds = locked.calculate_actual_duration(now)
         locked.ended_at = now
         locked.paused_at = None
+        if reason:
+            locked.end_reason = reason
+        if metadata is not None:
+            locked.end_metadata = metadata
 
     locked.status = target_status
     locked.save()
@@ -123,6 +129,12 @@ def transition_session(
         # Lưu điểm trước khi cập nhật tổng profile để màn summary đọc được
         # đầy đủ score ngay sau khi endpoint /end/ trả về.
         ScoreCalculator().persist_final_score(locked)
+        from apps.ai.models import SessionInsight
+
+        SessionInsight.objects.get_or_create(
+            session=locked,
+            defaults={"status": SessionInsight.Status.PENDING},
+        )
         Profile.objects.filter(user=locked.user).update(
             total_sessions=F("total_sessions") + 1,
             total_focus_minutes=F("total_focus_minutes")

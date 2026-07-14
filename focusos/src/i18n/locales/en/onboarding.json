@@ -1,0 +1,52 @@
+{
+  "progress": "Step {{current}} of {{total}}",
+  "actions": {
+    "back": "Back",
+    "continue": "Continue",
+    "next": "Next",
+    "skipSetup": "Skip setup",
+    "saving": "Saving...",
+    "setUpLater": "Set up later",
+    "enterDashboard": "Enter dashboard",
+    "installExtension": "Install from Chrome Web Store"
+  },
+  "domain": {
+    "context": "Workspace context",
+    "title": "What kind of work should this space support?",
+    "description": "FocusOS uses this to tune session suggestions around the work you actually do.",
+    "errors": {
+      "skip": "Failed to skip onboarding"
+    },
+    "fields": {
+      "student": { "label": "Student", "description": "Study blocks, review, exams" },
+      "developer": { "label": "Developer", "description": "Code, debug, ship" },
+      "designer": { "label": "Designer", "description": "Explore, refine, present" },
+      "freelancer": { "label": "Freelancer", "description": "Client work and admin" },
+      "researcher": { "label": "Researcher", "description": "Read, collect, write" },
+      "other": { "label": "Other", "description": "Shape your own rhythm" }
+    }
+  },
+  "duration": {
+    "context": "Session rhythm",
+    "title": "How long should your default focus room stay open?",
+    "description": "This becomes the first timer suggestion. You can still adjust every session later.",
+    "options": {
+      "25": "A short reset for starting, reviewing, or warming up.",
+      "50": "A steady default for reading, coding, or deep study.",
+      "90": "A longer block for work that needs full immersion."
+    }
+  },
+  "extension": {
+    "context": "Focus tracking",
+    "title": "Enable the browser layer for calmer sessions.",
+    "description": "The extension helps FocusOS understand when attention drifts so it can support recovery during a session.",
+    "errors": {
+      "save": "Failed to save onboarding"
+    },
+    "notes": {
+      "drift": { "title": "Notices drift early", "description": "Detects when browsing moves away from your session goal." },
+      "privacy": { "title": "Protects sensitive fields", "description": "Focus tracking is designed around attention signals, not private text." },
+      "recovery": { "title": "Keeps recovery gentle", "description": "Warnings are calm and timed to help you return without stress." }
+    }
+  }
+}

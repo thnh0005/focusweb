@@ -1,0 +1,272 @@
+{
+  "greeting": "Chào mừng trở lại",
+  "loading": {
+    "focusRoom": "Đang chuẩn bị phòng tập trung"
+  },
+  "metrics": "Chỉ số tập trung",
+  "recentSessions": "Phiên gần đây",
+  "progress": "Tiến độ",
+  "statistics": "Thống kê",
+  "emptySessions": "Chưa có phiên tập trung",
+  "theme": "Giao diện",
+  "soundscape": "Âm thanh",
+  "errors": {
+    "startSession": "Không thể bắt đầu phiên. Vui lòng thử lại.",
+    "statsResting": "Thống kê đang tạm nghỉ"
+  },
+  "focusHome": {
+    "motto": "Bảo vệ từng việc một.",
+    "profile": "Mở hồ sơ",
+    "dockAria": "Không gian tập trung",
+    "dock": {
+      "focus": "Tập trung",
+      "sounds": "Âm thanh",
+      "theme": "Giao diện",
+      "docs": "AI Docs",
+      "stats": "Thống kê",
+      "settings": "Cài đặt",
+      "open": "Mở {{label}}",
+      "close": "Đóng {{label}}",
+      "history": "Lịch sử"
+    },
+    "clock": {
+      "timerAria": "Bộ đếm tập trung {{count}} phút",
+      "duration": "{{count}}p",
+      "normal": "Tập trung",
+      "deepWork": "Deep Work",
+      "startFocus": "Bắt đầu tập trung",
+      "startDeepWork": "Bắt đầu Deep Work",
+      "starting": "Đang bắt đầu...",
+      "greeting": {
+        "morning": "Chào buổi sáng",
+        "afternoon": "Chào buổi chiều",
+        "evening": "Chào buổi tối"
+      }
+    },
+    "sounds": {
+      "title": "Âm thanh",
+      "description": "Chọn âm nền cho phòng",
+      "controlsAria": "Điều khiển âm thanh",
+      "layers": "Nhạc và các lớp âm nền",
+      "mute": "Tắt toàn bộ âm thanh",
+      "unmute": "Bật lại toàn bộ âm thanh",
+      "pause": "Tạm dừng âm thanh",
+      "play": "Phát âm thanh",
+      "music": "Nhạc",
+      "musicVolume": "Âm lượng nhạc {{volume}}%",
+      "on": "Bật",
+      "off": "Tắt",
+      "enable": "Bật",
+      "disable": "Tắt",
+      "loopVolume": "Âm lượng {{label}} {{volume}}%",
+      "tracks": {
+        "lofi-rain-01": {
+          "label": "Lo-fi mưa để học",
+          "mood": "Lo-fi ấm với lớp mưa nhẹ"
+        },
+        "soft-piano-01": {
+          "label": "Piano nhẹ để tập trung",
+          "mood": "Piano chậm cho đọc và viết"
+        }
+      },
+      "loops": {
+        "rain": {
+          "label": "Mưa trên kính",
+          "description": "Mưa nhẹ bên cửa sổ học tập"
+        },
+        "fireplace": {
+          "label": "Lò sưởi",
+          "description": "Tiếng lửa cabin khẽ nổ"
+        },
+        "cafe": {
+          "label": "Âm phòng",
+          "description": "Không khí phòng ấm ở xa"
+        },
+        "forest-night": {
+          "label": "Không khí rừng",
+          "description": "Cây yên, đêm ngoài trời và nền thấp"
+        }
+      },
+      "nowPlaying": "Đang phát"
+    },
+    "popover": {
+      "drag": "Kéo popup",
+      "close": "Đóng {{title}}"
+    },
+    "deepWork": {
+      "fallbackTemplates": [
+        "Hoàn thành việc cụ thể tiếp theo",
+        "Học một khái niệm mà không đổi tab",
+        "Viết bản hoàn chỉnh đầu tiên"
+      ],
+      "title": "Thiết lập Deep Work",
+      "description": "Đặt mục tiêu rõ ràng cho khối Deep Work {{count}} phút này.",
+      "goalLabel": "Bạn muốn hoàn thành điều gì?",
+      "goalPlaceholder": "Hoàn thiện flow auth và viết test edge case",
+      "goalRequired": "Deep Work cần một mục tiêu rõ ràng.",
+      "continue": "Tiếp tục: {{goal}}",
+      "templatesLoadFailed": "Đang dùng ví dụ có sẵn vì không tải được template từ server.",
+      "templatesEmpty": "Chưa có template trên server. Đang hiển thị ví dụ có sẵn.",
+      "templatesLoading": "Đang tải template mục tiêu...",
+      "cancel": "Hủy",
+      "confirm": "Xác nhận Deep Work",
+      "starting": "Đang bắt đầu..."
+    },
+    "aiDocs": {
+      "title": "AI Docs",
+      "description": "Tài liệu gần đây và thao tác học tập",
+      "add": "Thêm",
+      "viewAll": "Xem tất cả",
+      "loading": "Đang tải tài liệu",
+      "loadError": "Không thể tải AI Docs.",
+      "emptyTitle": "Chưa có tài liệu",
+      "emptyDescription": "Thêm file PDF, DOCX hoặc TXT để tạo tài liệu học.",
+      "openSummary": "Mở tóm tắt",
+      "summary": "Tóm tắt",
+      "openDeck": "Mở bộ thẻ",
+      "flashcards": "Flashcard"
+    },
+    "statsSheet": {
+      "aria": "Thống kê tập trung",
+      "title": "Thống kê nhẹ",
+      "focus": "Tập trung",
+      "score": "Điểm",
+      "streak": "Chuỗi",
+      "resting": "Đang nghỉ",
+      "recentRhythm": "Nhịp gần đây",
+      "deepWork": "Deep Work",
+      "focusSession": "Tập trung",
+      "deepWorkGoal": "Deep Work",
+      "normalGoal": "Phiên tập trung",
+      "empty": "Bắt đầu một phiên để tạo lịch sử.",
+      "close": "Đóng"
+    },
+    "theme": {
+      "title": "Giao diện",
+      "description": "Đổi bầu không khí của phòng",
+      "brightness": "Độ sáng giao diện",
+      "light": "Sáng",
+      "dark": "Tối",
+      "choices": "Lựa chọn giao diện",
+      "customTitle": "Giao diện tùy chỉnh",
+      "customDescription": "Thêm nền riêng cho không gian này.",
+      "removeCustom": "Gỡ giao diện tùy chỉnh",
+      "addImage": "Thêm ảnh",
+      "imageTypes": "JPG, PNG, WebP",
+      "customBadge": "Tùy chỉnh",
+      "previewBadge": "Xem trước",
+      "saved": "Đã lưu giao diện",
+      "errors": {
+        "load": "Không thể tải cài đặt giao diện",
+        "save": "Xem trước đã đổi, nhưng lưu thất bại.",
+        "imageType": "Hãy tải file ảnh.",
+        "imageSize": "Ảnh phải từ 2.5 MB trở xuống.",
+        "imageRead": "Không thể đọc ảnh này.",
+        "browserStorage": "Ảnh này quá lớn cho lưu trữ trình duyệt."
+      },
+      "options": {
+        "minimal": {
+          "label": "Tối giản",
+          "description": "Giảm tương phản để lập kế hoạch yên tĩnh."
+        },
+        "forest": {
+          "label": "Rừng",
+          "description": "Không gian xanh nguyên bản."
+        },
+        "aurora-night": {
+          "label": "Cực quang",
+          "description": "Không khí cực quang dịu."
+        },
+        "rain-room": {
+          "label": "Phòng mưa",
+          "description": "Bề mặt đọc mát hơn."
+        }
+      }
+    },
+    "sceneSwitcher": {
+      "aria": "Chọn không gian tập trung",
+      "eyebrow": "Phòng học",
+      "title": "Chọn khung cảnh",
+      "description": "Đổi khung cảnh ngay. Nhạc và lớp âm nền sẽ theo phòng đã chọn.",
+      "close": "Đóng giao diện"
+    },
+    "scenes": {
+      "rainy-cafe": {
+        "name": "Quán cà phê mưa",
+        "description": "Ánh đèn quán cà phê ấm, mưa bên ngoài, âm phòng nhẹ cho giờ học đều.",
+        "ambientLabel": "Mưa"
+      },
+      "forest-cabin": {
+        "name": "Cabin trong rừng",
+        "description": "Cabin gỗ yên tĩnh, mưa nhẹ và lò sưởi cho những khối tập trung dài.",
+        "ambientLabel": "Lò sưởi"
+      },
+      "night-study": {
+        "name": "Góc học đêm",
+        "description": "Bàn học mờ, bóng xanh trầm và piano cho những giờ đọc muộn.",
+        "ambientLabel": "Âm phòng"
+      },
+      "hobbit-library": {
+        "name": "Thư viện Hobbit",
+        "description": "Thư viện cửa sổ tròn với lửa ấm và nhịp lật trang chậm.",
+        "ambientLabel": "Lò sưởi"
+      },
+      "train-window": {
+        "name": "Cửa sổ tàu",
+        "description": "Ánh sáng lướt qua cửa sổ và mưa nền cho những phiên ôn tập bình tĩnh.",
+        "ambientLabel": "Mưa"
+      },
+      "da-lat-mist": {
+        "name": "Sương Đà Lạt",
+        "description": "Sương sáng mát, hương thông và piano nhẹ cho nhịp tập trung dịu.",
+        "ambientLabel": "Đêm rừng"
+      }
+    }
+  },
+  "quickActions": {
+    "title": "Hành động nhanh",
+    "description": "Điều khiển nhanh cho các khối Deep Work",
+    "startSession": "Bắt đầu phiên tập trung",
+    "startSessionDescription": "Mở bộ đếm ngược cho khối Deep Work",
+    "uploadDoc": "Tải tài liệu học",
+    "uploadDocDescription": "Chuyển chương sách thành flashcard và tóm tắt",
+    "blacklist": "Quản lý blacklist",
+    "blacklistDescription": "Chặn website gây xao nhãng trong phiên"
+  },
+  "statsStrip": {
+    "focusDuration": "Thời gian tập trung",
+    "todayBlocks": "Khối Deep Work hôm nay",
+    "activeSessions": "Phiên hoạt động",
+    "deepWorkBlocks_one": "{{count}} khối Deep Work",
+    "deepWorkBlocks_other": "{{count}} khối Deep Work",
+    "averageScore": "Điểm trung bình",
+    "targetCompletion": "{{count}}% hoàn thành mục tiêu",
+    "noCompleted": "Chưa có phiên hoàn thành",
+    "focusStreak": "Chuỗi tập trung",
+    "days_one": "{{count}} ngày",
+    "days_other": "{{count}} ngày",
+    "streakActive": "Chuỗi chánh niệm đang hoạt động!",
+    "streakPrompt": "Bắt đầu một phiên để xây chuỗi"
+  },
+  "dailySummary": {
+    "title": "Tóm tắt hôm nay",
+    "description": "Theo dõi thành tựu Deep Work trong ngày",
+    "ofTarget": "Mục tiêu",
+    "minutesFocus": "Phút tập trung",
+    "completionRate": "Tỷ lệ hoàn thành",
+    "complete": "Mục tiêu tập trung hôm nay đã hoàn thành! Rất tốt.",
+    "remaining": "Tập trung thêm {{count}} phút hôm nay để chốt mục tiêu."
+  },
+  "recentActivity": {
+    "title": "Phiên tập trung gần đây",
+    "description": "Lịch sử các khoảng Deep Work đã hoàn thành",
+    "loading": "Đang tải lịch sử...",
+    "emptyTitle": "Chưa ghi nhận phiên",
+    "emptyDescription": "Các khoảng Deep Work đã hoàn thành sẽ xuất hiện ở đây sau khi bạn kết thúc phiên.",
+    "start": "Bắt đầu phiên",
+    "deepWorkBlock": "Khối Deep Work",
+    "normalFocusBlock": "Khối tập trung",
+    "minutes_one": "{{count}} phút",
+    "minutes_other": "{{count}} phút"
+  }
+}

@@ -12,8 +12,8 @@ export interface DistractionWarningOverlayProps {
 
 const WARNING_CONFIG = {
   1: {
-    title: "Return to the room",
-    body: "Your attention has started to drift. Come back to the session goal.",
+    title: "Quay lại phiên tập trung",
+    body: "Sự chú ý của bạn vừa lệch khỏi mục tiêu. Hãy quay lại trước khi phiên bị gián đoạn.",
     tone: "text-urgency-amber",
     border: "border-urgency-amber/30",
     surface: "bg-urgency-amber/10",
@@ -22,8 +22,8 @@ const WARNING_CONFIG = {
     size: "max-w-md",
   },
   2: {
-    title: "Distraction detected",
-    body: "You have been away from the focus path for a little while. Refocus before the timer pauses.",
+    title: "Đã phát hiện xao nhãng",
+    body: "Bạn đã rời khỏi luồng tập trung một lúc. Hãy quay lại ngay để tránh phiên tự tạm dừng.",
     tone: "text-orange-300",
     border: "border-orange-300/35",
     surface: "bg-orange-300/[0.12]",
@@ -32,8 +32,8 @@ const WARNING_CONFIG = {
     size: "max-w-lg",
   },
   3: {
-    title: "Final refocus check",
-    body: "This session is about to pause. Return to your goal now or take the pause and restart calmly.",
+    title: "Cảnh báo cuối",
+    body: "Phiên này sắp bị tạm dừng. Quay lại mục tiêu ngay hoặc tạm nghỉ rồi bắt đầu lại bình tĩnh.",
     tone: "text-urgency-coral",
     border: "border-urgency-coral/40",
     surface: "bg-urgency-coral/[0.12]",
@@ -102,7 +102,7 @@ export function DistractionWarningOverlay({
 
                 <div className={cn("min-w-0 flex-1", warningLevel === 3 && "flex flex-col items-center")}>
                   <p className={cn("text-[11px] font-mono", config.tone)}>
-                    Warning {warningLevel}/3
+                    Cảnh báo {warningLevel}/3
                   </p>
                   <h2
                     id="distraction-warning-title"
@@ -129,7 +129,7 @@ export function DistractionWarningOverlay({
                     type="button"
                     onClick={onDismiss}
                     className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-text-muted transition-all duration-fast hover:bg-white/[0.08] hover:text-text-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                    aria-label="Dismiss warning"
+                    aria-label="Đóng cảnh báo"
                   >
                     <X className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
                   </button>
@@ -146,7 +146,7 @@ export function DistractionWarningOverlay({
                   config.tone
                 )}
               >
-                I&apos;m back, continue session
+                Tôi đã quay lại, tiếp tục phiên
               </button>
             </div>
           </motion.div>

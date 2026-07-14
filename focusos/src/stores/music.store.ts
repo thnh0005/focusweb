@@ -103,19 +103,24 @@ function persistState(state: MusicState) {
   window.localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
 }
 
-function playCurrentMix(state: MusicState) {
+async function playCurrentMix(state: MusicState): Promise<boolean> {
   const music = getMusicTrack(state.currentMusicId);
-  void AudioManager.playMusic(music.id, music.audioUrl, state.volume);
+  const playTasks: Promise<boolean>[] = [
+    AudioManager.playMusic(music.id, music.audioUrl, state.volume),
+  ];
 
   AMBIENT_LOOPS.forEach((loop) => {
     const loopVolume = state.ambientVolumes[loop.id] ?? 0;
     if (loopVolume > 0) {
-      void AudioManager.playAmbient(loop.id, loop.audioUrl, loopVolume);
+      playTasks.push(AudioManager.playAmbient(loop.id, loop.audioUrl, loopVolume));
     } else {
       AudioManager.stopAmbient(loop.id);
     }
   });
   AudioManager.setMuted(state.isMuted);
+
+  const results = await Promise.all(playTasks);
+  return results.some(Boolean);
 }
 
 const initialState = readPersistedState();
@@ -135,7 +140,9 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     set({ currentTrack: music, currentMusicId: music.id });
     persistState(get());
     if (get().playing) {
-      void AudioManager.playMusic(music.id, music.audioUrl, get().volume);
+      void AudioManager.playMusic(music.id, music.audioUrl, get().volume).then((started) => {
+        if (!started) set({ playing: false });
+      });
     }
   },
 
@@ -144,7 +151,9 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     set({ currentMusicId: music.id, currentTrack: music });
     persistState(get());
     if (get().playing) {
-      void AudioManager.playMusic(music.id, music.audioUrl, get().volume);
+      void AudioManager.playMusic(music.id, music.audioUrl, get().volume).then((started) => {
+        if (!started) set({ playing: false });
+      });
     }
   },
 
@@ -159,7 +168,9 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     });
     persistState(get());
     if (get().playing) {
-      playCurrentMix(get());
+      void playCurrentMix(get()).then((started) => {
+        if (!started) set({ playing: false });
+      });
     }
   },
 
@@ -167,7 +178,7 @@ export const useMusicStore = create<MusicState>((set, get) => ({
     get().setCurrentSceneId(sceneId);
   },
 
-  togglePlay: () => {
+  togglePlay: async () => {
     const state = get();
     if (state.playing) {
       AudioManager.stop();
@@ -175,8 +186,8 @@ export const useMusicStore = create<MusicState>((set, get) => ({
       return;
     }
 
-    playCurrentMix(state);
-    set({ playing: true });
+    const started = await playCurrentMix(state);
+    set({ playing: started });
   },
 
   setVolume: (volume) => {

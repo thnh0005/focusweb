@@ -2,6 +2,8 @@
 // Format Utilities — FocusOS
 // ═══════════════════════════════════════════════════════════════
 
+import { formatNumberForLanguage } from "@/i18n/format";
+
 /**
  * Format seconds into MM:SS countdown display
  * e.g. 3661 → "61:01"
@@ -95,7 +97,7 @@ export function truncate(text: string, maxLength: number): string {
  * e.g. 1234567 → "1,234,567"
  */
 export function formatNumber(n: number): string {
-  return n.toLocaleString("en-US");
+  return formatNumberForLanguage(n);
 }
 
 /**

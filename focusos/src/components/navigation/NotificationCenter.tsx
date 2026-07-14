@@ -90,7 +90,7 @@ const DEFAULT_NOTIFICATIONS: Notification[] = [
     type: "deep_work_suggestion",
     title: "Your peak focus window is now",
     body: "You typically focus best between 20:00–22:00. Now's a great time to start a Deep Work session.",
-    href: "/session",
+    href: "/dashboard",
     isRead: false,
     createdAt: new Date(Date.now() - 5 * 60_000),
   },

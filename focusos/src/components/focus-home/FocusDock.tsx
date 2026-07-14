@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { BarChart3, History, Music2, Play, Settings, type LucideIcon } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils/cn";
 
 export type FocusDockPanel = "stats" | "history" | null;
@@ -46,31 +47,33 @@ export function FocusDock({
   onStart,
   className,
 }: FocusDockProps) {
+  const { t } = useTranslation("dashboard");
+
   return (
     <nav
-      aria-label="Focus home controls"
+      aria-label={t("focusHome.dockAria")}
       className={cn(
         "fixed bottom-4 left-1/2 z-30 flex -translate-x-1/2 items-center gap-1 rounded-[1.75rem] border border-white/10 bg-bg-void/80 p-2 shadow-ambient backdrop-blur-2xl",
         "max-w-[calc(100vw-1.5rem)] overflow-x-auto",
         className
       )}
     >
-      <DockButton label="Focus" icon={Play} onClick={onStart} />
+      <DockButton label={t("focusHome.dock.focus")} icon={Play} onClick={onStart} />
       <Link
-        href="/settings/preferences"
+        href="/settings/profile"
         className="flex min-h-12 min-w-14 flex-col items-center justify-center gap-1 rounded-2xl px-3 text-xs text-text-secondary transition-colors hover:bg-white/[0.06] hover:text-text-primary focus-ring-soft"
       >
         <Music2 className="h-4 w-4" aria-hidden="true" />
-        <span>Music</span>
+        <span>{t("focusHome.dock.sounds")}</span>
       </Link>
       <DockButton
-        label="Stats"
+        label={t("focusHome.dock.stats")}
         icon={BarChart3}
         isActive={activePanel === "stats"}
         onClick={() => onPanelChange(activePanel === "stats" ? null : "stats")}
       />
       <DockButton
-        label="History"
+        label={t("focusHome.dock.history")}
         icon={History}
         isActive={activePanel === "history"}
         onClick={() => onPanelChange(activePanel === "history" ? null : "history")}
@@ -80,7 +83,7 @@ export function FocusDock({
         className="flex min-h-12 min-w-14 flex-col items-center justify-center gap-1 rounded-2xl px-3 text-xs text-text-secondary transition-colors hover:bg-white/[0.06] hover:text-text-primary focus-ring-soft"
       >
         <Settings className="h-4 w-4" aria-hidden="true" />
-        <span>Settings</span>
+        <span>{t("focusHome.dock.settings")}</span>
       </Link>
     </nav>
   );

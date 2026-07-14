@@ -54,6 +54,7 @@ export interface UserPreferences {
   themeAccent: string;
   workspaceBackgroundUrl: string;
   autoResumeSession: boolean;
+  language: "vi" | "en";
 }
 
 // ── Onboarding ────────────────────────────────────────────────
@@ -77,12 +78,9 @@ export interface OnboardingData {
 // ── Theme & Appearance ────────────────────────────────────────
 
 export type AppTheme =
-  | "cyber"
   | "minimal"
   | "forest"
-  | "minimal-dark"
   | "aurora-night"
-  | "forest-calm"
   | "rain-room";
 
 export type AmbientEffect = "rain" | "snow" | "stars" | "leaves" | null;
@@ -123,12 +121,14 @@ export interface ThemePreferences {
 
 // ── Blacklist Entry ───────────────────────────────────────────
 
-export type BlacklistSeverity = "high" | "medium";
+export type BlacklistSeverity = "high" | "medium" | "low";
 
 export interface BlacklistEntry {
   id: string;
   domain: string;
   severity: BlacklistSeverity;
+  enabled: boolean;
+  source?: "DEFAULT" | "USER";
   isDefault: boolean;
   addedAt: string;
   updatedAt?: string;
@@ -164,6 +164,7 @@ export interface UpdatePreferencesPayload {
   themeAccent?: string;
   workspaceBackgroundUrl?: string;
   autoResumeSession?: boolean;
+  language?: "vi" | "en";
 }
 
 export interface UpdateNotificationSettingsPayload {

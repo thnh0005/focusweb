@@ -1,0 +1,250 @@
+{
+  "layout": {
+    "backDashboard": "Dashboard",
+    "eyebrow": "FocusOS settings",
+    "title": "Tune the room",
+    "description": "Keep the focus space quiet, personal, and ready.",
+    "sectionsLabel": "Settings sections",
+    "categories": {
+      "account": "Account",
+      "experience": "Experience",
+      "tools": "Tools"
+    },
+    "items": {
+      "profile": "Profile",
+      "profileHint": "Identity",
+      "account": "Account",
+      "accountHint": "Data & deletion",
+      "notifications": "Notifications",
+      "notificationsHint": "Reminders",
+      "extension": "Extension",
+      "extensionHint": "Browser",
+      "boundaries": "Boundaries",
+      "boundariesHint": "Distractions"
+    }
+  },
+  "language": {
+    "title": "Language",
+    "description": "Choose the language used throughout FocusOS.",
+    "selectLabel": "Choose language",
+    "vi": "Tiếng Việt",
+    "en": "English",
+    "saving": "Saving language...",
+    "saveFailed": "Language changed locally, but could not sync with your account.",
+    "switchTo": "Switch to {{language}}"
+  },
+  "blacklist": {
+    "eyebrow": "Boundaries",
+    "title": "Distraction boundaries",
+    "description": "Choose domains that should gently interrupt Normal Mode sessions.",
+    "addTitle": "Add a boundary",
+    "domainPlaceholder": "e.g. facebook.com",
+    "domainAria": "Domain to add",
+    "severityAria": "Boundary severity",
+    "add": "Add",
+    "adding": "Adding",
+    "protectedTitle": "Protected attention",
+    "domainCount_one": "{{count}} domain",
+    "domainCount_other": "{{count}} domains",
+    "loading": "Loading boundaries...",
+    "empty": "No boundaries have been added yet.",
+    "defaultBoundary": "Default boundary",
+    "customBoundary": "Custom boundary",
+    "enabled": "enabled",
+    "disabled": "disabled",
+    "enable": "Enable",
+    "disable": "Disable",
+    "removeAria": "Remove {{domain}}",
+    "domainAriaFor": "Domain for {{domain}}",
+    "severityAriaFor": "Severity for {{domain}}",
+    "successAdded": "Boundary added successfully",
+    "successRemoved": "Boundary removed successfully",
+    "successSeverity": "Severity updated successfully",
+    "successEnabled": "Boundary enabled",
+    "successDisabled": "Boundary disabled",
+    "successDomain": "Domain updated successfully",
+    "errors": {
+      "load": "Failed to load blacklist",
+      "add": "Failed to add domain",
+      "remove": "Failed to remove domain",
+      "severity": "Failed to update severity",
+      "boundary": "Failed to update boundary",
+      "domain": "Failed to update domain"
+    },
+    "highRisk": "High",
+    "mediumRisk": "Medium",
+    "lowRisk": "Low"
+  },
+  "account": {
+    "eyebrow": "Account",
+    "title": "Data and deletion",
+    "description": "Export your account data or start the account deletion flow.",
+    "exportTitle": "Account export",
+    "exportDescription": "Request a ZIP export of your profile, preferences, sessions, and study data.",
+    "requesting": "Requesting",
+    "requestExport": "Request export",
+    "job": "Job {{id}}",
+    "checking": "Checking",
+    "checkStatus": "Check status",
+    "downloadZip": "Download ZIP",
+    "deleteTitle": "Delete account",
+    "deleteDescription": "This starts the backend account deletion job and logs you out. Enter your password and type DELETE to confirm.",
+    "currentPassword": "Current password",
+    "typeDelete": "Type DELETE",
+    "deleting": "Deleting",
+    "deletionQueued": "Deletion job queued: {{id}}",
+    "messages": {
+      "exportPending": "Account export is being prepared. Use Check status to refresh.",
+      "exportReady": "Account export is ready to download.",
+      "exportExpired": "This account export has expired. Request a new export.",
+      "exportCreated": "Account export request created."
+    },
+    "errors": {
+      "exportRequest": "Could not request account export",
+      "exportRefresh": "Could not refresh account export",
+      "delete": "Could not delete account"
+    }
+  },
+  "profile": {
+    "eyebrow": "Account",
+    "title": "Profile",
+    "description": "The identity shown around your focus workspace.",
+    "card": "Account card",
+    "emailManaged": "Email is managed by authentication.",
+    "emailAddress": "Email address",
+    "loading": "Loading...",
+    "notAvailable": "Not available",
+    "emailHelp": "Contact support if you need to change this email.",
+    "displayName": "Display name",
+    "displayNamePlaceholder": "Enter your display name",
+    "saved": "Profile updated successfully",
+    "saveChanges": "Save changes",
+    "accountStatus": "Account status",
+    "memberSince": "Member since",
+    "status": "Status",
+    "active": "Active",
+    "signOut": "Sign out",
+    "signOutDescription": "Logging out closes this browser session.",
+    "logout": "Logout",
+    "errors": {
+      "load": "Failed to load profile",
+      "save": "Failed to save profile",
+      "required": "Display name is required",
+      "min": "Display name must be at least 2 characters",
+      "max": "Display name must be less than 50 characters"
+    },
+    "saving": "Saving"
+  },
+  "notificationsPage": {
+    "eyebrow": "Notifications",
+    "title": "Calm reminders",
+    "description": "Choose which cues should interrupt you and which can wait.",
+    "session": "Session",
+    "notifications": "Notifications",
+    "notificationsDescription": "Allow FocusOS notification cues.",
+    "sessionReminders": "Session reminders",
+    "sessionRemindersDescription": "Reminders to start your daily focus session.",
+    "distractionWarnings": "Distraction warnings",
+    "distractionWarningsDescription": "Managed by extension focus boundaries.",
+    "reflection": "Reflection",
+    "weeklyReport": "Weekly report",
+    "weeklyReportDescription": "Analysis of your weekly focus patterns.",
+    "deepWorkSuggestions": "Deep work suggestions",
+    "deepWorkSuggestionsDescription": "Ideas for when to schedule deeper work.",
+    "dailyDigest": "Daily digest",
+    "noEndpoint": "No backend endpoint yet.",
+    "achievements": "Achievements",
+    "communication": "Communication",
+    "productUpdates": "Product updates",
+    "center": "Notification center",
+    "centerDescription": "Backend currently supports notification settings and test notification creation, but does not expose a notification list or mark-as-read endpoint yet.",
+    "creatingTest": "Creating test",
+    "createTest": "Create test notification",
+    "testCreated": "Test notification created: {{title}}",
+    "saved": "Notification settings saved successfully",
+    "save": "Save notifications",
+    "loading": "Loading",
+    "saving": "Saving",
+    "errors": {
+      "load": "Failed to load notification settings",
+      "save": "Failed to save notification settings",
+      "test": "Failed to create test notification"
+    }
+  },
+  "extensionPage": {
+    "eyebrow": "Extension",
+    "title": "Browser bridge",
+    "description": "The extension helps FocusOS understand tab context during active sessions.",
+    "connected": "Extension connected",
+    "notDetected": "Extension not detected",
+    "connectedDescription": "Live distraction detection is ready for your next session.",
+    "notDetectedDescription": "You can still start sessions, but live tab detection may be limited.",
+    "version": "Version {{version}}",
+    "ready": "Ready",
+    "needsSetup": "Needs setup",
+    "installTitle": "Install extension",
+    "installDescription": "Install the FocusOS browser extension to support real-time distraction detection and focus scoring.",
+    "install": "Install from Chrome Web Store",
+    "needsTitle": "What it needs",
+    "needs": {
+      "tabs": "Read tab context during focus sessions.",
+      "warnings": "Display distraction warnings when boundaries are crossed.",
+      "metadata": "Use page metadata to support Deep Work relevance scoring.",
+      "https": "Communicate with FocusOS over HTTPS."
+    }
+  },
+  "themePage": {
+    "eyebrow": "Theme",
+    "title": "Ambient appearance",
+    "description": "Preview the visual language used across FocusOS. Theme and accent are saved to your account.",
+    "previews": "Theme previews",
+    "accent": "Accent tone",
+    "background": "Workspace background",
+    "backgroundDescription": "Upload a local image for the focus room background.",
+    "chooseImage": "Choose background image",
+    "imageHelp": "JPG, PNG, or WebP up to 2.5 MB",
+    "customImage": "Custom image",
+    "defaultAmbient": "Default ambient",
+    "removeBackground": "Remove custom background",
+    "display": "Display",
+    "displayDescription": "These display controls do not have backend support yet.",
+    "reduceMotion": "Reduce motion",
+    "compactMode": "Compact mode",
+    "comingSoon": "Coming soon",
+    "saved": "Theme settings saved successfully",
+    "save": "Save theme",
+    "loading": "Loading",
+    "saving": "Saving",
+    "accents": {
+      "moss": "Moss",
+      "rain": "Rain",
+      "ember": "Ember"
+    },
+    "errors": {
+      "load": "Failed to load theme settings",
+      "save": "Failed to save theme settings",
+      "imageType": "Upload an image file.",
+      "imageSize": "Image must be 2.5 MB or smaller.",
+      "imageRead": "Could not read this image.",
+      "browserStorage": "This image is too large for browser storage."
+    },
+    "themes": {
+      "minimal": {
+        "label": "Minimal",
+        "description": "Reduced contrast for quiet planning."
+      },
+      "forest": {
+        "label": "Forest",
+        "description": "Original green workspace."
+      },
+      "aurora-night": {
+        "label": "Aurora",
+        "description": "Muted aurora atmosphere."
+      },
+      "rain-room": {
+        "label": "Rainroom",
+        "description": "Cooler reading surface."
+      }
+    }
+  }
+}

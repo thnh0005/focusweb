@@ -4,6 +4,7 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Briefcase, Code2, GraduationCap, Palette, Search, Sparkles } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import {
   clearOnboardingDraft,
   readOnboardingDraft,
@@ -15,19 +16,18 @@ import type { UserProfession } from "@/types/user.types";
 
 const fields: Array<{
   id: UserProfession;
-  label: string;
-  description: string;
   icon: React.ComponentType<{ className?: string; "aria-hidden"?: boolean }>;
 }> = [
-  { id: "student", label: "Student", description: "Study blocks, review, exams", icon: GraduationCap },
-  { id: "developer", label: "Developer", description: "Code, debug, ship", icon: Code2 },
-  { id: "designer", label: "Designer", description: "Explore, refine, present", icon: Palette },
-  { id: "freelancer", label: "Freelancer", description: "Client work and admin", icon: Briefcase },
-  { id: "researcher", label: "Researcher", description: "Read, collect, write", icon: Search },
-  { id: "other", label: "Other", description: "Shape your own rhythm", icon: Sparkles },
+  { id: "student", icon: GraduationCap },
+  { id: "developer", icon: Code2 },
+  { id: "designer", icon: Palette },
+  { id: "freelancer", icon: Briefcase },
+  { id: "researcher", icon: Search },
+  { id: "other", icon: Sparkles },
 ];
 
 export default function OnboardingDomainPage() {
+  const { t } = useTranslation("onboarding");
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
@@ -55,7 +55,7 @@ export default function OnboardingDomainPage() {
       clearOnboardingDraft();
       router.replace("/dashboard");
     } catch (skipError) {
-      setError(getErrorMessage(skipError, "Failed to skip onboarding"));
+      setError(getErrorMessage(skipError, t("domain.errors.skip")));
     } finally {
       setIsSkipping(false);
     }
@@ -70,8 +70,8 @@ export default function OnboardingDomainPage() {
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4 text-xs text-text-muted">
-          <span>Step 1 of 3</span>
-          <span>Workspace context</span>
+          <span>{t("progress", { current: 1, total: 3 })}</span>
+          <span>{t("domain.context")}</span>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-white/10">
           <div className="h-full w-1/3 rounded-full bg-focus-green transition-all duration-300" />
@@ -80,10 +80,10 @@ export default function OnboardingDomainPage() {
 
       <div className="space-y-3">
         <h1 className="font-display text-3xl font-light leading-tight text-text-primary sm:text-4xl">
-          What kind of work should this space support?
+          {t("domain.title")}
         </h1>
         <p className="max-w-[54ch] text-sm leading-6 text-text-secondary sm:text-base">
-          FocusOS uses this to tune session suggestions around the work you actually do.
+          {t("domain.description")}
         </p>
       </div>
 
@@ -108,9 +108,11 @@ export default function OnboardingDomainPage() {
                   <Icon className="h-5 w-5" aria-hidden={true} />
                 </span>
                 <span>
-                  <span className="block text-sm font-medium text-text-primary">{field.label}</span>
+                  <span className="block text-sm font-medium text-text-primary">
+                    {t(`domain.fields.${field.id}.label`)}
+                  </span>
                   <span className="mt-1 block text-xs leading-5 text-text-muted">
-                    {field.description}
+                    {t(`domain.fields.${field.id}.description`)}
                   </span>
                 </span>
               </div>
@@ -126,14 +128,14 @@ export default function OnboardingDomainPage() {
           onClick={handleSkip}
           disabled={isSkipping}
         >
-          {isSkipping ? "Saving..." : "Skip setup"}
+          {isSkipping ? t("actions.saving") : t("actions.skipSetup")}
         </Button>
         <Button
           onClick={handleContinue}
           disabled={!selected || isSkipping}
           className="h-12 rounded-2xl"
         >
-          Continue
+          {t("actions.continue")}
         </Button>
       </div>
 

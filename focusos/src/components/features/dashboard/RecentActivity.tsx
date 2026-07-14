@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { AlertCircle, Calendar, CheckCircle2, Clock } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/Card";
 import { EmptyState } from "@/components/ui/EmptyState";
 import { useFocusScore } from "@/hooks/useFocusScore";
@@ -15,6 +16,7 @@ export interface RecentActivityProps {
 }
 
 export function RecentActivity({ sessions, isLoading = false }: RecentActivityProps) {
+  const { t } = useTranslation("dashboard");
   const recentSessions = sessions ?? [];
 
   return (
@@ -24,27 +26,27 @@ export function RecentActivity({ sessions, isLoading = false }: RecentActivityPr
     >
       <CardHeader className="p-5 pb-3">
         <CardTitle className="text-base font-light tracking-wide text-text-primary">
-          Recent Focus Sessions
+          {t("recentActivity.title")}
         </CardTitle>
         <CardDescription className="text-text-muted text-xs font-light">
-          History log of completed deep work intervals
+          {t("recentActivity.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 pt-0 flex-1 flex flex-col justify-center">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center py-12 gap-3" aria-live="polite" aria-busy="true">
             <div className="h-5 w-5 animate-spin rounded-full border-2 border-focus-purple border-t-transparent" />
-            <span className="text-xs text-text-muted font-light">Loading history log...</span>
+            <span className="text-xs text-text-muted font-light">{t("recentActivity.loading")}</span>
           </div>
         ) : recentSessions.length === 0 ? (
           <div className="py-8">
             <EmptyState
               preset="stats"
-              title="No sessions recorded"
-              description="Your completed deep work intervals will appear here once you finish a focus session."
-              actionText="Start a Session"
+              title={t("recentActivity.emptyTitle")}
+              description={t("recentActivity.emptyDescription")}
+              actionText={t("recentActivity.start")}
               onAction={() => {
-                window.location.href = "/session";
+                window.location.href = "/dashboard";
               }}
             />
           </div>
@@ -67,6 +69,7 @@ function RecentSessionRow({
   session: Session;
   isFirst: boolean;
 }) {
+  const { t } = useTranslation("dashboard");
   const minutes = Math.round(session.actualDurationSeconds / 60);
   const scoreMetrics = useFocusScore(session.focusScore);
 
@@ -88,7 +91,7 @@ function RecentSessionRow({
 
         <div className="min-w-0">
           <h5 className="text-xs font-medium text-text-primary tracking-wide leading-snug truncate">
-            {session.goal || (session.mode === "deep-work" ? "Deep Work Block" : "Normal Focus Block")}
+            {session.goal || (session.mode === "deep-work" ? t("recentActivity.deepWorkBlock") : t("recentActivity.normalFocusBlock"))}
           </h5>
           <div className="flex items-center gap-2 mt-1">
             <span className="text-[10px] text-text-muted font-light flex items-center gap-1">
@@ -98,7 +101,7 @@ function RecentSessionRow({
             <span className="text-[10px] text-text-muted font-light">.</span>
             <span className="text-[10px] text-text-muted font-light flex items-center gap-1">
               <Clock className="h-3 w-3" />
-              <span>{minutes} mins</span>
+              <span>{t("recentActivity.minutes", { count: minutes })}</span>
             </span>
           </div>
 

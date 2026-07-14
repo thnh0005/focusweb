@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { ChevronRight, Home } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils/cn";
 
 // ─── Types ───────────────────────────────────────────────────────────────────
@@ -23,37 +24,41 @@ export interface BreadcrumbProps {
 // ─── Pathname → Readable Label map ───────────────────────────────────────────
 
 const ROUTE_LABELS: Record<string, string> = {
-  dashboard: "Dashboard",
-  analytics: "Analytics",
-  "study-tools": "Study Tools",
-  settings: "Settings",
-  profile: "Profile",
-  preferences: "Preferences",
-  blacklist: "Blacklist",
-  notifications: "Notifications",
-  theme: "Theme",
-  extension: "Extension",
-  session: "Session",
-  active: "Active",
-  summary: "Summary",
-  review: "Review",
-  upload: "Upload",
+  dashboard: "nav.dashboard",
+  analytics: "nav.analytics",
+  "study-tools": "nav.aiDocs",
+  settings: "nav.settings",
+  profile: "nav.profile",
+  preferences: "nav.preferences",
+  blacklist: "nav.blacklist",
+  notifications: "nav.notifications",
+  theme: "nav.theme",
+  extension: "nav.extension",
+  session: "nav.focus",
+  active: "states.ready",
+  summary: "nav.summary",
+  review: "nav.review",
+  upload: "nav.upload",
 };
 
 // ─── Derive segments from pathname ───────────────────────────────────────────
 
-function deriveSegments(pathname: string): BreadcrumbSegment[] {
+function deriveSegments(pathname: string, t: (key: string) => string): BreadcrumbSegment[] {
   const parts = pathname.split("/").filter(Boolean);
 
   if (parts.length === 0) {
-    return [{ label: "Dashboard", href: "/dashboard" }];
+    return [{ label: t("nav.dashboard"), href: "/dashboard" }];
   }
 
   return parts.map((part, idx) => {
     const href = "/" + parts.slice(0, idx + 1).join("/");
     // If segment looks like a UUID/dynamic id, label as "Detail"
     const isId = /^[0-9a-f-]{8,}$/i.test(part) || /^\d+$/.test(part);
-    const label = isId ? "Detail" : (ROUTE_LABELS[part] ?? capitalize(part.replace(/-/g, " ")));
+    const label = isId
+      ? t("nav.detail")
+      : ROUTE_LABELS[part]
+        ? t(ROUTE_LABELS[part])
+        : capitalize(part.replace(/-/g, " "));
     return { label, href: idx < parts.length - 1 ? href : undefined };
   });
 }
@@ -65,17 +70,18 @@ function capitalize(str: string): string {
 // ─── Component ───────────────────────────────────────────────────────────────
 
 export function Breadcrumb({ pathname, segments, className }: BreadcrumbProps) {
-  const items = segments ?? deriveSegments(pathname);
+  const { t } = useTranslation("common");
+  const items = segments ?? deriveSegments(pathname, t);
 
   return (
     <nav
-      aria-label="Breadcrumb"
+      aria-label={t("nav.home")}
       className={cn("flex items-center gap-1.5 min-w-0", className)}
     >
       {/* FocusOS root crumb */}
       <Link
         href="/dashboard"
-        aria-label="FocusOS home"
+        aria-label={t("nav.home")}
         className={cn(
           "flex items-center gap-1.5 text-text-muted hover:text-text-secondary",
           "transition-colors duration-[120ms]",

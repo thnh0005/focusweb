@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Play } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import { cn } from "@/lib/utils/cn";
 import type { SessionMode } from "@/types/session.types";
@@ -29,8 +30,10 @@ export function CenterFocusClock({
   startError,
   className,
 }: CenterFocusClockProps) {
-  const [greeting] = React.useState(() => getGreeting());
-  const startLabel = mode === "deep-work" ? "Start Deep Work" : "Start Focus";
+  const { t } = useTranslation("dashboard");
+  const greeting = getGreeting(t);
+  const startLabel =
+    mode === "deep-work" ? t("focusHome.clock.startDeepWork") : t("focusHome.clock.startFocus");
 
   return (
     <div className={cn("flex flex-col items-center text-center", className)}>
@@ -44,7 +47,7 @@ export function CenterFocusClock({
           fontWeight: 300,
           letterSpacing: "0",
         }}
-        aria-label={`${durationMinutes} minute focus timer`}
+        aria-label={t("focusHome.clock.timerAria", { count: durationMinutes })}
       >
         {String(durationMinutes).padStart(2, "0")}:00
       </div>
@@ -65,15 +68,15 @@ export function CenterFocusClock({
               isStarting && "cursor-not-allowed opacity-50"
             )}
           >
-            {minutes}m
+            {t("focusHome.clock.duration", { count: minutes })}
           </button>
         ))}
       </div>
 
       <div className="mt-3 flex rounded-full border border-white/10 bg-white/[0.055] p-1 backdrop-blur-md">
         {[
-          { id: "normal" as const, label: "Focus" },
-          { id: "deep-work" as const, label: "Deep Work" },
+          { id: "normal" as const, label: t("focusHome.clock.normal") },
+          { id: "deep-work" as const, label: t("focusHome.clock.deepWork") },
         ].map((option) => (
           <button
             key={option.id}
@@ -103,7 +106,7 @@ export function CenterFocusClock({
         className="mt-7 h-[52px] rounded-full px-8 text-base shadow-[0_20px_70px_rgba(0,0,0,0.36)]"
       >
         <Play className="mr-2 h-4 w-4 fill-current stroke-[1.6]" aria-hidden="true" />
-        {isStarting ? "Starting..." : startLabel}
+        {isStarting ? t("focusHome.clock.starting") : startLabel}
       </Button>
       {startError && (
         <p role="alert" className="mt-4 max-w-md text-sm text-urgency-coral">
@@ -114,9 +117,9 @@ export function CenterFocusClock({
   );
 }
 
-function getGreeting() {
+function getGreeting(t: (key: string) => string) {
   const hour = new Date().getHours();
-  if (hour < 12) return "Good morning";
-  if (hour < 18) return "Good afternoon";
-  return "Good evening";
+  if (hour < 12) return t("focusHome.clock.greeting.morning");
+  if (hour < 18) return t("focusHome.clock.greeting.afternoon");
+  return t("focusHome.clock.greeting.evening");
 }

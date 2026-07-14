@@ -40,10 +40,10 @@ export interface SessionState {
 
   // Actions
   startSession: (config: SessionConfig) => Promise<ActiveSession>;
-  hydrateActiveSession: () => Promise<ActiveSession | null>;
+  hydrateActiveSession: (options?: { force?: boolean }) => Promise<ActiveSession | null>;
   pauseSession: () => Promise<void>;
   resumeSession: () => Promise<void>;
-  endSession: () => Promise<Session>;
+  endSession: (sessionId?: string) => Promise<Session>;
   cancelSession: () => Promise<void>;
   updateRealtimeScore: (score: number, state: FocusStateLabel) => void;
   triggerWarning: (level: 1 | 2 | 3) => void;
@@ -74,10 +74,15 @@ export const useSessionStore = create<SessionState>((set, get) => ({
       let blacklistPayloads: BlacklistPayload[] = [];
       try {
         const blacklistEntries = await blacklistApi.getBlacklist();
-        blacklistPayloads = blacklistEntries.map((entry) => ({
-          domain: entry.domain,
-          severity: entry.severity,
-        }));
+        blacklistPayloads = blacklistEntries
+          .filter((entry) => entry.enabled)
+          .map((entry) => ({
+            domain: entry.domain,
+            severity: entry.severity,
+            enabled: entry.enabled,
+            source: entry.source,
+            updatedAt: entry.updatedAt,
+          }));
       } catch (err) {
         console.warn("Could not load blacklist entries for extension sync:", err);
       }
@@ -111,7 +116,8 @@ export const useSessionStore = create<SessionState>((set, get) => ({
         config.goal,
         config.mode,
         blacklistPayloads,
-        config.durationMinutes
+        config.durationMinutes,
+        activeSession.extensionBridgeToken
       );
 
       // 4. Update local state
@@ -137,9 +143,9 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  hydrateActiveSession: async () => {
+  hydrateActiveSession: async (options) => {
     const existingSession = get().activeSession;
-    if (existingSession) {
+    if (existingSession && !options?.force) {
       return existingSession;
     }
 
@@ -229,9 +235,12 @@ export const useSessionStore = create<SessionState>((set, get) => ({
     }
   },
 
-  endSession: async () => {
+  endSession: async (sessionId) => {
     const session = get().activeSession;
     if (!session) throw new Error("No active session to end");
+    if (sessionId && session.id !== sessionId) {
+      throw new Error("Active session changed before it could be ended");
+    }
     set({ isLoading: true });
     try {
       const actualDurationSeconds = Math.round(

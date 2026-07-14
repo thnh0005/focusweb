@@ -8,25 +8,42 @@ from django.utils import timezone
 
 
 DEFAULT_BLACKLIST_DOMAINS = [
-    ("youtube.com", "high"),
     ("facebook.com", "high"),
     ("instagram.com", "high"),
     ("tiktok.com", "high"),
-    ("reddit.com", "medium"),
-    ("twitter.com", "medium"),
-    ("x.com", "medium"),
-    ("netflix.com", "medium"),
+    ("twitter.com", "high"),
+    ("x.com", "high"),
+    ("reddit.com", "high"),
+    ("threads.net", "high"),
+    ("snapchat.com", "high"),
+    ("pinterest.com", "high"),
+    ("tumblr.com", "high"),
+    ("linkedin.com", "high"),
+    ("youtube.com", "high"),
+    ("twitch.tv", "high"),
+    ("discord.com", "high"),
+    ("messenger.com", "high"),
+    ("telegram.org", "high"),
+    ("web.telegram.org", "high"),
+    ("zalo.me", "high"),
+    ("chat.zalo.me", "high"),
 ]
 
 
-def ensure_default_blacklist_entries():
+def ensure_default_blacklist_entries(user=None):
+    if user is None:
+        return
     for domain, severity in DEFAULT_BLACKLIST_DOMAINS:
-        BlacklistEntry.objects.update_or_create(
+        normalized_domain = normalize_domain(domain)
+        if BlacklistRuleDeletion.objects.filter(user=user, domain=normalized_domain).exists():
+            continue
+        BlacklistEntry.objects.get_or_create(
+            user=user,
             domain=domain,
             is_default=True,
             defaults={
-                "user": None,
                 "severity": severity,
+                "enabled": True,
             },
         )
 
@@ -60,7 +77,7 @@ class ExtensionHeartbeat(models.Model):
 
 class BlacklistEntryQuerySet(models.QuerySet):
     def available_to(self, user):
-        return self.filter(Q(is_default=True) | Q(user=user)).order_by(
+        return self.filter(user=user).order_by(
             "-is_default",
             "domain",
         )
@@ -70,6 +87,7 @@ class BlacklistEntry(models.Model):
     class Severity(models.TextChoices):
         HIGH = "high", "High"
         MEDIUM = "medium", "Medium"
+        LOW = "low", "Low"
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     user = models.ForeignKey(
@@ -86,6 +104,7 @@ class BlacklistEntry(models.Model):
         default=Severity.MEDIUM,
     )
     is_default = models.BooleanField(default=False)
+    enabled = models.BooleanField(default=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -95,20 +114,11 @@ class BlacklistEntry(models.Model):
         ordering = ["-is_default", "domain"]
         constraints = [
             models.CheckConstraint(
-                condition=(
-                    Q(is_default=True, user__isnull=True)
-                    | Q(is_default=False, user__isnull=False)
-                ),
+                condition=Q(user__isnull=False),
                 name="blacklist_owner_matches_type",
             ),
             models.UniqueConstraint(
-                fields=["domain"],
-                condition=Q(is_default=True),
-                name="unique_default_blacklist_domain",
-            ),
-            models.UniqueConstraint(
                 fields=["user", "domain"],
-                condition=Q(is_default=False),
                 name="unique_custom_blacklist_domain_per_user",
             ),
         ]
@@ -119,3 +129,26 @@ class BlacklistEntry(models.Model):
 
     def __str__(self):
         return self.domain
+
+
+class BlacklistRuleDeletion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="deleted_default_blacklist_rules",
+    )
+    domain = models.CharField(max_length=253)
+    deleted_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "domain"],
+                name="unique_deleted_default_blacklist_rule",
+            ),
+        ]
+
+    def save(self, *args, **kwargs):
+        self.domain = normalize_domain(self.domain)
+        super().save(*args, **kwargs)

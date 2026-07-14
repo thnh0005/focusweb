@@ -1,0 +1,272 @@
+{
+  "greeting": "Welcome back",
+  "loading": {
+    "focusRoom": "Preparing focus room"
+  },
+  "metrics": "Focus metrics",
+  "recentSessions": "Recent sessions",
+  "progress": "Progress",
+  "statistics": "Statistics",
+  "emptySessions": "No sessions yet",
+  "theme": "Theme",
+  "soundscape": "Soundscape",
+  "errors": {
+    "startSession": "Could not start session. Please try again.",
+    "statsResting": "Stats are resting for now"
+  },
+  "focusHome": {
+    "motto": "Protect one thing at a time.",
+    "profile": "Open profile",
+    "dockAria": "Focus workspace",
+    "dock": {
+      "focus": "Focus",
+      "sounds": "Sounds",
+      "theme": "Theme",
+      "docs": "AI Docs",
+      "stats": "Stats",
+      "settings": "Settings",
+      "open": "Open {{label}}",
+      "close": "Close {{label}}",
+      "history": "History"
+    },
+    "clock": {
+      "timerAria": "{{count}} minute focus timer",
+      "duration": "{{count}}m",
+      "normal": "Focus",
+      "deepWork": "Deep Work",
+      "startFocus": "Start Focus",
+      "startDeepWork": "Start Deep Work",
+      "starting": "Starting...",
+      "greeting": {
+        "morning": "Good morning",
+        "afternoon": "Good afternoon",
+        "evening": "Good evening"
+      }
+    },
+    "sounds": {
+      "title": "Soundscape",
+      "description": "Choose a room tone",
+      "controlsAria": "Audio controls",
+      "layers": "Music and ambient layers",
+      "mute": "Mute all audio",
+      "unmute": "Unmute all audio",
+      "pause": "Pause audio",
+      "play": "Play audio",
+      "music": "Music",
+      "musicVolume": "Music volume {{volume}}%",
+      "on": "On",
+      "off": "Off",
+      "enable": "Enable",
+      "disable": "Disable",
+      "loopVolume": "{{label}} volume {{volume}}%",
+      "tracks": {
+        "lofi-rain-01": {
+          "label": "Lo-fi rain study",
+          "mood": "Warm lo-fi with soft rain texture"
+        },
+        "soft-piano-01": {
+          "label": "Soft piano focus",
+          "mood": "Slow piano for reading and writing"
+        }
+      },
+      "loops": {
+        "rain": {
+          "label": "Rain on glass",
+          "description": "Soft rain on a study window"
+        },
+        "fireplace": {
+          "label": "Fireplace",
+          "description": "Low cabin fire crackle"
+        },
+        "cafe": {
+          "label": "Room tone",
+          "description": "Distant warm room ambience"
+        },
+        "forest-night": {
+          "label": "Forest air",
+          "description": "Quiet trees, night air, and low outdoor texture"
+        }
+      },
+      "nowPlaying": "Now playing"
+    },
+    "popover": {
+      "drag": "Drag popup",
+      "close": "Close {{title}}"
+    },
+    "deepWork": {
+      "fallbackTemplates": [
+        "Finish the next concrete task",
+        "Study one concept without switching tabs",
+        "Draft the first complete version"
+      ],
+      "title": "Deep Work setup",
+      "description": "Set a clear target for this {{count}} minute deep work block.",
+      "goalLabel": "What are you here to finish?",
+      "goalPlaceholder": "Complete the auth flow and write the edge-case tests",
+      "goalRequired": "Deep Work needs a clear goal.",
+      "continue": "Continue: {{goal}}",
+      "templatesLoadFailed": "Using built-in goal examples because server templates could not load.",
+      "templatesEmpty": "No server templates yet. Showing built-in goal examples.",
+      "templatesLoading": "Loading server goal templates...",
+      "cancel": "Cancel",
+      "confirm": "Confirm Deep Work",
+      "starting": "Starting..."
+    },
+    "aiDocs": {
+      "title": "AI Docs",
+      "description": "Recent documents and study actions",
+      "add": "Add",
+      "viewAll": "View all",
+      "loading": "Loading documents",
+      "loadError": "Could not load AI documents.",
+      "emptyTitle": "No documents yet",
+      "emptyDescription": "Add a PDF, DOCX, or TXT file to generate study material.",
+      "openSummary": "Open summary",
+      "summary": "Summary",
+      "openDeck": "Open deck",
+      "flashcards": "Flashcards"
+    },
+    "statsSheet": {
+      "aria": "Focus stats",
+      "title": "Gentle stats",
+      "focus": "Focus",
+      "score": "Score",
+      "streak": "Streak",
+      "resting": "Resting",
+      "recentRhythm": "Recent rhythm",
+      "deepWork": "Deep Work",
+      "focusSession": "Focus",
+      "deepWorkGoal": "Deep work",
+      "normalGoal": "Focus session",
+      "empty": "Start a session to build history.",
+      "close": "Close"
+    },
+    "theme": {
+      "title": "Theme",
+      "description": "Change the room atmosphere",
+      "brightness": "Theme brightness",
+      "light": "Light",
+      "dark": "Dark",
+      "choices": "Theme choices",
+      "customTitle": "Custom theme",
+      "customDescription": "Add your own background for this workspace.",
+      "removeCustom": "Remove custom theme",
+      "addImage": "Add image",
+      "imageTypes": "JPG, PNG, WebP",
+      "customBadge": "Custom",
+      "previewBadge": "Preview",
+      "saved": "Theme saved",
+      "errors": {
+        "load": "Failed to load theme settings",
+        "save": "Theme preview changed, but saving failed.",
+        "imageType": "Upload an image file.",
+        "imageSize": "Image must be 2.5 MB or smaller.",
+        "imageRead": "Could not read this image.",
+        "browserStorage": "This image is too large for browser storage."
+      },
+      "options": {
+        "minimal": {
+          "label": "Minimal",
+          "description": "Reduced contrast for quiet planning."
+        },
+        "forest": {
+          "label": "Forest",
+          "description": "Original green workspace."
+        },
+        "aurora-night": {
+          "label": "Aurora",
+          "description": "Muted aurora atmosphere."
+        },
+        "rain-room": {
+          "label": "Rainroom",
+          "description": "Cooler reading surface."
+        }
+      }
+    },
+    "sceneSwitcher": {
+      "aria": "Choose focus scene",
+      "eyebrow": "Study room",
+      "title": "Choose your scene",
+      "description": "Switch scene instantly. Music and ambient mix follow the selected room.",
+      "close": "Close theme"
+    },
+    "scenes": {
+      "rainy-cafe": {
+        "name": "Rainy Cafe",
+        "description": "Warm cafe lights, rain outside, low room tone for steady study.",
+        "ambientLabel": "Rain"
+      },
+      "forest-cabin": {
+        "name": "Forest Cabin",
+        "description": "Quiet wooden cabin, soft rain and fireplace for long focus blocks.",
+        "ambientLabel": "Fireplace"
+      },
+      "night-study": {
+        "name": "Night Study",
+        "description": "Dim desk, deep blue shadows, piano for late reading.",
+        "ambientLabel": "Room tone"
+      },
+      "hobbit-library": {
+        "name": "Hobbit Library",
+        "description": "Round-window library with warm fire and slow pages.",
+        "ambientLabel": "Fireplace"
+      },
+      "train-window": {
+        "name": "Train Window",
+        "description": "Moving window light with rain ambience for calm review sessions.",
+        "ambientLabel": "Rain"
+      },
+      "da-lat-mist": {
+        "name": "Da Lat Mist",
+        "description": "Cool morning mist, pine air, and soft piano for gentle focus.",
+        "ambientLabel": "Forest night"
+      }
+    }
+  },
+  "quickActions": {
+    "title": "Quick Actions",
+    "description": "Sanctuary controls for immediate deep work blocks",
+    "startSession": "Start Focus Session",
+    "startSessionDescription": "Launch a deep work blocks countdown timer",
+    "uploadDoc": "Upload Study Materials",
+    "uploadDocDescription": "Convert textbook chapters to flashcards and summaries",
+    "blacklist": "Blacklist Manager",
+    "blacklistDescription": "Restrict distracting websites during active session"
+  },
+  "statsStrip": {
+    "focusDuration": "Focus Duration",
+    "todayBlocks": "Today's deep work blocks",
+    "activeSessions": "Active Sessions",
+    "deepWorkBlocks_one": "{{count}} deep work block",
+    "deepWorkBlocks_other": "{{count}} deep work blocks",
+    "averageScore": "Average Score",
+    "targetCompletion": "{{count}}% target completion",
+    "noCompleted": "No sessions completed yet",
+    "focusStreak": "Focus Streak",
+    "days_one": "{{count}} Day",
+    "days_other": "{{count}} Days",
+    "streakActive": "Mindful streak is active!",
+    "streakPrompt": "Start a session to build a streak"
+  },
+  "dailySummary": {
+    "title": "Daily Summary",
+    "description": "Track today's deep work focus achievements",
+    "ofTarget": "Of Target",
+    "minutesFocus": "Minutes Focus",
+    "completionRate": "Completion Rate",
+    "complete": "Daily focus goal fully complete! Excellent mindfulness.",
+    "remaining": "Focus for {{count}} more minutes today to lock in your daily target."
+  },
+  "recentActivity": {
+    "title": "Recent Focus Sessions",
+    "description": "History log of completed deep work intervals",
+    "loading": "Loading history log...",
+    "emptyTitle": "No sessions recorded",
+    "emptyDescription": "Your completed deep work intervals will appear here once you finish a focus session.",
+    "start": "Start a Session",
+    "deepWorkBlock": "Deep Work Block",
+    "normalFocusBlock": "Normal Focus Block",
+    "minutes_one": "{{count}} min",
+    "minutes_other": "{{count}} mins"
+  }
+}

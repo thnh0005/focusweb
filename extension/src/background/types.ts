@@ -1,10 +1,15 @@
 export type SessionMode = "normal" | "deep-work";
 export type SessionStatus = "active" | "paused";
 export type WarningLevel = 1 | 2 | 3;
+export type BlacklistRiskLevel = "HIGH" | "MEDIUM" | "LOW";
+export type SupportedLanguage = "vi" | "en";
 
 export interface BlacklistPayload {
   domain: string;
-  severity: "high" | "medium";
+  severity: "high" | "medium" | "low";
+  enabled?: boolean;
+  source?: "DEFAULT" | "USER" | "default" | "custom";
+  updatedAt?: string;
 }
 
 export interface ExtensionSessionStartPayload {
@@ -13,8 +18,10 @@ export interface ExtensionSessionStartPayload {
   mode: SessionMode;
   blacklist: BlacklistPayload[];
   backendApiUrl?: string;
+  extensionToken?: string;
   appUrl?: string;
   plannedDurationMinutes?: number;
+  language?: SupportedLanguage;
 }
 
 export type RuntimeMessageType =
@@ -25,7 +32,10 @@ export type RuntimeMessageType =
   | "SESSION_END"
   | "SESSION_CANCEL"
   | "BLACKLIST_SYNC"
-  | "GET_STATUS";
+  | "LANGUAGE_SYNC"
+  | "GET_STATUS"
+  | "BLACKLIST_RETURN_TO_FOCUS"
+  | "BLACKLIST_OVERLAY_DISMISSED";
 
 export interface RuntimeMessage {
   type: RuntimeMessageType;
@@ -64,12 +74,17 @@ export interface FocusSessionState {
   startedAt: string;
   pausedAt?: string;
   backendApiUrl: string;
+  extensionToken?: string;
   appUrl: string;
   plannedDurationMinutes?: number;
+  language?: SupportedLanguage;
   blacklist: BlacklistPayload[];
+  blacklistEnforcement?: BlacklistEnforcementState[];
   currentTab?: TrackedTab;
   tabSwitchCount: number;
   lastWarning?: BlacklistWarning;
+  backendConnected?: boolean;
+  lastBackendHeartbeatAt?: string;
   lastSyncAt?: string;
   lastError?: string;
 }
@@ -125,15 +140,30 @@ export interface QueueFlushResult {
   sent: number;
   retained: number;
   error?: string;
+  sessionClosed?: boolean;
 }
 
 export interface BlacklistWarning {
   sessionId: string;
   domain: string;
   matchedDomain: string;
-  severity: "high" | "medium";
+  severity: "high" | "medium" | "low";
+  riskLevel: BlacklistRiskLevel;
   level: WarningLevel;
   occurredAt: string;
+  warningCount?: number;
+}
+
+export interface BlacklistEnforcementState {
+  sessionId: string;
+  tabId: number;
+  domain: string;
+  riskLevel: BlacklistRiskLevel;
+  warningCount: number;
+  lastWarningAt: number | null;
+  enteredAt: number;
+  stopScheduledAt: number | null;
+  phase: "IDLE" | "WARNING" | "GRACE_PERIOD" | "STOPPED";
 }
 
 export interface ExtensionSnapshot {
@@ -143,6 +173,8 @@ export interface ExtensionSnapshot {
   activeSession: FocusSessionState | null;
   pendingEvents: number;
   lastSyncAt?: string;
+  backendConnected?: boolean;
+  lastBackendHeartbeatAt?: string;
   lastError?: string;
   currentDomain?: string;
   currentTitle?: string;

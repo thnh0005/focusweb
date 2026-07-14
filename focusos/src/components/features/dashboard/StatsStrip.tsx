@@ -3,6 +3,7 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import { Clock, Activity, Target, Flame } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { MetricCard } from "@/components/ui/MetricCard";
 import type { DashboardStats } from "@/types/analytics.types";
 
@@ -12,6 +13,7 @@ export interface StatsStripProps {
 }
 
 export function StatsStrip({ stats, streakCount = 0 }: StatsStripProps) {
+  const { t } = useTranslation("dashboard");
   const totalMinutes = stats?.totalFocusMinutes ?? 0;
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
@@ -20,9 +22,9 @@ export function StatsStrip({ stats, streakCount = 0 }: StatsStripProps) {
   const items = [
     {
       id: "focus-time",
-      label: "Focus Duration",
+      label: t("statsStrip.focusDuration"),
       value: durationLabel,
-      subcopy: "Today's deep work blocks",
+      subcopy: t("statsStrip.todayBlocks"),
       icon: Clock,
       iconClassName: "text-focus-purple",
       iconWrapClassName: "border-focus-purple/10 bg-focus-purple/5",
@@ -30,9 +32,9 @@ export function StatsStrip({ stats, streakCount = 0 }: StatsStripProps) {
     },
     {
       id: "sessions",
-      label: "Active Sessions",
+      label: t("statsStrip.activeSessions"),
       value: String(stats?.totalSessions ?? 0),
-      subcopy: `${stats?.deepWorkSessionCount ?? 0} deep work blocks`,
+      subcopy: t("statsStrip.deepWorkBlocks", { count: stats?.deepWorkSessionCount ?? 0 }),
       icon: Activity,
       iconClassName: "text-blue-400",
       iconWrapClassName: "border-blue-500/10 bg-blue-500/5",
@@ -40,9 +42,11 @@ export function StatsStrip({ stats, streakCount = 0 }: StatsStripProps) {
     },
     {
       id: "focus-score",
-      label: "Average Score",
+      label: t("statsStrip.averageScore"),
       value: stats?.averageFocusScore ? `${Math.round(stats.averageFocusScore)}%` : "N/A",
-      subcopy: stats?.completionRate ? `${Math.round(stats.completionRate)}% target completion` : "No sessions completed yet",
+      subcopy: stats?.completionRate
+        ? t("statsStrip.targetCompletion", { count: Math.round(stats.completionRate) })
+        : t("statsStrip.noCompleted"),
       icon: Target,
       iconClassName: "text-green-400",
       iconWrapClassName: "border-green-500/10 bg-green-500/5",
@@ -50,9 +54,9 @@ export function StatsStrip({ stats, streakCount = 0 }: StatsStripProps) {
     },
     {
       id: "streak",
-      label: "Focus Streak",
-      value: streakCount > 0 ? `${streakCount} Days` : "0 Days",
-      subcopy: streakCount > 0 ? "Mindful streak is active!" : "Start a session to build a streak",
+      label: t("statsStrip.focusStreak"),
+      value: t("statsStrip.days", { count: streakCount }),
+      subcopy: streakCount > 0 ? t("statsStrip.streakActive") : t("statsStrip.streakPrompt"),
       icon: Flame,
       iconClassName: "text-urgency-amber",
       iconWrapClassName: "border-urgency-amber/10 bg-urgency-amber/5",

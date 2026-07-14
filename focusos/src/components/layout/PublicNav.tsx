@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { AnimatePresence, motion, useReducedMotion } from "framer-motion";
 import { Leaf, Menu, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils/cn";
 import { Button } from "../ui/Button";
 
@@ -14,6 +15,7 @@ const navItems = [
 ];
 
 export function PublicNav() {
+  const { t } = useTranslation("auth");
   const [isScrolled, setIsScrolled] = React.useState(false);
   const [isMobileOpen, setIsMobileOpen] = React.useState(false);
   const reduceMotion = useReducedMotion();
@@ -68,12 +70,12 @@ export function PublicNav() {
                 size="sm"
                 className="rounded-xl text-text-secondary hover:text-text-primary"
               >
-                Sign in
+                {t("public.signIn")}
               </Button>
             </Link>
             <Link href="/register" tabIndex={-1}>
               <Button variant="primary" size="sm" className="rounded-xl shadow-glow">
-                Start focusing
+                {t("public.startFocusing")}
               </Button>
             </Link>
           </div>
@@ -83,7 +85,7 @@ export function PublicNav() {
             onClick={() => setIsMobileOpen((value) => !value)}
             className="flex h-11 w-11 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.045] text-text-primary transition-colors hover:bg-white/[0.075] focus-ring-soft md:hidden"
             aria-expanded={isMobileOpen}
-            aria-label={isMobileOpen ? "Close navigation menu" : "Open navigation menu"}
+            aria-label={isMobileOpen ? t("public.closeMenu") : t("public.openMenu")}
           >
             {isMobileOpen ? (
               <X className="h-5 w-5" aria-hidden="true" />
@@ -119,12 +121,12 @@ export function PublicNav() {
             <div className="grid gap-3">
               <Link href="/login" onClick={() => setIsMobileOpen(false)} tabIndex={-1}>
                 <Button variant="secondary" className="h-12 w-full rounded-2xl text-base">
-                  Sign in
+                  {t("public.signIn")}
                 </Button>
               </Link>
               <Link href="/register" onClick={() => setIsMobileOpen(false)} tabIndex={-1}>
                 <Button variant="primary" className="h-12 w-full rounded-2xl text-base">
-                  Start focusing
+                  {t("public.startFocusing")}
                 </Button>
               </Link>
             </div>

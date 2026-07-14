@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { useTranslation } from "react-i18next";
 import { useSession } from "@/hooks/useSession";
 import { useFocusScore } from "@/hooks/useFocusScore";
 import { useSessionStore } from "@/stores/session.store";
@@ -10,7 +11,6 @@ import { useMusicStore } from "@/stores/music.store";
 import { useExtensionStore } from "@/stores/extension.store";
 import { sessionsApi } from "@/services/sessions.api";
 import { FocusTimer } from "@/components/features/focus/FocusTimer";
-import { DistractionWarningOverlay } from "@/components/features/focus/DistractionWarningOverlay";
 import { AutoPauseModal } from "@/components/features/focus/AutoPauseModal";
 import { SessionNotepad } from "@/components/features/focus/SessionNotepad";
 import { ImmersiveSessionShell } from "@/components/session/ImmersiveSessionShell";
@@ -18,6 +18,7 @@ import { SessionGoalHeader } from "@/components/session/SessionGoalHeader";
 import { SessionControlPills } from "@/components/session/SessionControlPills";
 import { FocusStatePill } from "@/components/session/FocusStatePill";
 import { SessionUtilityDock } from "@/components/session/SessionUtilityDock";
+import { AiDocumentsWidget } from "@/components/focus-home/AiDocumentsWidget";
 import { SceneSwitcher } from "@/components/focus-home/SceneSwitcher";
 import {
   Dialog,
@@ -32,14 +33,15 @@ import type { BackendRealtimeScore } from "@/types/session.types";
 
 const BACKEND_POLL_INTERVAL_MS = 15_000;
 const EXTENSION_SCORE_STALE_MS = 30_000;
+const HYDRATE_TIMEOUT_MS = 8000;
 
-function scoreLabel(score: BackendRealtimeScore | undefined) {
-  if (!score) return "Checking focus signals";
-  if (score.data_quality === "INSUFFICIENT") return "Insufficient data";
-  if (score.stale) return "Stale backend score";
-  if (score.ai_status === "DISABLED") return "Rule-based score";
-  if (score.data_quality === "PARTIAL") return "Partial score";
-  return "Backend score";
+function scoreLabel(score: BackendRealtimeScore | undefined, t: (key: string) => string) {
+  if (!score) return t("active.checkingSignals");
+  if (score.data_quality === "INSUFFICIENT") return t("active.insufficientData");
+  if (score.stale) return t("active.staleBackend");
+  if (score.ai_status === "DISABLED") return t("active.ruleBased");
+  if (score.data_quality === "PARTIAL") return t("active.partialScore");
+  return t("active.backendScore");
 }
 
 function isEditableTarget(target: EventTarget | null) {
@@ -54,6 +56,7 @@ function isEditableTarget(target: EventTarget | null) {
 }
 
 export default function ActiveSessionPage() {
+  const { t } = useTranslation("focus");
   const router = useRouter();
   const {
     activeSession,
@@ -68,9 +71,7 @@ export default function ActiveSessionPage() {
   } = useSession();
   const {
     realtimeFocusScore,
-    warningLevel,
     isAutoPaused,
-    clearWarning,
     tabSwitchCount,
     isLoading,
     hydrateActiveSession,
@@ -79,25 +80,22 @@ export default function ActiveSessionPage() {
   const { connected: extensionConnected } = useExtensionStore();
   const { togglePlay } = useMusicStore();
   const [isNoteOpen, setIsNoteOpen] = React.useState(false);
+  const [isDocsOpen, setIsDocsOpen] = React.useState(false);
+  const [isSceneOpen, setIsSceneOpen] = React.useState(false);
   const [confirmEndOpen, setConfirmEndOpen] = React.useState(false);
   const [isHydrating, setIsHydrating] = React.useState(!activeSession);
-  const [dismissedBackendCycleId, setDismissedBackendCycleId] = React.useState<string | null>(null);
+  const [isEndingSession, setIsEndingSession] = React.useState(false);
   const [nowMs, setNowMs] = React.useState(0);
 
   const activeSessionId = activeSession?.id;
-  const shouldPollBackend = Boolean(activeSessionId);
+  const shouldPollBackend =
+    Boolean(activeSessionId) &&
+    !isEndingSession &&
+    ["active", "paused", "auto-paused"].includes(sessionStatus);
 
   const realtimeScoreQuery = useQuery({
     queryKey: ["session-realtime-score", activeSessionId],
     queryFn: () => sessionsApi.getRealtimeScore(activeSessionId as string),
-    enabled: shouldPollBackend,
-    refetchInterval: BACKEND_POLL_INTERVAL_MS,
-    retry: false,
-  });
-
-  const warningsQuery = useQuery({
-    queryKey: ["session-warnings", activeSessionId],
-    queryFn: () => sessionsApi.getSessionWarnings(activeSessionId as string),
     enabled: shouldPollBackend,
     refetchInterval: BACKEND_POLL_INTERVAL_MS,
     retry: false,
@@ -116,24 +114,10 @@ export default function ActiveSessionPage() {
       : null;
   const displayedScore = useBackendScore ? backendScore : realtimeFocusScore;
   const scoreMetrics = useFocusScore(displayedScore);
-  const backendActiveCycle = warningsQuery.data?.active_cycle;
-  const backendWarningLevel =
-    backendActiveCycle && backendActiveCycle.cycle_id !== dismissedBackendCycleId
-      ? backendActiveCycle.current_level
-      : null;
-  const displayedWarningLevel = warningLevel ?? backendWarningLevel;
-  const displayedAutoPaused =
-    isAutoPaused || Boolean(backendActiveCycle?.auto_pause_required);
+  const displayedAutoPaused = isAutoPaused;
   const scoreSourceLabel = useBackendScore
-    ? scoreLabel(realtimeScoreQuery.data)
-    : "Extension score";
-
-  const handleDismissWarning = React.useCallback(() => {
-    if (!warningLevel && backendActiveCycle?.cycle_id) {
-      setDismissedBackendCycleId(backendActiveCycle.cycle_id);
-    }
-    clearWarning();
-  }, [backendActiveCycle, clearWarning, warningLevel]);
+    ? scoreLabel(realtimeScoreQuery.data, t)
+    : t("active.extensionScore");
 
   React.useEffect(() => {
     const intervalId = window.setInterval(() => setNowMs(Date.now()), 5000);
@@ -141,26 +125,37 @@ export default function ActiveSessionPage() {
   }, []);
 
   React.useEffect(() => {
-    if (activeSession) {
+    if (isEndingSession) {
       return;
+    }
+    if (activeSession) {
+      const timerId = window.setTimeout(() => setIsHydrating(false), 0);
+      return () => window.clearTimeout(timerId);
     }
 
     let isMounted = true;
+
+    const timeoutId = window.setTimeout(() => {
+      if (!isMounted) return;
+      setIsHydrating(false);
+      router.replace("/dashboard");
+    }, HYDRATE_TIMEOUT_MS);
 
     hydrateActiveSession()
       .then((session) => {
         if (!isMounted) return;
         if (!session) {
-          router.replace("/session");
+          router.replace("/dashboard");
         }
       })
       .catch((error) => {
         console.error("Failed to restore active session:", error);
         if (isMounted) {
-          router.replace("/session");
+          router.replace("/dashboard");
         }
       })
       .finally(() => {
+        window.clearTimeout(timeoutId);
         if (isMounted) {
           setIsHydrating(false);
         }
@@ -168,19 +163,23 @@ export default function ActiveSessionPage() {
 
     return () => {
       isMounted = false;
+      window.clearTimeout(timeoutId);
     };
-  }, [activeSession, hydrateActiveSession, router]);
+  }, [activeSession, hydrateActiveSession, isEndingSession, router]);
 
   const handleEndSession = React.useCallback(async () => {
+    if (!activeSessionId) return;
+    setIsEndingSession(true);
     try {
-      const completed = await endSession();
+      const completed = await endSession(activeSessionId);
       setConfirmEndOpen(false);
-      router.push(`/session/summary/${completed.id}`);
+      router.replace(`/session/summary/${completed.id === activeSessionId ? completed.id : activeSessionId}`);
     } catch (error) {
       console.error("Failed to end session:", error);
+      setIsEndingSession(false);
       router.push("/dashboard");
     }
-  }, [endSession, router]);
+  }, [activeSessionId, endSession, router]);
 
   const handlePauseResume = React.useCallback(() => {
     if (sessionStatus === "active") {
@@ -240,7 +239,7 @@ export default function ActiveSessionPage() {
     return (
       <div className="flex min-h-[100dvh] items-center justify-center bg-background text-text-secondary">
         <div className="rounded-3xl border border-white/10 bg-white/[0.045] px-5 py-3 text-sm font-light">
-          Restoring focus session...
+          {isEndingSession ? t("active.finalizing", { defaultValue: "Preparing your focus score..." }) : t("active.restore")}
         </div>
       </div>
     );
@@ -286,7 +285,11 @@ export default function ActiveSessionPage() {
         utilityDock={
           <SessionUtilityDock
             noteOpen={isNoteOpen}
+            docsOpen={isDocsOpen}
+            sceneOpen={isSceneOpen}
             onToggleNote={() => setIsNoteOpen((value) => !value)}
+            onToggleDocs={() => setIsDocsOpen((value) => !value)}
+            onToggleScene={() => setIsSceneOpen((value) => !value)}
             onToggleFullscreen={handleToggleFullscreen}
           />
         }
@@ -301,7 +304,7 @@ export default function ActiveSessionPage() {
         diagnostics={
           <div className="flex flex-wrap items-center justify-center gap-2">
             <div className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-[11px] font-mono text-text-muted backdrop-blur-md">
-              {tabSwitchCount} tab switches
+              {t("active.tabSwitches", { count: tabSwitchCount })}
             </div>
             <div className="rounded-full border border-white/10 bg-white/[0.045] px-3 py-1.5 text-[11px] font-mono text-text-muted backdrop-blur-md">
               {scoreSourceLabel}
@@ -310,17 +313,17 @@ export default function ActiveSessionPage() {
         }
         overlays={
           <>
-            <DistractionWarningOverlay
-              warningLevel={displayedWarningLevel}
-              onDismiss={handleDismissWarning}
-            />
             <AutoPauseModal
               isOpen={displayedAutoPaused}
               onResume={resumeSession}
               onEnd={() => setConfirmEndOpen(true)}
               isLoading={isLoading}
             />
-            <SceneSwitcher />
+            {isSceneOpen && <SceneSwitcher onClose={() => setIsSceneOpen(false)} />}
+            <AiDocumentsWidget
+              isOpen={isDocsOpen}
+              onClose={() => setIsDocsOpen(false)}
+            />
           </>
         }
       />
@@ -328,9 +331,9 @@ export default function ActiveSessionPage() {
       <Dialog open={confirmEndOpen} onOpenChange={setConfirmEndOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>End this focus session?</DialogTitle>
+            <DialogTitle>{t("active.confirmEndTitle")}</DialogTitle>
             <DialogDescription>
-              Your current note will be saved with the session summary.
+              {t("active.confirmEndDescription")}
             </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-3 sm:gap-2">
@@ -339,7 +342,7 @@ export default function ActiveSessionPage() {
               variant="outline"
               onClick={() => setConfirmEndOpen(false)}
             >
-              Keep focusing
+              {t("active.keepFocusing")}
             </Button>
             <Button
               type="button"
@@ -347,7 +350,7 @@ export default function ActiveSessionPage() {
               onClick={handleEndSession}
               disabled={isLoading}
             >
-              End session
+              {t("active.endSession")}
             </Button>
           </DialogFooter>
         </DialogContent>

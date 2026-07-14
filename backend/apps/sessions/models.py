@@ -1,3 +1,4 @@
+import secrets
 import uuid
 
 from django.conf import settings
@@ -131,6 +132,9 @@ class FocusSession(models.Model):
     started_at = models.DateTimeField(default=timezone.now)
     paused_at = models.DateTimeField(null=True, blank=True)
     ended_at = models.DateTimeField(null=True, blank=True)
+    end_reason = models.CharField(max_length=120, blank=True)
+    end_metadata = models.JSONField(default=dict, blank=True)
+    extension_bridge_token = models.CharField(max_length=128, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -156,6 +160,13 @@ class FocusSession(models.Model):
             paused_seconds += max(0, int((at - self.paused_at).total_seconds()))
         elapsed_seconds = max(0, int((at - self.started_at).total_seconds()))
         return max(0, elapsed_seconds - paused_seconds)
+
+    def ensure_extension_bridge_token(self):
+        if self.extension_bridge_token:
+            return self.extension_bridge_token
+        self.extension_bridge_token = secrets.token_urlsafe(32)
+        self.save(update_fields=["extension_bridge_token", "updated_at"])
+        return self.extension_bridge_token
 
     def __str__(self):
         return f"{self.user.email}: {self.mode} ({self.status})"

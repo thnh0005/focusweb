@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { KeyRound, Mail, ArrowLeft, CheckCircle2 } from "lucide-react";
 import { authApi } from "@/services/auth.api";
 import { Button } from "@/components/ui/Button";
@@ -11,6 +12,7 @@ import { Spinner } from "@/components/ui/Spinner";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/Card";
 
 export function ForgotPasswordForm() {
+  const { t } = useTranslation("auth");
   const [email, setEmail] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
   const [isSuccess, setIsSuccess] = React.useState(false);
@@ -23,10 +25,10 @@ export function ForgotPasswordForm() {
     setSubmitError("");
 
     if (!email) {
-      setEmailError("Email is required");
+      setEmailError(t("validation.emailRequired"));
       return false;
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError("Please enter a valid email address");
+      setEmailError(t("validation.emailInvalid"));
       return false;
     }
 
@@ -42,9 +44,8 @@ export function ForgotPasswordForm() {
       await authApi.requestPasswordReset(email);
       setIsSuccess(true);
       setIsLoading(false);
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to request recovery link. Please try again.";
-      setSubmitError(errorMsg);
+    } catch {
+      setSubmitError(t("errors.recoveryFailed"));
       setIsLoading(false);
     }
   };
@@ -62,10 +63,10 @@ export function ForgotPasswordForm() {
               <CheckCircle2 className="h-6 w-6 stroke-[1.5]" />
             </div>
             <CardTitle className="text-2xl font-light tracking-wide text-text-primary mt-2">
-              Recovery Link Sent
+              {t("forgotPassword.successTitle")}
             </CardTitle>
             <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-              We&apos;ve dispatched password reset instructions to
+              {t("forgotPassword.successDescription")}
             </CardDescription>
             <div className="text-xs font-mono bg-white/[0.02] border border-white/[0.05] rounded-lg py-1 px-3 inline-block mx-auto text-text-secondary">
               {email}
@@ -73,7 +74,7 @@ export function ForgotPasswordForm() {
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-text-muted font-light leading-relaxed">
-              Please check your inbox (and spam folder). If the email exists in our records, you will receive a secure token to reset your password.
+              {t("forgotPassword.successNote")}
             </p>
           </CardContent>
           <CardFooter className="flex justify-center border-t border-white/[0.05] pt-4 mt-2">
@@ -82,7 +83,7 @@ export function ForgotPasswordForm() {
               className="text-xs text-focus-purple hover:text-focus-purple/80 transition-colors font-medium flex items-center gap-1.5"
             >
               <ArrowLeft className="h-3.5 w-3.5 stroke-[1.5]" />
-              <span>Back to Sign In</span>
+              <span>{t("forgotPassword.backToLogin")}</span>
             </Link>
           </CardFooter>
         </Card>
@@ -102,10 +103,10 @@ export function ForgotPasswordForm() {
             <KeyRound className="h-6 w-6 stroke-[1.5]" />
           </div>
           <CardTitle className="text-2xl font-light tracking-wide text-text-primary mt-2">
-            Reset Password
+            {t("forgotPassword.title")}
           </CardTitle>
           <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-            Enter your email to receive recovery instructions
+            {t("forgotPassword.description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -121,8 +122,8 @@ export function ForgotPasswordForm() {
             
             <Input
               type="email"
-              label="Email Address"
-              placeholder="e.g. minh@example.com"
+              label={t("forgotPassword.emailLabel")}
+              placeholder={t("forgotPassword.emailPlaceholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={emailError}
@@ -141,12 +142,12 @@ export function ForgotPasswordForm() {
               {isLoading ? (
                 <>
                   <Spinner className="h-4 w-4 text-primary-foreground" />
-                  <span>Sending recovery link...</span>
+                  <span>{t("forgotPassword.submitting")}</span>
                 </>
               ) : (
                 <span className="flex items-center gap-2">
                   <Mail className="h-4 w-4 stroke-[1.5]" />
-                  <span>Send Recovery Email</span>
+                  <span>{t("forgotPassword.submit")}</span>
                 </span>
               )}
             </Button>
@@ -158,7 +159,7 @@ export function ForgotPasswordForm() {
             className="text-xs text-text-muted hover:text-text-secondary transition-colors font-light flex items-center gap-1.5"
           >
             <ArrowLeft className="h-3.5 w-3.5 stroke-[1.5]" />
-            <span>Cancel and return to Sign In</span>
+            <span>{t("forgotPassword.cancel")}</span>
           </Link>
         </CardFooter>
       </Card>

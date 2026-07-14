@@ -3,6 +3,7 @@
 import * as React from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { TooltipProvider } from "@/components/ui/Tooltip";
+import { LanguageProvider } from "@/i18n/LanguageProvider";
 
 export interface ProvidersProps {
   children: React.ReactNode;
@@ -18,6 +19,7 @@ export function Providers({ children }: ProvidersProps) {
             staleTime: 60 * 1000, // 60 seconds
             refetchOnWindowFocus: false,
             retry: 1,
+            retryDelay: 5000,
           },
         },
       })
@@ -25,7 +27,9 @@ export function Providers({ children }: ProvidersProps) {
 
   return (
     <QueryClientProvider client={queryClient}>
-      <TooltipProvider>{children}</TooltipProvider>
+      <LanguageProvider>
+        <TooltipProvider>{children}</TooltipProvider>
+      </LanguageProvider>
     </QueryClientProvider>
   );
 }

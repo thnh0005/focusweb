@@ -1,0 +1,101 @@
+{
+  "title": "Phân tích",
+  "backHome": "Quay lại",
+  "headline": "Nhìn lại sự tập trung",
+  "description": "Các mẫu từ những phiên gần đây, được làm mềm thành tín hiệu bạn có thể hành động.",
+  "loading": "Đang tải phân tích tập trung",
+  "ranges": {
+    "7d": "7 ngày",
+    "30d": "30 ngày",
+    "all": "Tất cả"
+  },
+  "errors": {
+    "load": "Không thể làm mới phân tích. Biểu đồ sẽ hiển lại khi kết nối phục hồi.",
+    "exportCreate": "Không thể tạo báo cáo xuất",
+    "exportRefresh": "Không thể làm mới trạng thái xuất"
+  },
+  "empty": {
+    "title": "Hoàn thành vài phiên để thấy mẫu",
+    "description": "Xu hướng tập trung, heatmap và nguồn xao nhãng sẽ hữu ích sau vài phiên hoàn thành.",
+    "weekly": "Chưa có ảnh chụp tuần.",
+    "trend": "Hoàn thành thêm phiên để xem đường xu hướng.",
+    "distractions": "Chưa ghi nhận cảnh báo xao nhãng.",
+    "sessions": "Chưa có phiên",
+    "heatmap": "Chưa có dữ liệu theo thời điểm trong ngày."
+  },
+  "metrics": {
+    "top": "Chỉ số tập trung nổi bật",
+    "totalFocusHours": "Tổng giờ tập trung",
+    "averageScore": "Điểm trung bình",
+    "sessions": "Phiên",
+    "deepWorkShare": "Tỷ lệ Deep Work",
+    "totalHours": "Tổng giờ",
+    "avgScore": "Điểm TB",
+    "deepWork": "Deep Work"
+  },
+  "charts": {
+    "focusTrend": "Xu hướng tập trung",
+    "focusTrendDescription": "Điểm trung bình qua các phiên hoàn thành",
+    "improving": "Tốt lên",
+    "drifting": "Trôi đi",
+    "stable": "Ổn định",
+    "distractionSources": "Nguồn xao nhãng",
+    "warningCountByDomain": "Số cảnh báo theo domain",
+    "sessionBreakdown": "Phân bổ phiên",
+    "normalMode": "Chế độ thường",
+    "deepWork": "Deep Work",
+    "ofTotal": "{{value}}% tổng số",
+    "peakHours": "Giờ tập trung cao",
+    "peakHoursDescription": "Độ đậm cao hơn nghĩa là điểm tập trung trung bình mạnh hơn. Mỗi ô có tooltip.",
+    "noData": "Chưa có dữ liệu",
+    "heatmapCell": "{{day}} lúc {{hour}}h: {{value}}",
+    "sessionsPercent": "{{value}}% phiên"
+  },
+  "weekly": {
+    "title": "Tiến độ tuần",
+    "description": "Tuần này so với tuần trước",
+    "focus": "Trọng tâm tuần này"
+  },
+  "recommendations": {
+    "best_duration_bucket": "Hãy dùng độ dài phiên từng tạo ra điểm tập trung trung bình tốt nhất cho bạn.",
+    "no_clear_mode_preference": "Tiếp tục giữ cả chế độ thường và Deep Work cho tới khi dữ liệu cho thấy xu hướng rõ hơn.",
+    "deep_work_outperforms_normal": "Deep Work đang cho kết quả tốt hơn. Hãy ưu tiên chế độ này cho phiên tập trung tiếp theo.",
+    "normal_outperforms_deep_work": "Chế độ thường đang ổn định hơn. Hãy dùng chế độ này khi bạn muốn một phiên nhẹ và đều.",
+    "recommended_break_after_session": "Thêm một khoảng nghỉ ngắn sau phiên tiếp theo để khối làm việc sau bắt đầu sạch hơn.",
+    "best_focus_time": "Hãy đặt phiên quan trọng tiếp theo vào khung giờ bạn tập trung tốt nhất.",
+    "high_warning_domain": "Xem lại domain gây xao nhãng chính trước phiên tiếp theo.",
+    "high_tab_switch_frequency": "Giảm số lần chuyển tab trước khi bắt đầu khối tập trung tiếp theo.",
+    "warnings_in_last_third": "Rút ngắn nhẹ phiên tiếp theo hoặc thêm nghỉ trước một phần ba cuối phiên.",
+    "no_previous_week_baseline": "Hãy xem tuần này là mốc nền; so sánh sẽ rõ hơn sau một tuần nữa.",
+    "focus_time_increased": "Tổng thời gian tập trung tuần này đã tăng. Hãy giữ nhịp hiện tại.",
+    "focus_time_decreased": "Tổng thời gian tập trung tuần này đã giảm. Hãy bắt đầu phiên tiếp theo nhỏ hơn.",
+    "focus_score_improved": "Điểm tập trung trung bình tuần này đã tốt hơn. Hãy lặp lại điều kiện đã giúp bạn.",
+    "focus_score_declined": "Điểm tập trung trung bình tuần này giảm. Hãy rà lại nguồn xao nhãng trước phiên tiếp theo.",
+    "warnings_reduced": "Cảnh báo xao nhãng tuần này đã giảm. Hãy giữ nguyên cách chuẩn bị hiện tại.",
+    "warnings_increased": "Cảnh báo xao nhãng tuần này tăng. Hãy dọn nguồn xao nhãng chính trước.",
+    "insufficient_weekly_data": "Chưa có đủ lịch sử theo tuần. Hoàn thành thêm vài phiên để tín hiệu rõ hơn."
+  },
+  "export": {
+    "eyebrow": "Xuất báo cáo",
+    "title": "Xuất báo cáo tập trung",
+    "description": "Xuất khoảng phân tích {{range}} hiện tại. JSON và HTML được trả ngay khi sẵn sàng; PDF có thể được tạo nền.",
+    "format": "Định dạng báo cáo",
+    "exporting": "Đang xuất",
+    "export": "Xuất báo cáo",
+    "checking": "Đang kiểm tra",
+    "checkStatus": "Kiểm tra trạng thái",
+    "job": "Job {{id}}",
+    "queued": "Báo cáo đã được đưa vào hàng đợi. Dùng Kiểm tra trạng thái để làm mới.",
+    "expired": "Báo cáo này đã hết hạn. Hãy tạo báo cáo mới.",
+    "ready": "Báo cáo đã sẵn sàng."
+  },
+  "days": {
+    "mon": "T2",
+    "tue": "T3",
+    "wed": "T4",
+    "thu": "T5",
+    "fri": "T6",
+    "sat": "T7",
+    "sun": "CN"
+  }
+}

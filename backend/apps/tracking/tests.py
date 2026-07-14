@@ -112,6 +112,42 @@ class EventBatchIngestApiTests(APITestCase):
         self.assertEqual(response.data["accepted_count"], 1)
         self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
 
+    def test_tracking_alias_accepts_extension_token_without_cookie_auth(self):
+        session = self.create_session()
+        token = session.ensure_extension_bridge_token()
+        self.client.force_authenticate(user=None)
+
+        response = self.client.post(
+            f"/api/tracking/sessions/{session.id}/events/",
+            {"events": [self.valid_event(domain="developer.mozilla.org")]},
+            format="json",
+            HTTP_X_FOCUSOS_SESSION_ID=str(session.id),
+            HTTP_X_FOCUSOS_EXTENSION_TOKEN=token,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["accepted_count"], 1)
+        self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
+
+    def test_tracking_alias_extension_token_bypasses_session_csrf(self):
+        session = self.create_session()
+        token = session.ensure_extension_bridge_token()
+        csrf_client = APIClient(enforce_csrf_checks=True)
+        self.assertTrue(csrf_client.login(email=self.user.email, password=PASSWORD))
+
+        response = csrf_client.post(
+            f"/api/tracking/sessions/{session.id}/events/",
+            {"events": [self.valid_event(event_type="tab_switch", tab_switch_count=4)]},
+            format="json",
+            HTTP_ORIGIN="chrome-extension://hjjldlnbhofmlndoabaophfnmdmeigne",
+            HTTP_X_FOCUSOS_SESSION_ID=str(session.id),
+            HTTP_X_FOCUSOS_EXTENSION_TOKEN=token,
+        )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["accepted_count"], 1)
+        self.assertEqual(BrowserEvent.objects.filter(session_id=session.id).count(), 1)
+
     @override_settings(
         CSRF_TRUSTED_ORIGINS=[
             "chrome-extension://abcdefghijklmnopabcdefghijklmnop"

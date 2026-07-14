@@ -4,29 +4,28 @@ import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
 import { Bell, EyeOff, ShieldCheck, Waves } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { clearOnboardingDraft, readOnboardingDraft } from "@/lib/onboarding/storage";
 import { useAuthStore } from "@/stores/auth.store";
 import { Button } from "@/components/ui/Button";
 
 const extensionNotes = [
   {
-    title: "Notices drift early",
-    description: "Detects when browsing moves away from your session goal.",
+    id: "drift",
     icon: Bell,
   },
   {
-    title: "Protects sensitive fields",
-    description: "Focus tracking is designed around attention signals, not private text.",
+    id: "privacy",
     icon: EyeOff,
   },
   {
-    title: "Keeps recovery gentle",
-    description: "Warnings are calm and timed to help you return without stress.",
+    id: "recovery",
     icon: Waves,
   },
 ];
 
 export default function OnboardingExtensionPage() {
+  const { t } = useTranslation("onboarding");
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const completeOnboarding = useAuthStore((state) => state.completeOnboarding);
@@ -44,7 +43,7 @@ export default function OnboardingExtensionPage() {
       clearOnboardingDraft();
       router.replace("/dashboard");
     } catch (completeError) {
-      setError(getErrorMessage(completeError, "Failed to save onboarding"));
+      setError(getErrorMessage(completeError, t("extension.errors.save")));
     } finally {
       setIsSaving(false);
     }
@@ -59,8 +58,8 @@ export default function OnboardingExtensionPage() {
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4 text-xs text-text-muted">
-          <span>Step 3 of 3</span>
-          <span>Focus tracking</span>
+          <span>{t("progress", { current: 3, total: 3 })}</span>
+          <span>{t("extension.context")}</span>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-white/10">
           <div className="h-full w-full rounded-full bg-focus-green transition-all duration-300" />
@@ -72,10 +71,10 @@ export default function OnboardingExtensionPage() {
           <ShieldCheck className="h-5 w-5" aria-hidden="true" />
         </div>
         <h1 className="font-display text-3xl font-light leading-tight text-text-primary sm:text-4xl">
-          Enable the browser layer for calmer sessions.
+          {t("extension.title")}
         </h1>
         <p className="max-w-[56ch] text-sm leading-6 text-text-secondary sm:text-base">
-          The extension helps FocusOS understand when attention drifts so it can support recovery during a session.
+          {t("extension.description")}
         </p>
       </div>
 
@@ -84,7 +83,7 @@ export default function OnboardingExtensionPage() {
           const Icon = note.icon;
           return (
             <div
-              key={note.title}
+              key={note.id}
               className="rounded-2xl border border-white/10 bg-white/[0.04] p-4"
             >
               <div className="flex gap-3">
@@ -92,9 +91,11 @@ export default function OnboardingExtensionPage() {
                   <Icon className="h-5 w-5" aria-hidden="true" />
                 </span>
                 <span>
-                  <span className="block text-sm font-medium text-text-primary">{note.title}</span>
+                  <span className="block text-sm font-medium text-text-primary">
+                    {t(`extension.notes.${note.id}.title`)}
+                  </span>
                   <span className="mt-1 block text-sm leading-6 text-text-secondary">
-                    {note.description}
+                    {t(`extension.notes.${note.id}.description`)}
                   </span>
                 </span>
               </div>
@@ -110,7 +111,7 @@ export default function OnboardingExtensionPage() {
         className="block"
       >
         <Button className="h-12 w-full rounded-2xl">
-          Install from Chrome Web Store
+          {t("actions.installExtension")}
         </Button>
       </a>
 
@@ -121,10 +122,10 @@ export default function OnboardingExtensionPage() {
           onClick={() => handleComplete(false)}
           disabled={isSaving}
         >
-          {isSaving ? "Saving..." : "Set up later"}
+          {isSaving ? t("actions.saving") : t("actions.setUpLater")}
         </Button>
         <Button onClick={() => handleComplete(true)} disabled={isSaving} className="h-12 rounded-2xl">
-          {isSaving ? "Saving..." : "Enter dashboard"}
+          {isSaving ? t("actions.saving") : t("actions.enterDashboard")}
         </Button>
       </div>
 

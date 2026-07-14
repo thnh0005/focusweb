@@ -15,6 +15,7 @@ export interface UserState {
   updateProfile: (payload: { displayName?: string; avatarUrl?: string }) => Promise<void>;
   fetchPreferences: () => Promise<void>;
   updatePreferences: (prefs: Partial<UserPreferences>) => Promise<void>;
+  updatePreferencesLocal: (prefs: Partial<UserPreferences>) => void;
   fetchStreak: () => Promise<void>;
   incrementStreak: () => void;
 }
@@ -81,6 +82,12 @@ export const useUserStore = create<UserState>((set, get) => ({
       set({ isLoading: false });
       throw error;
     }
+  },
+
+  updatePreferencesLocal: (prefs) => {
+    set((state) => ({
+      preferences: state.preferences ? { ...state.preferences, ...prefs } : state.preferences,
+    }));
   },
 
   fetchStreak: async () => {

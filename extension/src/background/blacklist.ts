@@ -1,4 +1,9 @@
-import type { BlacklistPayload, BlacklistWarning, WarningLevel } from "./types";
+import type {
+  BlacklistPayload,
+  BlacklistRiskLevel,
+  BlacklistWarning,
+  WarningLevel,
+} from "./types";
 import { domainsMatch, normalizeDomain } from "./domain";
 
 export function normalizeBlacklist(entries: BlacklistPayload[] = []): BlacklistPayload[] {
@@ -10,16 +15,35 @@ export function normalizeBlacklist(entries: BlacklistPayload[] = []): BlacklistP
     if (!domain || seen.has(domain)) continue;
 
     seen.add(domain);
+    const severity = normalizeSeverity(entry.severity);
     normalized.push({
       domain,
-      severity: entry.severity === "high" ? "high" : "medium",
+      severity,
+      enabled: entry.enabled !== false,
+      source: entry.source,
+      updatedAt: entry.updatedAt,
     });
   }
 
   return normalized;
 }
 
-export function levelForSeverity(severity: "high" | "medium"): WarningLevel {
+export function normalizeSeverity(value?: string): "high" | "medium" | "low" {
+  const normalized = String(value || "").trim().toLowerCase();
+  if (normalized === "high" || normalized === "medium" || normalized === "low") {
+    return normalized;
+  }
+  return "medium";
+}
+
+export function riskLevelForSeverity(severity: string): BlacklistRiskLevel {
+  const normalized = normalizeSeverity(severity);
+  if (normalized === "high") return "HIGH";
+  if (normalized === "low") return "LOW";
+  return "MEDIUM";
+}
+
+export function levelForSeverity(severity: string): WarningLevel {
   return severity === "high" ? 3 : 2;
 }
 
@@ -31,14 +55,18 @@ export function findBlacklistWarning(
   const normalizedDomain = normalizeDomain(domain);
   if (!normalizedDomain) return null;
 
-  const match = entries.find((entry) => domainsMatch(normalizedDomain, entry.domain));
+  const match = entries.find(
+    (entry) => entry.enabled !== false && domainsMatch(normalizedDomain, entry.domain)
+  );
   if (!match) return null;
+  const riskLevel = riskLevelForSeverity(match.severity);
 
   return {
     sessionId,
     domain: normalizedDomain,
     matchedDomain: match.domain,
     severity: match.severity,
+    riskLevel,
     level: levelForSeverity(match.severity),
     occurredAt: new Date().toISOString(),
   };

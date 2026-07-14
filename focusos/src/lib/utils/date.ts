@@ -2,6 +2,12 @@
 // Date Utilities — FocusOS
 // ═══════════════════════════════════════════════════════════════
 
+import {
+  formatDateForLanguage,
+  formatRelativeTimeForLanguage,
+  getCurrentLanguage,
+} from "@/i18n/format";
+
 /**
  * Format a date to a human-readable relative string.
  * e.g. "2 hours ago", "yesterday", "3 days ago"
@@ -15,11 +21,10 @@ export function formatRelativeTime(date: Date | string): string {
   const diffHours = Math.floor(diffMinutes / 60);
   const diffDays = Math.floor(diffHours / 24);
 
-  if (diffSeconds < 60) return "just now";
-  if (diffMinutes < 60) return `${diffMinutes}m ago`;
-  if (diffHours < 24) return `${diffHours}h ago`;
-  if (diffDays === 1) return "yesterday";
-  if (diffDays < 7) return `${diffDays} days ago`;
+  if (diffSeconds < 60) return formatRelativeTimeForLanguage(0, "second");
+  if (diffMinutes < 60) return formatRelativeTimeForLanguage(-diffMinutes, "minute");
+  if (diffHours < 24) return formatRelativeTimeForLanguage(-diffHours, "hour");
+  if (diffDays < 7) return formatRelativeTimeForLanguage(-diffDays, "day");
   return formatDate(d);
 }
 
@@ -28,7 +33,7 @@ export function formatRelativeTime(date: Date | string): string {
  */
 export function formatDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
+  return formatDateForLanguage(d, {
     month: "long",
     day: "numeric",
     year: "numeric",
@@ -40,7 +45,7 @@ export function formatDate(date: Date | string): string {
  */
 export function formatShortDate(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleDateString("en-US", {
+  return formatDateForLanguage(d, {
     month: "short",
     day: "numeric",
   });
@@ -59,10 +64,9 @@ export function formatISODate(date: Date | string): string {
  */
 export function formatTime(date: Date | string): string {
   const d = typeof date === "string" ? new Date(date) : date;
-  return d.toLocaleTimeString("en-US", {
+  return formatDateForLanguage(d, {
     hour: "numeric",
     minute: "2-digit",
-    hour12: true,
   });
 }
 
@@ -101,7 +105,14 @@ export function getDaysAgo(days: number): Date {
  * Get a human-readable greeting based on time of day
  */
 export function getTimeGreeting(): string {
+  const language = getCurrentLanguage();
   const hour = new Date().getHours();
+  if (language === "vi") {
+    if (hour < 12) return "Chào buổi sáng";
+    if (hour < 17) return "Chào buổi chiều";
+    if (hour < 21) return "Chào buổi tối";
+    return "Chúc ngủ ngon";
+  }
   if (hour < 12) return "Good morning";
   if (hour < 17) return "Good afternoon";
   if (hour < 21) return "Good evening";

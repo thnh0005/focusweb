@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { AMBIENT_LOOPS, MUSIC_TRACKS, type AmbientLoopId } from "@/constants/ambient-tracks";
 import { useMusicStore } from "@/stores/music.store";
 import { cn } from "@/lib/utils/cn";
@@ -12,6 +13,7 @@ export interface AmbientControlsProps {
 }
 
 export function AmbientControls({ className, compact = false }: AmbientControlsProps) {
+  const { t } = useTranslation("dashboard");
   const currentMusicId = useMusicStore((state) => state.currentMusicId);
   const playing = useMusicStore((state) => state.playing);
   const volume = useMusicStore((state) => state.volume);
@@ -31,15 +33,15 @@ export function AmbientControls({ className, compact = false }: AmbientControlsP
         compact && "space-y-2 p-2.5",
         className
       )}
-      aria-label="Audio controls"
+      aria-label={t("focusHome.sounds.controlsAria")}
     >
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-muted">
-            Soundscape
+            {t("focusHome.sounds.title")}
           </p>
           <p className="mt-1 text-sm font-medium text-text-primary">
-            Music and ambient layers
+            {t("focusHome.sounds.layers")}
           </p>
         </div>
         <div className="flex items-center gap-1">
@@ -47,7 +49,7 @@ export function AmbientControls({ className, compact = false }: AmbientControlsP
             type="button"
             onClick={() => setMuted(!isMuted)}
             className="flex h-9 w-9 items-center justify-center rounded-full text-text-secondary transition-all duration-fast hover:bg-white/[0.08] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            aria-label={isMuted ? "Unmute all audio" : "Mute all audio"}
+            aria-label={isMuted ? t("focusHome.sounds.unmute") : t("focusHome.sounds.mute")}
           >
             {isMuted ? (
               <VolumeX className="h-4 w-4 stroke-[1.7]" aria-hidden="true" />
@@ -62,7 +64,7 @@ export function AmbientControls({ className, compact = false }: AmbientControlsP
               "flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/[0.06] text-text-primary transition-all duration-fast hover:bg-white/[0.11] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
               playing && "shadow-focus-purple"
             )}
-            aria-label={playing ? "Pause audio" : "Play audio"}
+            aria-label={playing ? t("focusHome.sounds.pause") : t("focusHome.sounds.play")}
           >
             {playing ? (
               <Pause className="h-4 w-4 stroke-[1.7]" aria-hidden="true" />
@@ -87,9 +89,9 @@ export function AmbientControls({ className, compact = false }: AmbientControlsP
             )}
             aria-pressed={currentMusicId === track.id}
           >
-            <span className="block text-xs font-medium">{track.label}</span>
+            <span className="block text-xs font-medium">{t(`focusHome.sounds.tracks.${track.id}.label`)}</span>
             <span className="mt-0.5 block truncate text-[10px] text-text-muted">
-              {track.mood}
+              {t(`focusHome.sounds.tracks.${track.id}.mood`)}
             </span>
           </button>
         ))}
@@ -97,7 +99,7 @@ export function AmbientControls({ className, compact = false }: AmbientControlsP
 
       <div className="flex items-center gap-2 border-t border-white/[0.08] pt-3">
         <span className="w-16 text-[10px] font-mono uppercase tracking-[0.12em] text-text-muted">
-          Music
+          {t("focusHome.sounds.music")}
         </span>
         <input
           type="range"
@@ -106,7 +108,7 @@ export function AmbientControls({ className, compact = false }: AmbientControlsP
           value={volume}
           onChange={(event) => setVolume(Number(event.target.value))}
           className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/[0.12] accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`Music volume ${volume}%`}
+          aria-label={t("focusHome.sounds.musicVolume", { volume })}
         />
         <span className="w-9 text-right text-[11px] font-mono text-text-muted">
           {volume}%
@@ -122,10 +124,18 @@ export function AmbientControls({ className, compact = false }: AmbientControlsP
             <AmbientLoopControl
               key={loop.id}
               id={loop.id}
-              label={loop.label}
-              description={loop.description}
+              label={t(`focusHome.sounds.loops.${loop.id}.label`)}
+              description={t(`focusHome.sounds.loops.${loop.id}.description`)}
               volume={loopVolume}
               active={active}
+              onLabel={t("focusHome.sounds.on")}
+              offLabel={t("focusHome.sounds.off")}
+              enableLabel={t("focusHome.sounds.enable")}
+              disableLabel={t("focusHome.sounds.disable")}
+              volumeLabel={t("focusHome.sounds.loopVolume", {
+                label: t(`focusHome.sounds.loops.${loop.id}.label`),
+                volume: loopVolume,
+              })}
               onToggle={() => toggleAmbient(loop.id)}
               onVolumeChange={(nextVolume) => setAmbientVolume(loop.id, nextVolume)}
             />
@@ -142,6 +152,11 @@ interface AmbientLoopControlProps {
   description: string;
   volume: number;
   active: boolean;
+  onLabel: string;
+  offLabel: string;
+  enableLabel: string;
+  disableLabel: string;
+  volumeLabel: string;
   onToggle: () => void;
   onVolumeChange: (volume: number) => void;
 }
@@ -152,6 +167,11 @@ function AmbientLoopControl({
   description,
   volume,
   active,
+  onLabel,
+  offLabel,
+  enableLabel,
+  disableLabel,
+  volumeLabel,
   onToggle,
   onVolumeChange,
 }: AmbientLoopControlProps) {
@@ -170,7 +190,7 @@ function AmbientLoopControl({
           onClick={onToggle}
           className="min-w-0 flex-1 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
           aria-pressed={active}
-          aria-label={`${active ? "Disable" : "Enable"} ${label}`}
+          aria-label={`${active ? disableLabel : enableLabel} ${label}`}
         >
           <span className="block truncate text-xs font-medium text-text-primary">
             {label}
@@ -187,7 +207,7 @@ function AmbientLoopControl({
               : "bg-white/[0.05] text-text-muted"
           )}
         >
-          {active ? "On" : "Off"}
+          {active ? onLabel : offLabel}
         </span>
       </div>
       <div className="mt-2 flex items-center gap-2">
@@ -199,7 +219,7 @@ function AmbientLoopControl({
           value={volume}
           onChange={(event) => onVolumeChange(Number(event.target.value))}
           className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/[0.12] accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`${label} volume ${volume}%`}
+          aria-label={volumeLabel}
         />
         <span className="w-8 text-right text-[10px] font-mono text-text-muted">
           {volume}%

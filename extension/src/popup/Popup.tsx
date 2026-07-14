@@ -4,6 +4,11 @@ import { ConnectionCard } from "./components/ConnectionCard";
 import { BlacklistHitCard } from "./components/BlacklistHitCard";
 import { SessionCard } from "./components/SessionCard";
 import { StatusCard } from "./components/StatusCard";
+import {
+  getStoredExtensionLanguage,
+  translateExtension,
+  type ExtensionLanguage,
+} from "../i18n";
 
 const EMPTY_SNAPSHOT: ExtensionSnapshot = {
   installed: true,
@@ -20,6 +25,7 @@ async function requestSnapshot(): Promise<ExtensionSnapshot> {
 export function Popup() {
   const [snapshot, setSnapshot] = useState<ExtensionSnapshot>(EMPTY_SNAPSHOT);
   const [loading, setLoading] = useState(true);
+  const [language, setLanguage] = useState<ExtensionLanguage>("vi");
 
   useEffect(() => {
     let cancelled = false;
@@ -29,6 +35,7 @@ export function Popup() {
         const nextSnapshot = await requestSnapshot();
         if (!cancelled && nextSnapshot) {
           setSnapshot(nextSnapshot);
+          setLanguage(nextSnapshot.activeSession?.language ?? (await getStoredExtensionLanguage()));
         }
       } finally {
         if (!cancelled) setLoading(false);
@@ -44,11 +51,11 @@ export function Popup() {
   }, []);
 
   const connectionState = useMemo(() => {
-    if (loading) return "Checking";
-    if (snapshot.activeSession?.status === "active") return "Tracking";
-    if (snapshot.activeSession?.status === "paused") return "Paused";
-    return "Ready";
-  }, [loading, snapshot.activeSession?.status]);
+    if (loading) return translateExtension(language, "checking");
+    if (snapshot.activeSession?.status === "active") return translateExtension(language, "tracking");
+    if (snapshot.activeSession?.status === "paused") return translateExtension(language, "paused");
+    return translateExtension(language, "ready");
+  }, [language, loading, snapshot.activeSession?.status]);
 
   function openFocusOS() {
     void chrome.tabs.create({ url: snapshot.activeSession?.appUrl ?? "http://localhost:3000" });
@@ -59,20 +66,20 @@ export function Popup() {
       <header className="popup-header">
         <div>
           <p className="eyebrow">FocusOS</p>
-          <h1>Browser bridge</h1>
+          <h1>{translateExtension(language, "browserBridge")}</h1>
         </div>
         <span className={`status-dot ${snapshot.activeSession ? "active" : ""}`} />
       </header>
 
-      <StatusCard state={connectionState} snapshot={snapshot} />
-      <SessionCard snapshot={snapshot} />
-      <BlacklistHitCard warning={snapshot.lastWarning} />
-      <ConnectionCard snapshot={snapshot} />
+      <StatusCard state={connectionState} snapshot={snapshot} language={language} />
+      <SessionCard snapshot={snapshot} language={language} />
+      <BlacklistHitCard warning={snapshot.lastWarning} language={language} />
+      <ConnectionCard snapshot={snapshot} language={language} />
 
       <footer className="popup-footer">
         <span>v{snapshot.version}</span>
         <button type="button" onClick={openFocusOS}>
-          Open FocusOS
+          {translateExtension(language, "openFocusOS")}
         </button>
       </footer>
     </main>

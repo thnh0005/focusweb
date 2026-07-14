@@ -3,6 +3,7 @@
 import * as React from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { Pause, Play, Square } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils/cn";
 
 export interface SessionControlsProps {
@@ -26,6 +27,7 @@ export function SessionControls({
   onEnd,
   className,
 }: SessionControlsProps) {
+  const { t } = useTranslation("focus");
   const prefersReduced = useReducedMotion();
 
   const showPause = isActive && !isPaused && !isAutoPaused;
@@ -43,11 +45,11 @@ export function SessionControls({
         <PrimaryButton
           onClick={onPause}
           disabled={isLoading}
-          aria-label="Pause session (Space)"
-          title="Pause (Space)"
+          aria-label={`${t("active.pauseSession")} (Space)`}
+          title={`${t("active.pause")} (Space)`}
         >
           <Pause className="h-5 w-5 stroke-[1.5]" aria-hidden="true" />
-          <span className="text-sm font-light tracking-wide">Pause</span>
+          <span className="text-sm font-light tracking-wide">{t("active.pause")}</span>
         </PrimaryButton>
       )}
 
@@ -55,12 +57,12 @@ export function SessionControls({
         <PrimaryButton
           onClick={onResume}
           disabled={isLoading}
-          aria-label="Resume session (Space)"
-          title="Resume (Space)"
+          aria-label={`${t("active.resumeSession")} (Space)`}
+          title={`${t("active.resume")} (Space)`}
           variant="resume"
         >
           <Play className="h-5 w-5 stroke-[1.5]" aria-hidden="true" />
-          <span className="text-sm font-light tracking-wide">Resume</span>
+          <span className="text-sm font-light tracking-wide">{t("active.resume")}</span>
         </PrimaryButton>
       )}
 
@@ -68,10 +70,10 @@ export function SessionControls({
       <EndButton
         onClick={onEnd}
         disabled={isLoading}
-        aria-label="End session"
+        aria-label={t("active.endSession")}
       >
         <Square className="h-3.5 w-3.5 stroke-[1.5]" aria-hidden="true" />
-        <span className="text-xs font-mono uppercase tracking-[0.18em]">End</span>
+        <span className="text-xs font-mono uppercase tracking-[0.18em]">{t("active.end")}</span>
       </EndButton>
     </motion.div>
   );

@@ -2,9 +2,12 @@ from django.urls import path
 
 from .views import (
     DocumentDetailView,
+    DocumentAIJobStatusView,
+    DocumentFileView,
     DocumentFlashcardsView,
     DocumentFlashcardsGenerateView,
     DocumentListView,
+    DocumentSourceTextView,
     DocumentSummaryView,
     DocumentUploadView,
     FlashcardDeckDetailView,
@@ -17,6 +20,9 @@ urlpatterns = [
     path("documents/", DocumentListView.as_view(), name="document-list"),
     path("documents/upload/", DocumentUploadView.as_view(), name="document-upload"),
     path("documents/<uuid:document_id>/", DocumentDetailView.as_view(), name="document-detail"),
+    path("documents/<uuid:document_id>/file/", DocumentFileView.as_view(), name="document-file"),
+    path("documents/<uuid:document_id>/text/", DocumentSourceTextView.as_view(), name="document-text"),
+    path("documents/<uuid:document_id>/ai-job/", DocumentAIJobStatusView.as_view(), name="document-ai-job"),
     path(
         "documents/<uuid:document_id>/summary/",
         DocumentSummaryView.as_view(),

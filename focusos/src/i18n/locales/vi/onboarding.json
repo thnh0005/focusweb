@@ -1,0 +1,52 @@
+{
+  "progress": "B\u01b0\u1edbc {{current}} / {{total}}",
+  "actions": {
+    "back": "Quay l\u1ea1i",
+    "continue": "Ti\u1ebfp t\u1ee5c",
+    "next": "Ti\u1ebfp",
+    "skipSetup": "B\u1ecf qua thi\u1ebft l\u1eadp",
+    "saving": "\u0110ang l\u01b0u...",
+    "setUpLater": "\u0110\u1ec3 sau",
+    "enterDashboard": "V\u00e0o t\u1ed5ng quan",
+    "installExtension": "C\u00e0i t\u1eeb Chrome Web Store"
+  },
+  "domain": {
+    "context": "Ng\u1eef c\u1ea3nh l\u00e0m vi\u1ec7c",
+    "title": "Kh\u00f4ng gian n\u00e0y n\u00ean h\u1ed7 tr\u1ee3 lo\u1ea1i c\u00f4ng vi\u1ec7c n\u00e0o?",
+    "description": "FocusOS d\u00f9ng th\u00f4ng tin n\u00e0y \u0111\u1ec3 tinh ch\u1ec9nh g\u1ee3i \u00fd phi\u00ean quanh vi\u1ec7c b\u1ea1n th\u1eadt s\u1ef1 l\u00e0m.",
+    "errors": {
+      "skip": "Kh\u00f4ng th\u1ec3 b\u1ecf qua thi\u1ebft l\u1eadp"
+    },
+    "fields": {
+      "student": { "label": "H\u1ecdc sinh/sinh vi\u00ean", "description": "Kh\u1ed1i h\u1ecdc, \u00f4n t\u1eadp, thi c\u1eed" },
+      "developer": { "label": "L\u1eadp tr\u00ecnh vi\u00ean", "description": "Code, debug, ship" },
+      "designer": { "label": "Nh\u00e0 thi\u1ebft k\u1ebf", "description": "Kh\u00e1m ph\u00e1, tinh ch\u1ec9nh, tr\u00ecnh b\u00e0y" },
+      "freelancer": { "label": "Freelancer", "description": "Vi\u1ec7c kh\u00e1ch h\u00e0ng v\u00e0 qu\u1ea3n tr\u1ecb" },
+      "researcher": { "label": "Nh\u00e0 nghi\u00ean c\u1ee9u", "description": "\u0110\u1ecdc, thu th\u1eadp, vi\u1ebft" },
+      "other": { "label": "Kh\u00e1c", "description": "T\u1ef1 t\u1ea1o nh\u1ecbp l\u00e0m vi\u1ec7c c\u1ee7a b\u1ea1n" }
+    }
+  },
+  "duration": {
+    "context": "Nh\u1ecbp phi\u00ean",
+    "title": "Ph\u00f2ng t\u1eadp trung m\u1eb7c \u0111\u1ecbnh n\u00ean m\u1edf trong bao l\u00e2u?",
+    "description": "\u0110\u00e2y l\u00e0 g\u1ee3i \u00fd timer \u0111\u1ea7u ti\u00ean. B\u1ea1n v\u1eabn c\u00f3 th\u1ec3 ch\u1ec9nh t\u1eebng phi\u00ean sau.",
+    "options": {
+      "25": "Kho\u1ea3ng ng\u1eafn \u0111\u1ec3 b\u1eaft \u0111\u1ea7u, \u00f4n l\u1ea1i ho\u1eb7c l\u00e0m n\u00f3ng.",
+      "50": "M\u1eb7c \u0111\u1ecbnh \u1ed5n \u0111\u1ecbnh cho \u0111\u1ecdc, code ho\u1eb7c h\u1ecdc s\u00e2u.",
+      "90": "Kh\u1ed1i d\u00e0i h\u01a1n cho vi\u1ec7c c\u1ea7n \u0111\u1eafm ch\u00ecm ho\u00e0n to\u00e0n."
+    }
+  },
+  "extension": {
+    "context": "Theo d\u00f5i t\u1eadp trung",
+    "title": "B\u1eadt l\u1edbp tr\u00ecnh duy\u1ec7t \u0111\u1ec3 phi\u00ean b\u00ecnh t\u0129nh h\u01a1n.",
+    "description": "Extension gi\u00fap FocusOS hi\u1ec3u khi s\u1ef1 ch\u00fa \u00fd tr\u00f4i \u0111i \u0111\u1ec3 h\u1ed7 tr\u1ee3 b\u1ea1n quay l\u1ea1i trong phi\u00ean.",
+    "errors": {
+      "save": "Kh\u00f4ng th\u1ec3 l\u01b0u thi\u1ebft l\u1eadp ban \u0111\u1ea7u"
+    },
+    "notes": {
+      "drift": { "title": "Nh\u1eadn ra s\u1ef1 tr\u00f4i s\u1edbm", "description": "Ph\u00e1t hi\u1ec7n khi vi\u1ec7c duy\u1ec7t web r\u1eddi xa m\u1ee5c ti\u00eau phi\u00ean." },
+      "privacy": { "title": "B\u1ea3o v\u1ec7 tr\u01b0\u1eddng nh\u1ea1y c\u1ea3m", "description": "Theo d\u00f5i t\u1eadp trung xoay quanh t\u00edn hi\u1ec7u ch\u00fa \u00fd, kh\u00f4ng ph\u1ea3i n\u1ed9i dung ri\u00eang t\u01b0." },
+      "recovery": { "title": "Gi\u1eef vi\u1ec7c quay l\u1ea1i nh\u1eb9 nh\u00e0ng", "description": "C\u1ea3nh b\u00e1o b\u00ecnh t\u0129nh v\u00e0 \u0111\u00fang nh\u1ecbp \u0111\u1ec3 b\u1ea1n quay l\u1ea1i kh\u00f4ng c\u0103ng th\u1eb3ng." }
+    }
+  }
+}

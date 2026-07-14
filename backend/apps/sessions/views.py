@@ -1,6 +1,8 @@
 from rest_framework import status
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.exceptions import NotFound, PermissionDenied, ValidationError
 from rest_framework.generics import GenericAPIView
+from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from drf_spectacular.utils import extend_schema
 
@@ -14,6 +16,7 @@ from apps.scoring.realtime_score_service import RealtimeScoreService
 from apps.tracking.models import BrowserEvent, WarningCycle, WarningEvent
 
 from .models import FocusSession, GoalTemplate, SessionNote, SessionTag
+from .extension_auth import ExtensionBridgeAuthentication, get_session_for_request
 from .serializers import (
     ActiveSessionSerializer,
     CreateSessionSerializer,
@@ -60,7 +63,16 @@ def get_score_breakdown(session):
     except FocusSession.score_result.RelatedObjectDoesNotExist:
         return None, {}
 
-    components = {component.key: component.value for component in score.components.all()}
+    score_components = list(score.components.all())
+    components = {component.key: component.value for component in score_components}
+    score_metadata = dict(score.metadata or {})
+    component_metadata = {
+        component.key: component.metadata or {} for component in score_components
+    }
+    tab_metadata = component_metadata.get("tab_stability", {})
+    for key in ("browserEventCount", "tabSwitchCount"):
+        if key in tab_metadata and key not in score_metadata:
+            score_metadata[key] = tab_metadata[key]
     breakdown = {
         "contentRelevance": components.get("content_relevance", 0),
         "focusContinuity": components.get("focus_continuity", 0),
@@ -68,7 +80,7 @@ def get_score_breakdown(session):
         "distractionPenalty": components.get("distraction_penalty", 0),
         "total": score.total_score,
     }
-    return breakdown, score.metadata
+    return breakdown, score_metadata
 
 
 class GoalTemplateListView(GenericAPIView):
@@ -605,16 +617,23 @@ class SessionResumeView(GenericAPIView):
 
 
 class SessionEndView(GenericAPIView):
+    authentication_classes = [ExtensionBridgeAuthentication, SessionAuthentication]
+    permission_classes = [AllowAny]
     serializer_class = EndSessionSerializer
 
     def post(self, request, session_id):
         serializer = EndSessionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        owned_session = get_session_for_request(request, session_id)
+        if owned_session.status == FocusSession.Status.COMPLETED:
+            return Response(SessionSerializer(owned_session).data)
         session = transition_session(
-            get_owned_session(request.user, session_id),
+            owned_session,
             FocusSession.Status.COMPLETED,
             note=serializer.validated_data.get("note"),
             tags=serializer.validated_data.get("tags"),
+            reason=serializer.validated_data.get("reason", ""),
+            metadata=serializer.validated_data.get("metadata"),
             allowed_from_statuses=set(FocusSession.OPEN_STATUSES),
         )
         return Response(SessionSerializer(session).data)

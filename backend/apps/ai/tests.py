@@ -1,8 +1,11 @@
 from unittest.mock import Mock, patch
 from io import BytesIO
 from urllib.error import HTTPError
+import json
 import zipfile
 
+from celery.exceptions import Retry
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import override_settings
@@ -14,7 +17,18 @@ from apps.scoring.models import FocusScore, ScoreComponent
 from apps.sessions.models import FocusSession
 from apps.tracking.models import BrowserEvent, WarningEvent
 
-from .models import AIAnalysisResult, DocumentSummary, Flashcard, FlashcardDeck, SessionInsight, StudyDocument
+from .models import (
+    AIAnalysisResult,
+    DocumentAIChunk,
+    DocumentAIJob,
+    AIRequestUsage,
+    AITokenCalibration,
+    DocumentSummary,
+    Flashcard,
+    FlashcardDeck,
+    SessionInsight,
+    StudyDocument,
+)
 from .document_parsers.exceptions import FileTooLargeError, FileTypeMismatchError
 from .services import (
     AIClient,
@@ -24,6 +38,7 @@ from .services import (
     AINotConfigured,
     AIProviderError,
     AIProviderUnavailable,
+    AIQuotaDeferred,
     AIRateLimited,
     AITimeout,
     AIUnknownError,
@@ -40,13 +55,22 @@ from .services.document_summary import (
     DocumentChunker,
     DocumentSummaryOutputValidator,
     DocumentSummaryService,
+    estimate_request_tokens,
+    reserved_output_tokens_for,
 )
 from .services.flashcard_generation import (
     DocumentSourceSelector,
     FlashcardGenerationService,
     FlashcardOutputValidator,
 )
+from .services.stale_recovery import (
+    STALE_PROCESSING_FAILED,
+    STALE_PROCESSING_RECOVERED,
+    StaleAIWorkRecoveryService,
+)
 from .tasks import extract_document_text
+from .tasks import fail_deferred_document_summary
+from .tasks import fail_deferred_flashcard_deck
 from .tasks import generate_document_flashcards
 from .tasks import generate_document_summary
 from .tasks import generate_session_insight
@@ -56,6 +80,19 @@ from .services.circuit_breaker import (
     CIRCUIT_HALF_OPEN,
     CIRCUIT_OPEN,
 )
+from .services.token_counter import (
+    PreparedAIRequest,
+    TokenCountingService,
+    calculate_p95,
+    find_largest_fitting_chunk,
+)
+from .services.provider_rate_limiter import ProviderRateLimiter
+from .services.document_ai_flow import (
+    DocumentAIFlow,
+    claim_ai_slot_or_reschedule,
+    create_or_resume_document_ai_job,
+)
+from apps.notifications.models import Notification
 
 
 User = get_user_model()
@@ -71,8 +108,9 @@ LOCMEM_CACHE = {
 
 
 class FakeHTTPResponse:
-    def __init__(self, payload):
+    def __init__(self, payload, headers=None):
         self.payload = payload
+        self.headers = headers or {}
 
     def __enter__(self):
         return self
@@ -82,6 +120,45 @@ class FakeHTTPResponse:
 
     def read(self):
         return self.payload
+
+
+class FakeRedisRateLimitClient:
+    def __init__(self):
+        self.store = {}
+
+    def eval(self, _script, _numkeys, key, now_ms, window_ms, token_limit, request_limit, requested_tokens):
+        state = self.store.setdefault(
+            key,
+            {"reset_ms": 0, "used_tokens": 0, "used_requests": 0, "blocked_until_ms": 0},
+        )
+        now_ms = int(now_ms)
+        window_ms = int(window_ms)
+        token_limit = int(token_limit)
+        request_limit = int(request_limit)
+        requested_tokens = int(requested_tokens)
+        if state["blocked_until_ms"] > now_ms:
+            return [0, max(0, token_limit - state["used_tokens"]), state["blocked_until_ms"], state["used_tokens"], state["used_requests"], b"blocked"]
+        if state["reset_ms"] <= now_ms:
+            state["reset_ms"] = now_ms + window_ms
+            state["used_tokens"] = 0
+            state["used_requests"] = 0
+        remaining = token_limit - state["used_tokens"]
+        if requested_tokens > remaining or state["used_requests"] >= request_limit:
+            return [0, max(0, remaining), state["reset_ms"], state["used_tokens"], state["used_requests"], b"limited"]
+        state["used_tokens"] += requested_tokens
+        state["used_requests"] += 1
+        return [1, max(0, token_limit - state["used_tokens"]), state["reset_ms"], state["used_tokens"], state["used_requests"], b"allowed"]
+
+    def hset(self, key, mapping):
+        state = self.store.setdefault(
+            key,
+            {"reset_ms": 0, "used_tokens": 0, "used_requests": 0, "blocked_until_ms": 0},
+        )
+        for field, value in mapping.items():
+            state[field] = int(value)
+
+    def pexpire(self, key, ttl):
+        del key, ttl
 
 
 class AIAnalysisResultModelTests(APITestCase):
@@ -128,17 +205,44 @@ class DocumentApiTests(APITestCase):
             b"Focus sessions need clear goals. Short reviews improve memory.",
             content_type="text/plain",
         )
-        return self.client.post("/api/documents/upload/", {"file": file}, format="multipart")
+        with patch("apps.ai.tasks.extract_document_text.delay"):
+            return self.client.post("/api/documents/upload/", {"file": file}, format="multipart")
 
     def test_document_upload_library_summary_flashcards_and_review_flow(self):
         upload = self.upload_txt_document()
         document_id = upload.data["id"]
+        document = StudyDocument.objects.get(pk=document_id)
+        summary_record = DocumentSummary.objects.create(
+            document=document,
+            mode=DocumentSummary.Mode.DETAILED,
+            status=DocumentSummary.Status.COMPLETED,
+            content="## Cached focus summary",
+            input_checksum="api-test-checksum",
+            generated_at=timezone.now(),
+        )
+        deck = FlashcardDeck.objects.create(
+            user=self.user,
+            document=document,
+            title="Focus review",
+            requested_quantity=2,
+            quantity=2,
+            generated_quantity=2,
+            status=FlashcardDeck.Status.COMPLETED,
+        )
+        Flashcard.objects.bulk_create(
+            [
+                Flashcard(deck=deck, document=document, question="What helps focus?", answer="Clear goals.", order=0),
+                Flashcard(deck=deck, document=document, question="What helps memory?", answer="Short reviews.", order=1),
+            ]
+        )
 
         listing = self.client.get("/api/documents/?search=focus&fileType=txt")
+        source_file = self.client.get(f"/api/documents/{document_id}/file/")
+        source_text = self.client.get(f"/api/documents/{document_id}/text/")
         summary = self.client.get(f"/api/documents/{document_id}/summary/?mode=detailed")
         flashcards = self.client.get(f"/api/documents/{document_id}/flashcards/")
-        deck_id = flashcards.data["id"]
-        card_ids = [card["id"] for card in flashcards.data["cards"]]
+        deck_id = flashcards.data["deck"]["id"]
+        card_ids = [card["id"] for card in flashcards.data["deck"]["cards"]]
         decks = self.client.get("/api/flashcard-decks/")
         review = self.client.post(
             f"/api/flashcard-decks/{deck_id}/review-session/",
@@ -152,14 +256,25 @@ class DocumentApiTests(APITestCase):
 
         self.assertEqual(upload.status_code, status.HTTP_201_CREATED)
         self.assertEqual(upload.data["fileType"], "txt")
-        self.assertEqual(upload.data["status"], "ready")
+        self.assertEqual(upload.data["status"], "uploaded")
+        self.assertEqual(upload.data["sourceFileUrl"], f"/api/documents/{document_id}/file/")
+        self.assertTrue(upload.data["canReadInline"])
         self.assertEqual(listing.status_code, status.HTTP_200_OK)
         self.assertEqual(len(listing.data), 1)
+        self.assertEqual(source_file.status_code, status.HTTP_200_OK)
+        self.assertEqual(
+            b"".join(source_file.streaming_content),
+            b"Focus sessions need clear goals. Short reviews improve memory.",
+        )
+        self.assertEqual(source_text.status_code, status.HTTP_200_OK)
+        self.assertEqual(source_text.data["text"], "")
         self.assertEqual(summary.status_code, status.HTTP_200_OK)
         self.assertEqual(summary.data["documentId"], document_id)
-        self.assertIn("focus-notes.txt", summary.data["content"])
+        self.assertEqual(summary.data["summary"]["id"], str(summary_record.id))
+        self.assertIn("Cached focus summary", summary.data["content"])
         self.assertEqual(flashcards.status_code, status.HTTP_200_OK)
-        self.assertGreater(len(flashcards.data["cards"]), 0)
+        self.assertEqual(flashcards.data["status"], FlashcardDeck.Status.COMPLETED)
+        self.assertGreater(len(flashcards.data["deck"]["cards"]), 0)
         self.assertEqual(decks.status_code, status.HTTP_200_OK)
         self.assertEqual(decks.data[0]["id"], deck_id)
         self.assertEqual(review.status_code, status.HTTP_201_CREATED)
@@ -177,6 +292,8 @@ class DocumentApiTests(APITestCase):
 
         self.client.force_authenticate(self.other_user)
         other_access = self.client.get(f"/api/documents/{document_id}/")
+        other_file_access = self.client.get(f"/api/documents/{document_id}/file/")
+        other_text_access = self.client.get(f"/api/documents/{document_id}/text/")
 
         self.client.force_authenticate(self.user)
         delete = self.client.delete(f"/api/documents/{document_id}/")
@@ -185,6 +302,8 @@ class DocumentApiTests(APITestCase):
         self.assertEqual(update.status_code, status.HTTP_200_OK)
         self.assertEqual(update.data["originalName"], "renamed.txt")
         self.assertEqual(other_access.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(other_file_access.status_code, status.HTTP_404_NOT_FOUND)
+        self.assertEqual(other_text_access.status_code, status.HTTP_404_NOT_FOUND)
         self.assertEqual(delete.status_code, status.HTTP_204_NO_CONTENT)
         self.assertEqual(listing.data, [])
         self.assertFalse(StudyDocument.objects.filter(pk=document_id).exists())
@@ -259,11 +378,25 @@ class DocumentExtractionDay19Tests(APITestCase):
             content_type="text/plain",
         )
 
-        response = self.client.post("/api/documents/upload/", {"file": upload}, format="multipart")
+        with patch("apps.ai.tasks.extract_document_text.delay") as delay, patch(
+            "apps.ai.tasks.start_document_ai_job.delay",
+        ) as legacy_delay, self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post("/api/documents/upload/", {"file": upload}, format="multipart")
 
         self.assertEqual(response.status_code, status.HTTP_201_CREATED)
         document = StudyDocument.objects.get(pk=response.data["id"])
         extraction = document.metadata["extraction"]
+        self.assertEqual(document.status, StudyDocument.Status.UPLOADED)
+        self.assertEqual(document.extracted_text, "")
+        self.assertEqual(extraction["status"], "pending")
+        self.assertEqual(DocumentAIJob.objects.filter(document=document).count(), 0)
+        delay.assert_called_once_with(str(document.id))
+        legacy_delay.assert_not_called()
+
+        result = extract_document_text.run(str(document.id))
+        document.refresh_from_db()
+        extraction = document.metadata["extraction"]
+        self.assertEqual(result["status"], "completed")
         self.assertEqual(document.status, StudyDocument.Status.READY)
         self.assertEqual(document.extracted_text, "Xin chào FocusOS.\n\nHoc tap tot.")
         self.assertEqual(extraction["status"], "completed")
@@ -370,6 +503,46 @@ class DocumentExtractionDay19Tests(APITestCase):
         self.assertEqual(document.extracted_text, "Task notes.")
         self.assertEqual(len(document.metadata["extraction"]["checksum"]), 64)
 
+    def test_async_task_missing_source_marks_document_error(self):
+        document = StudyDocument.objects.create(
+            user=self.user,
+            filename="missing.txt",
+            original_name="missing.txt",
+            file_type=StudyDocument.FileType.TXT,
+            file_size_bytes=10,
+            status=StudyDocument.Status.UPLOADED,
+            metadata={
+                "source_file": {"path": "study-documents/missing.txt"},
+                "extraction": {"status": "pending"},
+            },
+        )
+
+        result = extract_document_text.run(str(document.id))
+
+        document.refresh_from_db()
+        self.assertEqual(result["status"], "failed")
+        self.assertEqual(document.status, StudyDocument.Status.ERROR)
+        self.assertEqual(document.metadata["extraction"]["status"], "failed")
+        self.assertEqual(document.metadata["extraction"]["error_code"], "FILE_NOT_FOUND")
+
+    def test_upload_enqueue_failure_keeps_uploaded_and_records_safe_metadata(self):
+        upload = SimpleUploadedFile(
+            "queue-failure.txt",
+            b"Queued later by stale recovery.",
+            content_type="text/plain",
+        )
+
+        with patch("apps.ai.tasks.extract_document_text.delay", side_effect=RuntimeError("broker down")), self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post("/api/documents/upload/", {"file": upload}, format="multipart")
+
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        document = StudyDocument.objects.get(pk=response.data["id"])
+        extraction = document.metadata["extraction"]
+        self.assertEqual(document.status, StudyDocument.Status.UPLOADED)
+        self.assertEqual(extraction["enqueue_status"], "failed")
+        self.assertEqual(extraction["enqueue_error_code"], "EXTRACTION_ENQUEUE_FAILED")
+        self.assertEqual(DocumentAIJob.objects.filter(document=document).count(), 0)
+
 
 class FakeSummaryClient:
     PROVIDER = "openrouter"
@@ -379,12 +552,13 @@ class FakeSummaryClient:
         self.exc = exc
         self.calls = []
 
-    def complete_json(self, system_prompt, user_prompt, operation="document_summary"):
+    def complete_json(self, system_prompt, user_prompt, operation="document_summary", **kwargs):
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "operation": operation,
+                **kwargs,
             }
         )
         if self.exc:
@@ -396,6 +570,8 @@ class FakeSummaryClient:
                 '{"language":"en","key_points":['
                 '{"title":"Focus","content":"Clear goals improve focus."}]}'
             )
+        if isinstance(content, Exception):
+            raise content
         return {"content": content, "source": "openrouter", "model": "summary-test"}
 
 
@@ -407,6 +583,7 @@ class FakeSummaryClient:
     DOCUMENT_SUMMARY_CHUNK_OVERLAP_CHARACTERS=10,
     DOCUMENT_SUMMARY_MAX_CHUNKS=4,
     DOCUMENT_SUMMARY_MAX_SOURCE_CHARACTERS=260,
+    DOCUMENT_CHUNK_REQUEST_DELAY_SECONDS=0,
 )
 class DocumentSummaryDay20Tests(APITestCase):
     def setUp(self):
@@ -453,6 +630,53 @@ class DocumentSummaryDay20Tests(APITestCase):
         self.assertIn("<DOCUMENT_CONTENT>", user_prompt)
         self.assertIn(document_text, user_prompt)
         self.assertNotIn("secret-api-key", system_prompt + user_prompt)
+
+    def test_summary_prompts_encode_mode_depth_requirements(self):
+        builder = DocumentSummaryService().prompt_builder
+
+        _, detailed_prompt = builder.build_messages(
+            DocumentSummary.Mode.DETAILED,
+            "A long lesson with definitions, examples, and conclusions.",
+            phase="reduce",
+        )
+        _, key_points_prompt = builder.build_messages(
+            DocumentSummary.Mode.KEY_POINTS,
+            "A lesson with important concepts.",
+        )
+
+        self.assertIn("5 to 9 sections", detailed_prompt)
+        self.assertIn("2 to 5 sentences", detailed_prompt)
+        self.assertIn("Do not compress", detailed_prompt)
+        self.assertIn("8 to 12 key_points", key_points_prompt)
+        self.assertIn("2 to 4 sentences", key_points_prompt)
+
+    def test_contextual_chunk_prompt_keeps_detailed_partial_summary_rich(self):
+        document = self.create_ready_document()
+        chunk = DocumentChunker(chunk_characters=80, overlap_characters=10).chunk(
+            "Definitions introduce the core concept. Examples explain it. "
+            "The final paragraph compares tradeoffs."
+        ).chunks[0]
+
+        _, user_prompt = DocumentSummaryService().prompt_builder.build_contextual_chunk_messages(
+            DocumentSummary.Mode.DETAILED,
+            chunk,
+            rolling_context="",
+            entity_memory={},
+            open_context=[],
+            document=document,
+        )
+
+        self.assertIn("partial_summary should be 5 to 9 sentences", user_prompt)
+        self.assertIn("Capture details that would be lost", user_prompt)
+
+    def test_detailed_summary_uses_larger_final_output_budget(self):
+        detailed = reserved_output_tokens_for(DocumentSummary.Mode.DETAILED, "reduce")
+        key_points = reserved_output_tokens_for(DocumentSummary.Mode.KEY_POINTS, "reduce")
+        chunk = reserved_output_tokens_for(DocumentSummary.Mode.DETAILED, "map")
+
+        self.assertGreaterEqual(detailed, 1200)
+        self.assertGreaterEqual(key_points, 800)
+        self.assertGreater(detailed, chunk)
 
     def test_chunker_splits_long_unicode_text_in_order_and_marks_truncation(self):
         text = "Đoạn một nói về học tập.\n\n" * 20
@@ -527,14 +751,306 @@ class DocumentSummaryDay20Tests(APITestCase):
         self.assertIn("chunk_summaries", fake.calls[-1]["user_prompt"])
         self.assertNotIn("Paragraph about goals", fake.calls[-1]["user_prompt"])
 
+    def test_contextual_chunk_flow_keeps_continuity_and_payload_budget(self):
+        document = self.create_ready_document(
+            text=(
+                "1. Focus score\n"
+                "Focus score measures study attention and planning. This method\n\n"
+                "continues by combining distraction signals with review quality.\n\n"
+                "2. Update\n"
+                "It replaces the earlier simple score with a weighted score."
+            ),
+            checksum="context-flow",
+        )
+        responses = [
+            '{"partial_summary":"Focus score is introduced.","key_points":["Focus score measures attention."],'
+            '"important_terms":[{"term":"Focus score","definition":"Study attention measure","first_seen_chunk":1}],'
+            '"entities":[{"name":"Focus score","type":"concept","description":"Attention metric"}],'
+            '"relationships":[],"open_context":["This method continues in the next chunk."],'
+            '"flashcard_candidates":[{"question":"What is Focus score?","answer":"A study attention measure.","importance":1}],'
+            '"context_updates":[],"updated_context_summary":"Focus score is a study attention metric; a method is being described."}',
+            '{"partial_summary":"The method is extended and replaces a simple score.","key_points":["Weighted score replaces simple score."],'
+            '"important_terms":[],"entities":[{"name":"weighted score","type":"concept","description":"Updated metric"}],'
+            '"relationships":[{"source":"weighted score","relation":"replaces","target":"simple score"}],'
+            '"open_context":[],"flashcard_candidates":[{"question":"What changed?","answer":"A weighted score replaces the simple score.","importance":1}],'
+            '"context_updates":[{"type":"replace","previous_statement":"simple score","new_statement":"weighted score","source_chunk_index":2}],'
+            '"updated_context_summary":"Focus score is now described as a weighted study-attention metric replacing the earlier simple score."}',
+            '{"language":"en","key_points":[{"title":"Focus score","content":"Focus score becomes a weighted metric across the document."}]}',
+        ]
+        fake = FakeSummaryClient(responses=responses)
+        service = DocumentSummaryService(
+            client=fake,
+            chunker=DocumentChunker(chunk_characters=95, overlap_characters=35, max_chunks=2),
+        )
+
+        service.generate(str(document.id), DocumentSummary.Mode.KEY_POINTS)
+
+        summary = DocumentSummary.objects.get(document=document, mode=DocumentSummary.Mode.KEY_POINTS)
+        context = summary.structured_content["processing_context"]
+        self.assertEqual(context["last_completed_chunk_index"], 2)
+        self.assertLessEqual(context["rolling_context_token_count"], 450)
+        self.assertIn("previous_chunk_tail", fake.calls[1]["user_prompt"])
+        self.assertIn("This method", fake.calls[1]["user_prompt"])
+        self.assertIn("weighted", context["rolling_context_summary"])
+        self.assertTrue(context["chunks"][1]["context_updates"])
+        for call in fake.calls:
+            self.assertLess(estimate_request_tokens(call["system_prompt"], call["user_prompt"], 800), 5000)
+
+    def test_summary_retry_resumes_after_completed_chunk_checkpoint(self):
+        document = self.create_ready_document(
+            text=(
+                "1. Focus score\n"
+                "Focus score measures study attention and planning. This method\n\n"
+                "continues by combining distraction signals with review quality.\n\n"
+                "2. Update\n"
+                "It replaces the earlier simple score with a weighted score."
+            ),
+            checksum="checkpoint-flow",
+        )
+        first_client = FakeSummaryClient(
+            responses=[
+                '{"partial_summary":"Focus score is introduced.","key_points":["Focus score measures attention."],'
+                '"important_terms":[{"term":"Focus score","definition":"Study attention measure","first_seen_chunk":1}],'
+                '"entities":[{"name":"Focus score","type":"concept","description":"Attention metric"}],'
+                '"relationships":[],"open_context":["This method continues in the next chunk."],'
+                '"flashcard_candidates":[],"context_updates":[],'
+                '"updated_context_summary":"Focus score is a study attention metric; a method is being described."}',
+                AIQuotaDeferred(retry_after_seconds=60),
+            ]
+        )
+        chunker = DocumentChunker(chunk_characters=95, overlap_characters=35, max_chunks=2)
+        first_service = DocumentSummaryService(client=first_client, chunker=chunker)
+
+        with self.assertRaises(AIQuotaDeferred):
+            first_service.generate(str(document.id), DocumentSummary.Mode.KEY_POINTS)
+
+        summary = DocumentSummary.objects.get(document=document, mode=DocumentSummary.Mode.KEY_POINTS)
+        checkpoint = summary.structured_content["processing_context"]
+        self.assertEqual(summary.status, DocumentSummary.Status.PENDING)
+        self.assertEqual(checkpoint["last_completed_chunk_index"], 1)
+        self.assertEqual([call.get("chunk_id") for call in first_client.calls], ["1", "2"])
+
+        second_client = FakeSummaryClient(
+            responses=[
+                '{"partial_summary":"The method is extended and replaces a simple score.","key_points":["Weighted score replaces simple score."],'
+                '"important_terms":[],"entities":[{"name":"weighted score","type":"concept","description":"Updated metric"}],'
+                '"relationships":[],"open_context":[],"flashcard_candidates":[],"context_updates":[],'
+                '"updated_context_summary":"Focus score is now described as a weighted study-attention metric."}',
+                '{"language":"en","key_points":[{"title":"Focus score","content":"Focus score becomes weighted."}]}',
+            ]
+        )
+        second_service = DocumentSummaryService(client=second_client, chunker=chunker)
+
+        result = second_service.generate(str(document.id), DocumentSummary.Mode.KEY_POINTS, force=True)
+
+        summary.refresh_from_db()
+        self.assertEqual(result["status"], DocumentSummary.Status.COMPLETED)
+        self.assertEqual(summary.status, DocumentSummary.Status.COMPLETED)
+        self.assertEqual([call.get("chunk_id") for call in second_client.calls], ["2", None])
+        self.assertIn("chunk_summaries", second_client.calls[-1]["user_prompt"])
+
+    def test_summary_checkpoints_fallback_when_context_retry_is_quota_deferred(self):
+        document = self.create_ready_document(
+            text=(
+                "1. Focus score\n"
+                "Focus score measures study attention and planning. This method\n\n"
+                "continues by combining distraction signals with review quality.\n\n"
+                "2. Update\n"
+                "It replaces the earlier simple score with a weighted score."
+            ),
+            checksum="invalid-context-quota",
+        )
+        first_client = FakeSummaryClient(
+            responses=[
+                "not-json",
+                AIQuotaDeferred(retry_after_seconds=60),
+                AIQuotaDeferred(retry_after_seconds=60),
+            ]
+        )
+        chunker = DocumentChunker(chunk_characters=95, overlap_characters=35, max_chunks=2)
+        first_service = DocumentSummaryService(client=first_client, chunker=chunker)
+
+        with self.assertRaises(AIQuotaDeferred):
+            first_service.generate(str(document.id), DocumentSummary.Mode.KEY_POINTS)
+
+        summary = DocumentSummary.objects.get(document=document, mode=DocumentSummary.Mode.KEY_POINTS)
+        checkpoint = summary.structured_content["processing_context"]
+        self.assertEqual(summary.status, DocumentSummary.Status.PENDING)
+        self.assertEqual(checkpoint["last_completed_chunk_index"], 1)
+        self.assertEqual([call.get("chunk_id") for call in first_client.calls], ["1", "1", "2"])
+
+        second_client = FakeSummaryClient(
+            responses=[
+                '{"partial_summary":"The method is extended.","key_points":["Weighted score replaces simple score."],'
+                '"important_terms":[],"entities":[],"relationships":[],"open_context":[],'
+                '"flashcard_candidates":[],"context_updates":[],'
+                '"updated_context_summary":"A weighted study-attention metric is described."}',
+                '{"language":"en","key_points":[{"title":"Focus score","content":"Focus score becomes weighted."}]}',
+            ]
+        )
+        second_service = DocumentSummaryService(client=second_client, chunker=chunker)
+
+        result = second_service.generate(str(document.id), DocumentSummary.Mode.KEY_POINTS, force=True)
+
+        self.assertEqual(result["status"], DocumentSummary.Status.COMPLETED)
+        self.assertEqual([call.get("chunk_id") for call in second_client.calls], ["2", None])
+
     def test_task_generates_summary_with_mocked_service_client(self):
         document = self.create_ready_document()
 
-        with patch("apps.ai.services.document_summary.AIClient", return_value=FakeSummaryClient()):
+        response = {
+            "content": (
+                '{"language":"en","key_points":['
+                '{"title":"Focus","content":"Clear goals improve focus."}]}'
+            ),
+            "source": "openrouter",
+            "model": "summary-test",
+        }
+        with patch.object(AIClient, "complete_json", return_value=response) as complete_json:
             result = generate_document_summary.run(str(document.id), DocumentSummary.Mode.KEY_POINTS)
 
+        summary = DocumentSummary.objects.get(document=document, mode=DocumentSummary.Mode.KEY_POINTS)
         self.assertEqual(result["status"], DocumentSummary.Status.COMPLETED)
-        self.assertEqual(DocumentSummary.objects.count(), 1)
+        self.assertEqual(summary.status, DocumentSummary.Status.COMPLETED)
+        self.assertEqual(summary.generation_attempts, 1)
+        self.assertIn("Clear goals", summary.content)
+        complete_json.assert_called_once()
+
+    def test_task_recovers_pending_summary_that_was_not_enqueued(self):
+        document = self.create_ready_document()
+        DocumentSummary.objects.create(
+            document=document,
+            mode=DocumentSummary.Mode.KEY_POINTS,
+            status=DocumentSummary.Status.PENDING,
+            input_checksum="checksum-1",
+            prompt_version=DocumentSummaryService().prompt_builder.PROMPT_VERSION,
+        )
+        response = {
+            "content": (
+                '{"language":"en","key_points":['
+                '{"title":"Recovered","content":"Pending summary now runs."}]}'
+            ),
+            "source": "openrouter",
+            "model": "summary-test",
+        }
+
+        with patch.object(AIClient, "complete_json", return_value=response) as complete_json:
+            result = generate_document_summary.run(str(document.id), DocumentSummary.Mode.KEY_POINTS)
+
+        summary = DocumentSummary.objects.get(document=document, mode=DocumentSummary.Mode.KEY_POINTS)
+        self.assertEqual(result["status"], DocumentSummary.Status.COMPLETED)
+        self.assertEqual(summary.status, DocumentSummary.Status.COMPLETED)
+        self.assertEqual(summary.generation_attempts, 1)
+        self.assertIn("Pending summary now runs", summary.content)
+        complete_json.assert_called_once()
+
+    def test_two_summary_posts_enqueue_one_task(self):
+        document = self.create_ready_document()
+
+        with patch("apps.ai.views.generate_document_summary.delay") as delay, self.captureOnCommitCallbacks(execute=True):
+            first = self.client.post(
+                f"/api/documents/{document.id}/summary/",
+                {"mode": DocumentSummary.Mode.KEY_POINTS},
+                format="json",
+            )
+            second = self.client.post(
+                f"/api/documents/{document.id}/summary/",
+                {"mode": DocumentSummary.Mode.KEY_POINTS},
+                format="json",
+            )
+
+        self.assertEqual(first.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        delay.assert_called_once()
+        self.assertEqual(
+            DocumentSummary.objects.filter(document=document, mode=DocumentSummary.Mode.KEY_POINTS).count(),
+            1,
+        )
+
+    def test_processing_summary_task_does_not_call_provider_again(self):
+        document = self.create_ready_document()
+        DocumentSummary.objects.create(
+            document=document,
+            mode=DocumentSummary.Mode.KEY_POINTS,
+            status=DocumentSummary.Status.PROCESSING,
+            input_checksum="checksum-1",
+            prompt_version=DocumentSummaryService().prompt_builder.PROMPT_VERSION,
+            generation_attempts=1,
+        )
+
+        with patch.object(AIClient, "complete_json") as complete_json:
+            result = generate_document_summary.run(str(document.id), DocumentSummary.Mode.KEY_POINTS)
+
+        self.assertEqual(result["status"], DocumentSummary.Status.PROCESSING)
+        complete_json.assert_not_called()
+
+    def test_summary_quota_defer_uses_dedicated_retry_budget(self):
+        document = self.create_ready_document()
+        self.assertEqual(generate_document_summary.max_retries, settings.AI_QUOTA_DEFER_MAX_RETRIES)
+
+        with patch("apps.ai.tasks.DocumentSummaryService") as service_class:
+            service_class.return_value.generate.side_effect = AIQuotaDeferred(
+                retry_after_seconds=37,
+                provider="openrouter",
+                model="summary-test",
+            )
+            with patch.object(generate_document_summary, "retry", side_effect=Retry()) as retry:
+                with self.assertRaises(Retry):
+                    generate_document_summary.run(str(document.id), DocumentSummary.Mode.DETAILED)
+
+        retry.assert_called_once()
+        self.assertEqual(retry.call_args.kwargs["countdown"], 37)
+
+    def test_deferred_summary_exhaustion_marks_record_failed(self):
+        document = self.create_ready_document()
+        summary = DocumentSummary.objects.create(
+            document=document,
+            mode=DocumentSummary.Mode.DETAILED,
+            status=DocumentSummary.Status.PENDING,
+            error_code="AI_QUOTA_DEFERRED",
+        )
+
+        result = fail_deferred_document_summary(str(document.id), DocumentSummary.Mode.DETAILED)
+
+        summary.refresh_from_db()
+        self.assertEqual(result["status"], DocumentSummary.Status.FAILED)
+        self.assertEqual(summary.status, DocumentSummary.Status.FAILED)
+        self.assertEqual(summary.error_code, "AI_QUOTA_DEFERRED_EXHAUSTED")
+
+    def test_request_summary_rebuilds_cached_summary_when_prompt_version_changes(self):
+        document = self.create_ready_document()
+        DocumentSummary.objects.create(
+            document=document,
+            mode=DocumentSummary.Mode.DETAILED,
+            status=DocumentSummary.Status.COMPLETED,
+            content="Old short summary",
+            structured_content={"title": "Old"},
+            input_checksum="checksum-1",
+            prompt_version="document-summary-v2-context",
+            generated_at=timezone.now(),
+        )
+
+        result = DocumentSummaryService().request_summary(document, DocumentSummary.Mode.DETAILED)
+
+        result.summary.refresh_from_db()
+        self.assertFalse(result.cached)
+        self.assertTrue(result.should_enqueue)
+        self.assertEqual(result.summary.status, DocumentSummary.Status.PENDING)
+        self.assertEqual(result.summary.prompt_version, DocumentSummaryService().prompt_builder.PROMPT_VERSION)
+        self.assertEqual(result.summary.content, "")
+        self.assertEqual(result.summary.structured_content, {})
+
+    def test_summary_preserves_token_budget_error_code(self):
+        error = AIProviderError(
+            "too many tokens",
+            error_code="AI_TOKEN_BUDGET_EXCEEDED",
+            retryable=False,
+        )
+
+        self.assertEqual(
+            DocumentSummaryService().map_ai_error(error),
+            "AI_TOKEN_BUDGET_EXCEEDED",
+        )
 
     def test_post_requires_authentication_and_owner(self):
         document = self.create_ready_document()
@@ -577,6 +1093,44 @@ class DocumentSummaryDay20Tests(APITestCase):
         complete_json.assert_not_called()
         self.assertLessEqual(delay.call_count, 1)
 
+    def test_summary_post_does_not_call_legacy_document_ai_flow(self):
+        document = self.create_ready_document()
+
+        with patch("apps.ai.views.generate_document_summary.delay") as summary_delay, patch(
+            "apps.ai.tasks.start_document_ai_job.delay",
+        ) as legacy_delay, self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f"/api/documents/{document.id}/summary/",
+                {"mode": "key_points"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        summary_delay.assert_called_once()
+        legacy_delay.assert_not_called()
+        self.assertEqual(DocumentAIJob.objects.filter(document=document).count(), 0)
+
+    def test_post_existing_pending_summary_does_not_enqueue_duplicate_task(self):
+        document = self.create_ready_document()
+        DocumentSummary.objects.create(
+            document=document,
+            mode=DocumentSummary.Mode.KEY_POINTS,
+            status=DocumentSummary.Status.PENDING,
+            input_checksum="checksum-1",
+            prompt_version=DocumentSummaryService().prompt_builder.PROMPT_VERSION,
+        )
+
+        with patch("apps.ai.views.generate_document_summary.delay") as delay:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(
+                    f"/api/documents/{document.id}/summary/",
+                    {"mode": "key_points"},
+                    format="json",
+                )
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        delay.assert_not_called()
+
     def test_post_cache_hit_does_not_enqueue_or_call_ai(self):
         document = self.create_ready_document()
         DocumentSummary.objects.create(
@@ -589,6 +1143,7 @@ class DocumentSummaryDay20Tests(APITestCase):
                 "key_points": [{"title": "Focus", "content": "Cached."}],
             },
             input_checksum="checksum-1",
+            prompt_version=DocumentSummaryService().prompt_builder.PROMPT_VERSION,
             generated_at=timezone.now(),
         )
 
@@ -658,6 +1213,13 @@ class DocumentSummaryDay20Tests(APITestCase):
         self.assertIn("Cached", response.data["summary"]["content"])
         self.assertIn("key_points", both.data["summaries"])
         self.assertIn("detailed", both.data["summaries"])
+        self.assertEqual(both.data["summaries"]["key_points"]["status"], "not_generated")
+        self.assertFalse(
+            DocumentSummary.objects.filter(
+                document=document,
+                mode=DocumentSummary.Mode.KEY_POINTS,
+            ).exists()
+        )
         self.assertNotIn(document.extracted_text, str(response.data))
         complete_json.assert_not_called()
 
@@ -697,12 +1259,13 @@ class FakeFlashcardClient:
         self.exc = exc
         self.calls = []
 
-    def complete_json(self, system_prompt, user_prompt, operation="flashcard_generation"):
+    def complete_json(self, system_prompt, user_prompt, operation="flashcard_generation", **kwargs):
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "operation": operation,
+                **kwargs,
             }
         )
         if self.exc:
@@ -719,6 +1282,8 @@ class FakeFlashcardClient:
                 '],"warnings":[]}'
             )
         )
+        if isinstance(content, Exception):
+            raise content
         return {"content": content, "source": "openrouter", "model": "flashcard-test"}
 
 
@@ -728,6 +1293,7 @@ class FakeFlashcardClient:
     FLASHCARD_GENERATION_MODEL="flashcard-model",
     FLASHCARD_GENERATION_CHUNK_CHARACTERS=500,
     FLASHCARD_GENERATION_MAX_CHUNKS=4,
+    DOCUMENT_CHUNK_REQUEST_DELAY_SECONDS=0,
 )
 class FlashcardGenerationDay21Tests(APITestCase):
     def setUp(self):
@@ -769,6 +1335,19 @@ class FlashcardGenerationDay21Tests(APITestCase):
             processed_at=timezone.now(),
         )
 
+    def test_get_flashcards_without_deck_is_read_only_not_generated(self):
+        document = self.create_ready_document()
+
+        with patch.object(AIClient, "complete_json") as complete_json:
+            response = self.client.get(f"/api/documents/{document.id}/flashcards/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], "not_generated")
+        self.assertIsNone(response.data["deck"])
+        self.assertEqual(FlashcardDeck.objects.filter(document=document).count(), 0)
+        self.assertEqual(Flashcard.objects.filter(document=document).count(), 0)
+        complete_json.assert_not_called()
+
     def test_source_selector_supports_full_page_and_section_scope(self):
         document = self.create_ready_document()
         selector = DocumentSourceSelector()
@@ -802,6 +1381,26 @@ class FlashcardGenerationDay21Tests(APITestCase):
         self.assertIn("<DOCUMENT_SOURCE>", user_prompt)
         self.assertIn(source, user_prompt)
         self.assertNotIn("secret-api-key", system_prompt + user_prompt)
+
+    def test_flashcard_prompt_marks_previous_tail_as_context_only(self):
+        service = FlashcardGenerationService(client=FakeFlashcardClient())
+
+        system_prompt, user_prompt = service.prompt_builder.build_messages(
+            "Current chunk defines weighted focus scoring.",
+            difficulty=FlashcardDeck.Difficulty.MEDIUM,
+            quantity=10,
+            scope_metadata={
+                "type": "full_document",
+                "chunk": {"chunk_index": 2, "total_chunks": 3},
+                "previous_chunk_tail": "Prior chunk tail only.",
+            },
+        )
+
+        self.assertIn("<previous_chunk_tail>", user_prompt)
+        self.assertIn("do not create cards", user_prompt.lower())
+        self.assertIn("<DOCUMENT_SOURCE>", user_prompt)
+        self.assertNotIn("secret-api-key", system_prompt + user_prompt)
+        self.assertLess(estimate_request_tokens(system_prompt, user_prompt, 1400), 5000)
 
     def test_output_validator_deduplicates_limits_and_rejects_empty_cards(self):
         validator = FlashcardOutputValidator()
@@ -879,6 +1478,57 @@ class FlashcardGenerationDay21Tests(APITestCase):
         self.assertEqual(deck.cards.count(), 3)
         self.assertGreaterEqual(len(fake.calls), 3)
 
+    def test_flashcard_generation_resumes_after_chunk_quota_defer(self):
+        document = self.create_ready_document(
+            text=(
+                "FocusOS goals improve attention and planning for students. "
+                "Clear study goals support better review routines.\n\n"
+                "Extracted material supports memory and review for students. "
+                "Students reduce distractions during study sessions."
+            ),
+            checksum="quota-resume-cards",
+        )
+        config = {"scope": "full_document", "quantity": 2, "difficulty": "medium"}
+        first_client = FakeFlashcardClient(
+            responses=[
+                '{"flashcards":[{"question":"What improves attention?","answer":"FocusOS goals improve attention."}]}',
+                AIQuotaDeferred(retry_after_seconds=17, provider="openrouter", model="flashcard-test"),
+            ]
+        )
+        first_service = FlashcardGenerationService(
+            client=first_client,
+            chunker=DocumentChunker(chunk_characters=95, overlap_characters=0, max_chunks=2),
+        )
+
+        with self.assertRaises(AIQuotaDeferred):
+            first_service.generate(str(document.id), config, force=True)
+
+        deck = FlashcardDeck.objects.get(document=document)
+        checkpoint = deck.scope["processing_context"]
+        self.assertEqual(deck.status, FlashcardDeck.Status.PENDING)
+        self.assertEqual(checkpoint["completed_chunk_ids"], ["1"])
+        self.assertEqual(checkpoint["retry_after_seconds"], 17)
+        self.assertEqual([call["chunk_id"] for call in first_client.calls], ["1", "2"])
+
+        second_client = FakeFlashcardClient(
+            responses=[
+                '{"flashcards":[{"question":"What supports memory?","answer":"Extracted material supports memory."}]}',
+            ]
+        )
+        second_service = FlashcardGenerationService(
+            client=second_client,
+            chunker=DocumentChunker(chunk_characters=95, overlap_characters=0, max_chunks=2),
+        )
+
+        result = second_service.generate(str(document.id), config, force=True)
+
+        deck.refresh_from_db()
+        self.assertEqual(result["status"], FlashcardDeck.Status.COMPLETED)
+        self.assertEqual(deck.status, FlashcardDeck.Status.COMPLETED)
+        self.assertNotIn("processing_context", deck.scope)
+        self.assertEqual(deck.cards.count(), 2)
+        self.assertEqual([call["chunk_id"] for call in second_client.calls], ["2"])
+
     def test_post_generate_requires_authentication_and_owner(self):
         document = self.create_ready_document()
         self.client.force_authenticate(None)
@@ -931,10 +1581,160 @@ class FlashcardGenerationDay21Tests(APITestCase):
         complete_json.assert_not_called()
         self.assertLessEqual(delay.call_count, 1)
 
+    def test_two_flashcard_posts_enqueue_one_task(self):
+        document = self.create_ready_document()
+
+        with patch("apps.ai.views.generate_document_flashcards.delay") as delay, self.captureOnCommitCallbacks(execute=True):
+            first = self.client.post(
+                f"/api/documents/{document.id}/flashcards/generate/",
+                {"scope": "full_document", "quantity": 5, "difficulty": "easy"},
+                format="json",
+            )
+            second = self.client.post(
+                f"/api/documents/{document.id}/flashcards/generate/",
+                {"scope": "full_document", "quantity": 5, "difficulty": "easy"},
+                format="json",
+            )
+
+        self.assertEqual(first.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        delay.assert_called_once()
+        self.assertEqual(FlashcardDeck.objects.filter(document=document).count(), 1)
+
+    def test_get_flashcards_prefers_pending_deck_and_is_not_cached(self):
+        document = self.create_ready_document()
+        FlashcardDeck.objects.create(
+            user=document.user,
+            document=document,
+            requested_quantity=5,
+            difficulty="medium",
+            status=FlashcardDeck.Status.PENDING,
+            generation_fingerprint="pending-fingerprint",
+            source_checksum="cards-checksum",
+            scope={"type": "full_document", "processing_context": {"retry_after_seconds": 12}},
+            prompt_version=FlashcardGenerationService().prompt_builder.PROMPT_VERSION,
+        )
+
+        response = self.client.get(f"/api/documents/{document.id}/flashcards/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(response.data["status"], FlashcardDeck.Status.PENDING)
+        self.assertFalse(response.data["cached"])
+        self.assertTrue(response.data["reused"])
+        self.assertEqual(response.data["deck"]["cards"], [])
+        self.assertEqual(response.data["deck"]["scope"], {"type": "full_document"})
+        self.assertIsNone(response.data["deck"]["generatedAt"])
+        self.assertEqual(response.data["deck"]["retryAfterSeconds"], 12)
+
+    def test_force_post_reuses_pending_deck_without_duplicate_enqueue(self):
+        document = self.create_ready_document()
+        config = {"scope": "full_document", "quantity": 5, "difficulty": "medium"}
+
+        with patch("apps.ai.views.generate_document_flashcards.delay") as delay, self.captureOnCommitCallbacks(execute=True):
+            first = self.client.post(
+                f"/api/documents/{document.id}/flashcards/generate/",
+                config,
+                format="json",
+            )
+            second = self.client.post(
+                f"/api/documents/{document.id}/flashcards/generate/",
+                {**config, "force": True},
+                format="json",
+            )
+
+        self.assertEqual(first.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(second.status_code, status.HTTP_200_OK)
+        self.assertTrue(second.data["reused"])
+        delay.assert_called_once()
+        self.assertEqual(FlashcardDeck.objects.filter(document=document).count(), 1)
+
+    def test_processing_flashcard_task_does_not_call_provider_again(self):
+        document = self.create_ready_document()
+        source = DocumentSourceSelector().select(
+            document,
+            {"scope": "full_document", "quantity": 5, "difficulty": "medium"},
+        )
+        fingerprint = FlashcardGenerationService().generation_fingerprint(
+            document,
+            source,
+            {"scope": "full_document", "quantity": 5, "difficulty": "medium"},
+        )
+        FlashcardDeck.objects.create(
+            user=document.user,
+            document=document,
+            requested_quantity=5,
+            difficulty="medium",
+            status=FlashcardDeck.Status.PROCESSING,
+            generation_attempts=1,
+            generation_fingerprint=fingerprint,
+            source_checksum=source.source_checksum,
+            scope=source.scope,
+            prompt_version=FlashcardGenerationService().prompt_builder.PROMPT_VERSION,
+        )
+
+        with patch.object(AIClient, "complete_json") as complete_json:
+            result = generate_document_flashcards.run(
+                str(document.id),
+                {"scope": "full_document", "quantity": 5, "difficulty": "medium"},
+            )
+
+        self.assertEqual(result["status"], FlashcardDeck.Status.PROCESSING)
+        complete_json.assert_not_called()
+
+    def test_flashcard_post_does_not_call_legacy_document_ai_flow(self):
+        document = self.create_ready_document()
+
+        with patch("apps.ai.views.generate_document_flashcards.delay") as flashcard_delay, patch(
+            "apps.ai.tasks.start_document_ai_job.delay",
+        ) as legacy_delay, self.captureOnCommitCallbacks(execute=True):
+            response = self.client.post(
+                f"/api/documents/{document.id}/flashcards/generate/",
+                {"scope": "full_document", "quantity": 5, "difficulty": "easy"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        flashcard_delay.assert_called_once()
+        legacy_delay.assert_not_called()
+        self.assertEqual(DocumentAIJob.objects.filter(document=document).count(), 0)
+
+    def test_legacy_flashcards_post_uses_async_ai_generation_not_rule_based_fallback(self):
+        document = self.create_ready_document()
+
+        with patch("apps.ai.views.generate_document_flashcards.delay") as delay, patch.object(
+            AIClient,
+            "complete_json",
+        ) as complete_json:
+            response = self.client.post(
+                f"/api/documents/{document.id}/flashcards/",
+                {"quantity": 5, "difficulty": "medium"},
+                format="json",
+            )
+
+        self.assertEqual(response.status_code, status.HTTP_202_ACCEPTED)
+        self.assertEqual(response.data["status"], FlashcardDeck.Status.PENDING)
+        self.assertEqual(response.data["deck"]["status"], FlashcardDeck.Status.PENDING)
+        self.assertEqual(response.data["deck"]["cards"], [])
+        self.assertNotEqual(response.data["deck"]["provider"], "rule_based")
+        self.assertEqual(Flashcard.objects.count(), 0)
+        complete_json.assert_not_called()
+        self.assertLessEqual(delay.call_count, 1)
+
     def test_post_generate_cache_hit_does_not_enqueue(self):
         document = self.create_ready_document()
-        service = FlashcardGenerationService(client=FakeFlashcardClient())
-        config = {"scope": "full_document", "quantity": 2, "difficulty": "medium"}
+        fake = FakeFlashcardClient(
+            responses=[
+                '{"flashcards":['
+                '{"question":"What improves FocusOS study sessions?","answer":"FocusOS goals improve study sessions."},'
+                '{"question":"What should students review?","answer":"Students should review extracted study material."},'
+                '{"question":"What reduces distractions?","answer":"Students reduce distractions during study sessions."},'
+                '{"question":"What helps students set direction?","answer":"Clear goals help students set direction."},'
+                '{"question":"What material supports memory?","answer":"Extracted study material supports memory."}'
+                ']}'
+            ]
+        )
+        service = FlashcardGenerationService(client=fake)
+        config = {"scope": "full_document", "quantity": 5, "difficulty": "medium"}
         service.generate(str(document.id), config)
 
         with patch("apps.ai.views.generate_document_flashcards.delay") as delay:
@@ -950,7 +1750,7 @@ class FlashcardGenerationDay21Tests(APITestCase):
         self.assertEqual(response.data["document_id"], str(document.id))
         self.assertEqual(str(response.data["deck"]["documentId"]), str(document.id))
         self.assertEqual(response.data["deck"]["status"], FlashcardDeck.Status.COMPLETED)
-        self.assertEqual(len(response.data["deck"]["cards"]), 2)
+        self.assertEqual(len(response.data["deck"]["cards"]), 5)
         delay.assert_not_called()
 
     def test_post_generate_rejects_preconditions_invalid_config_and_ranges(self):
@@ -975,6 +1775,11 @@ class FlashcardGenerationDay21Tests(APITestCase):
                 {"scope": "full_document", "quantity": 0, "difficulty": "easy"},
                 format="json",
             )
+            too_many_cards = self.client.post(
+                f"/api/documents/{ready.id}/flashcards/generate/",
+                {"scope": "full_document", "quantity": 21, "difficulty": "easy"},
+                format="json",
+            )
             missing_scope = self.client.post(
                 f"/api/documents/{ready.id}/flashcards/generate/",
                 {"quantity": 5, "difficulty": "easy"},
@@ -990,6 +1795,7 @@ class FlashcardGenerationDay21Tests(APITestCase):
         self.assertEqual(not_ready.data["error"]["code"], "EXTRACTION_NOT_READY")
         self.assertEqual(invalid_scope.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(invalid_quantity.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertEqual(too_many_cards.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertEqual(missing_scope.status_code, status.HTTP_400_BAD_REQUEST)
         self.assertIn("scope", missing_scope.data)
         self.assertEqual(invalid_range.status_code, status.HTTP_400_BAD_REQUEST)
@@ -998,13 +1804,64 @@ class FlashcardGenerationDay21Tests(APITestCase):
     def test_task_generates_with_mocked_ai_client(self):
         document = self.create_ready_document()
         config = {"scope": "full_document", "quantity": 2, "difficulty": "medium"}
+        response = {
+            "content": (
+                '{"flashcards":['
+                '{"question":"What supports study sessions?","answer":"FocusOS supports study sessions."},'
+                '{"question":"What should students review?","answer":"Students review extracted study material."}'
+                ']}'
+            ),
+            "source": "openrouter",
+            "model": "flashcard-test",
+        }
 
-        with patch("apps.ai.services.flashcard_generation.AIClient", return_value=FakeFlashcardClient()):
+        with patch.object(AIClient, "complete_json", return_value=response) as complete_json:
             result = generate_document_flashcards.run(str(document.id), config)
 
+        deck = FlashcardDeck.objects.get(document=document)
         self.assertEqual(result["status"], FlashcardDeck.Status.COMPLETED)
-        self.assertEqual(FlashcardDeck.objects.count(), 1)
+        self.assertEqual(deck.requested_quantity, 2)
+        self.assertEqual(deck.generated_quantity, 2)
         self.assertEqual(Flashcard.objects.count(), 2)
+        complete_json.assert_called_once()
+
+    def test_flashcard_quota_defer_uses_dedicated_retry_budget(self):
+        document = self.create_ready_document()
+        config = {"scope": "full_document", "quantity": 2, "difficulty": "medium"}
+        self.assertEqual(generate_document_flashcards.max_retries, settings.AI_QUOTA_DEFER_MAX_RETRIES)
+
+        with patch("apps.ai.tasks.FlashcardGenerationService") as service_class:
+            service_class.return_value.generate.side_effect = AIQuotaDeferred(
+                retry_after_seconds=41,
+                provider="openrouter",
+                model="flashcard-test",
+            )
+            with patch.object(generate_document_flashcards, "retry", side_effect=Retry()) as retry:
+                with self.assertRaises(Retry):
+                    generate_document_flashcards.run(str(document.id), config)
+
+        retry.assert_called_once()
+        self.assertEqual(retry.call_args.kwargs["countdown"], 41)
+
+    def test_deferred_flashcard_exhaustion_marks_deck_failed(self):
+        document = self.create_ready_document()
+        config = {"scope": "full_document", "quantity": 2, "difficulty": "medium"}
+        deck = FlashcardDeck.objects.create(
+            user=document.user,
+            document=document,
+            title="Pending deck",
+            difficulty="medium",
+            requested_quantity=2,
+            status=FlashcardDeck.Status.PENDING,
+            error_code="AI_QUOTA_DEFERRED",
+        )
+
+        result = fail_deferred_flashcard_deck(str(document.id), config)
+
+        deck.refresh_from_db()
+        self.assertEqual(result["status"], FlashcardDeck.Status.FAILED)
+        self.assertEqual(deck.status, FlashcardDeck.Status.FAILED)
+        self.assertEqual(deck.error_code, "AI_QUOTA_DEFERRED_EXHAUSTED")
 
     def test_timeout_maps_to_failed_deck_without_raw_provider_body(self):
         document = self.create_ready_document()
@@ -1022,6 +1879,430 @@ class FlashcardGenerationDay21Tests(APITestCase):
         self.assertNotIn("Traceback", deck.error_message)
 
 
+@override_settings(
+    DOCUMENT_EXTRACTION_STALE_SECONDS=60,
+    DOCUMENT_UPLOADED_GRACE_SECONDS=60,
+    DOCUMENT_EXTRACTION_MAX_RECOVERY_ATTEMPTS=2,
+    AI_JOB_STALE_PROCESSING_SECONDS=60,
+    AI_JOB_MAX_RECOVERY_ATTEMPTS=2,
+)
+class StaleAIWorkRecoveryTests(APITestCase):
+    def setUp(self):
+        self.user = User.objects.create_user(email="stale-ai@example.com", password=PASSWORD)
+        self.now = timezone.now()
+        self.old = self.now - timezone.timedelta(minutes=10)
+
+    def create_document(self, status=StudyDocument.Status.READY, metadata=None):
+        return StudyDocument.objects.create(
+            user=self.user,
+            filename="stale.txt",
+            original_name="stale.txt",
+            file_type=StudyDocument.FileType.TXT,
+            file_size_bytes=20,
+            status=status,
+            extracted_text="Recovered study text." if status == StudyDocument.Status.READY else "",
+            metadata=metadata or {"extraction": {"status": "completed", "checksum": "stale-checksum"}},
+            processed_at=timezone.now() if status == StudyDocument.Status.READY else None,
+        )
+
+    def test_recovery_requeues_stale_processing_records_without_duplicates(self):
+        processing_doc = self.create_document(
+            status=StudyDocument.Status.PROCESSING,
+            metadata={
+                "source_file": {"path": "study-documents/test/stale.txt"},
+                "extraction": {"status": "processing", "started_at": self.old.isoformat()},
+            },
+        )
+        ready_doc = self.create_document()
+        summary = DocumentSummary.objects.create(
+            document=ready_doc,
+            mode=DocumentSummary.Mode.DETAILED,
+            status=DocumentSummary.Status.PROCESSING,
+            generation_attempts=1,
+        )
+        deck = FlashcardDeck.objects.create(
+            user=self.user,
+            document=ready_doc,
+            title="Recover deck",
+            requested_quantity=5,
+            difficulty=FlashcardDeck.Difficulty.MEDIUM,
+            status=FlashcardDeck.Status.PROCESSING,
+            scope={"type": "full_document"},
+            generation_attempts=1,
+        )
+        job = DocumentAIJob.objects.create(
+            user=self.user,
+            document=ready_doc,
+            status=DocumentAIJob.Status.GENERATING_SUMMARY,
+            attempt_count=1,
+        )
+        DocumentSummary.objects.filter(pk=summary.pk).update(updated_at=self.old)
+        FlashcardDeck.objects.filter(pk=deck.pk).update(updated_at=self.old)
+        DocumentAIJob.objects.filter(pk=job.pk).update(updated_at=self.old)
+
+        service = StaleAIWorkRecoveryService(now=self.now)
+        with patch.object(service, "enqueue_extraction") as enqueue_extraction, patch.object(
+            service,
+            "enqueue_summary",
+        ) as enqueue_summary, patch.object(service, "enqueue_flashcards") as enqueue_flashcards, patch.object(
+            service,
+            "enqueue_document_ai_job",
+        ) as enqueue_job, self.captureOnCommitCallbacks(execute=True):
+            result = service.recover()
+
+        processing_doc.refresh_from_db()
+        summary.refresh_from_db()
+        deck.refresh_from_db()
+        job.refresh_from_db()
+        self.assertEqual(result["documents"]["recovered"], 1)
+        self.assertEqual(result["summaries"]["recovered"], 1)
+        self.assertEqual(result["flashcard_decks"]["recovered"], 1)
+        self.assertEqual(result["document_ai_jobs"]["recovered"], 1)
+        self.assertEqual(processing_doc.status, StudyDocument.Status.UPLOADED)
+        self.assertEqual(processing_doc.metadata["extraction"]["error_code"], STALE_PROCESSING_RECOVERED)
+        self.assertEqual(summary.status, DocumentSummary.Status.PENDING)
+        self.assertEqual(summary.error_code, STALE_PROCESSING_RECOVERED)
+        self.assertEqual(deck.status, FlashcardDeck.Status.PENDING)
+        self.assertEqual(deck.error_code, STALE_PROCESSING_RECOVERED)
+        self.assertEqual(job.status, DocumentAIJob.Status.PENDING)
+        self.assertEqual(job.error_code, STALE_PROCESSING_RECOVERED)
+        enqueue_extraction.assert_called_once_with(
+            str(processing_doc.id),
+            previous_status=StudyDocument.Status.PROCESSING,
+            recovery_action="requeue_processing",
+            attempt=1,
+        )
+        enqueue_summary.assert_called_once_with(str(ready_doc.id), DocumentSummary.Mode.DETAILED)
+        enqueue_flashcards.assert_called_once()
+        enqueue_job.assert_called_once_with(str(job.id))
+
+        with patch.object(service, "enqueue_extraction") as duplicate_enqueue:
+            duplicate = service.recover_documents()
+        self.assertEqual(duplicate["recovered"], 0)
+        duplicate_enqueue.assert_not_called()
+
+    def test_uploaded_orphan_after_grace_is_enqueued_once(self):
+        uploaded = self.create_document(
+            status=StudyDocument.Status.UPLOADED,
+            metadata={
+                "source_file": {"path": "study-documents/test/uploaded.txt"},
+                "extraction": {"status": "pending", "queued_at": self.old.isoformat()},
+            },
+        )
+
+        service = StaleAIWorkRecoveryService(now=self.now)
+        with patch.object(service, "enqueue_extraction") as enqueue, self.captureOnCommitCallbacks(execute=True):
+            first = service.recover_documents()
+        uploaded.refresh_from_db()
+
+        self.assertEqual(first["recovered"], 1)
+        self.assertEqual(uploaded.status, StudyDocument.Status.UPLOADED)
+        self.assertEqual(uploaded.metadata["extraction"]["recovery_attempts"], 1)
+        enqueue.assert_called_once_with(
+            str(uploaded.id),
+            previous_status=StudyDocument.Status.UPLOADED,
+            recovery_action="enqueue_uploaded",
+            attempt=1,
+        )
+
+        with patch.object(service, "enqueue_extraction") as duplicate_enqueue:
+            second = service.recover_documents()
+        self.assertEqual(second["recovered"], 0)
+        duplicate_enqueue.assert_not_called()
+
+    def test_uploaded_document_before_grace_is_not_enqueued(self):
+        uploaded = self.create_document(
+            status=StudyDocument.Status.UPLOADED,
+            metadata={
+                "source_file": {"path": "study-documents/test/recent.txt"},
+                "extraction": {"status": "pending", "queued_at": self.now.isoformat()},
+            },
+        )
+
+        service = StaleAIWorkRecoveryService(now=self.now)
+        with patch.object(service, "enqueue_extraction") as enqueue:
+            result = service.recover_documents()
+
+        uploaded.refresh_from_db()
+        self.assertEqual(result["skipped"], 1)
+        self.assertEqual(uploaded.status, StudyDocument.Status.UPLOADED)
+        enqueue.assert_not_called()
+
+    def test_ready_and_error_documents_are_not_recovered(self):
+        ready = self.create_document(status=StudyDocument.Status.READY)
+        errored = self.create_document(
+            status=StudyDocument.Status.ERROR,
+            metadata={"extraction": {"status": "failed", "queued_at": self.old.isoformat()}},
+        )
+
+        service = StaleAIWorkRecoveryService(now=self.now)
+        with patch.object(service, "enqueue_extraction") as enqueue:
+            result = service.recover_documents()
+
+        self.assertEqual(result, {"recovered": 0, "failed": 0, "skipped": 0})
+        enqueue.assert_not_called()
+        ready.refresh_from_db()
+        errored.refresh_from_db()
+        self.assertEqual(ready.status, StudyDocument.Status.READY)
+        self.assertEqual(errored.status, StudyDocument.Status.ERROR)
+
+    def test_uploaded_exhausted_attempts_moves_to_error(self):
+        uploaded = self.create_document(
+            status=StudyDocument.Status.UPLOADED,
+            metadata={
+                "extraction": {
+                    "status": "pending",
+                    "queued_at": self.old.isoformat(),
+                    "recovery_attempts": 2,
+                }
+            },
+        )
+
+        result = StaleAIWorkRecoveryService(now=self.now).recover_documents()
+
+        uploaded.refresh_from_db()
+        self.assertEqual(result["failed"], 1)
+        self.assertEqual(uploaded.status, StudyDocument.Status.ERROR)
+        self.assertEqual(uploaded.metadata["extraction"]["error_code"], STALE_PROCESSING_FAILED)
+
+    def test_enqueue_exception_does_not_crash_recovery(self):
+        uploaded = self.create_document(
+            status=StudyDocument.Status.UPLOADED,
+            metadata={
+                "source_file": {"path": "study-documents/test/uploaded.txt"},
+                "extraction": {"status": "pending", "queued_at": self.old.isoformat()},
+            },
+        )
+
+        service = StaleAIWorkRecoveryService(now=self.now)
+        with patch("apps.ai.tasks.extract_document_text.delay", side_effect=RuntimeError("broker down")), self.captureOnCommitCallbacks(execute=True):
+            result = service.recover_documents()
+
+        uploaded.refresh_from_db()
+        self.assertEqual(result["recovered"], 1)
+        self.assertEqual(uploaded.status, StudyDocument.Status.UPLOADED)
+        self.assertEqual(uploaded.metadata["extraction"]["recovery_attempts"], 1)
+        self.assertEqual(uploaded.metadata["extraction"]["enqueue_error_code"], "EXTRACTION_ENQUEUE_FAILED")
+
+    def test_recovery_fails_exhausted_attempts_and_ignores_completed(self):
+        failed_doc = self.create_document(
+            status=StudyDocument.Status.PROCESSING,
+            metadata={
+                "extraction": {
+                    "status": "processing",
+                    "started_at": self.old.isoformat(),
+                    "recovery_attempts": 2,
+                }
+            },
+        )
+        ready_doc = self.create_document()
+        exhausted_summary = DocumentSummary.objects.create(
+            document=ready_doc,
+            mode=DocumentSummary.Mode.KEY_POINTS,
+            status=DocumentSummary.Status.PROCESSING,
+            generation_attempts=2,
+        )
+        completed_summary = DocumentSummary.objects.create(
+            document=ready_doc,
+            mode=DocumentSummary.Mode.DETAILED,
+            status=DocumentSummary.Status.COMPLETED,
+            content="Done",
+            generation_attempts=2,
+        )
+        exhausted_deck = FlashcardDeck.objects.create(
+            user=self.user,
+            document=ready_doc,
+            title="Failed deck",
+            requested_quantity=5,
+            status=FlashcardDeck.Status.PROCESSING,
+            generation_attempts=2,
+        )
+        exhausted_job_doc = self.create_document()
+        exhausted_job = DocumentAIJob.objects.create(
+            user=self.user,
+            document=exhausted_job_doc,
+            status=DocumentAIJob.Status.GENERATING_FLASHCARDS,
+            attempt_count=2,
+        )
+        DocumentSummary.objects.filter(pk=exhausted_summary.pk).update(updated_at=self.old)
+        DocumentSummary.objects.filter(pk=completed_summary.pk).update(updated_at=self.old)
+        FlashcardDeck.objects.filter(pk=exhausted_deck.pk).update(updated_at=self.old)
+        DocumentAIJob.objects.filter(pk=exhausted_job.pk).update(updated_at=self.old)
+
+        result = StaleAIWorkRecoveryService(now=self.now).recover()
+
+        failed_doc.refresh_from_db()
+        exhausted_summary.refresh_from_db()
+        completed_summary.refresh_from_db()
+        exhausted_deck.refresh_from_db()
+        exhausted_job.refresh_from_db()
+        self.assertEqual(result["documents"]["failed"], 1)
+        self.assertEqual(result["summaries"]["failed"], 1)
+        self.assertEqual(result["flashcard_decks"]["failed"], 1)
+        self.assertEqual(result["document_ai_jobs"]["failed"], 1)
+        self.assertEqual(failed_doc.status, StudyDocument.Status.ERROR)
+        self.assertEqual(failed_doc.metadata["extraction"]["error_code"], STALE_PROCESSING_FAILED)
+        self.assertEqual(exhausted_summary.status, DocumentSummary.Status.FAILED)
+        self.assertEqual(exhausted_summary.error_code, STALE_PROCESSING_FAILED)
+        self.assertEqual(completed_summary.status, DocumentSummary.Status.COMPLETED)
+        self.assertEqual(exhausted_deck.status, FlashcardDeck.Status.FAILED)
+        self.assertEqual(exhausted_deck.error_code, STALE_PROCESSING_FAILED)
+        self.assertEqual(exhausted_job.status, DocumentAIJob.Status.FAILED)
+        self.assertEqual(exhausted_job.error_code, STALE_PROCESSING_FAILED)
+
+
+class FakeScheduledTask:
+    calls = []
+
+    @classmethod
+    def apply_async(cls, args=None, countdown=None, eta=None):
+        cls.calls.append({"args": args or [], "countdown": countdown, "eta": eta})
+
+
+@override_settings(
+    OPENROUTER_MODEL="test-model",
+    DOCUMENT_SUMMARY_MODEL="test-model",
+    FLASHCARD_GENERATION_MODEL="test-model",
+)
+class DocumentAIFlowTests(APITestCase):
+    def setUp(self):
+        FakeScheduledTask.calls = []
+        self.user = User.objects.create_user(email="flow@example.com", password=PASSWORD)
+
+    def create_ready_document(self, text=None):
+        return StudyDocument.objects.create(
+            user=self.user,
+            filename="flow.txt",
+            original_name="flow.txt",
+            file_type=StudyDocument.FileType.TXT,
+            file_size_bytes=200,
+            status=StudyDocument.Status.READY,
+            extracted_text=text
+            or "Chapter 1\nFocus score measures attention. It improves study planning.\n\nChapter 2\nReview cards reinforce memory.",
+            metadata={"extraction": {"status": "completed", "checksum": "flow-checksum"}},
+            processed_at=timezone.now(),
+        )
+
+    def test_create_or_resume_job_is_idempotent(self):
+        document = self.create_ready_document()
+
+        first, first_enqueue = create_or_resume_document_ai_job(document)
+        second, second_enqueue = create_or_resume_document_ai_job(document)
+
+        self.assertTrue(first_enqueue)
+        self.assertFalse(second_enqueue)
+        self.assertEqual(first.id, second.id)
+        self.assertEqual(DocumentAIJob.objects.filter(document=document).count(), 1)
+
+    def test_rate_limit_reschedules_second_request_without_slot(self):
+        document = self.create_ready_document()
+        job, _ = create_or_resume_document_ai_job(document)
+
+        claimed = claim_ai_slot_or_reschedule(str(job.id), FakeScheduledTask, str(job.id))
+        with self.captureOnCommitCallbacks(execute=True):
+            blocked = claim_ai_slot_or_reschedule(str(job.id), FakeScheduledTask, str(job.id))
+
+        self.assertIsNotNone(claimed)
+        self.assertIsNone(blocked)
+        self.assertEqual(len(FakeScheduledTask.calls), 1)
+        self.assertGreaterEqual(FakeScheduledTask.calls[0]["countdown"], 1)
+
+    @patch("apps.ai.tasks.process_next_document_chunk.delay")
+    def test_start_creates_persistent_chunks_and_schedules_first_chunk(self, delay):
+        document = self.create_ready_document()
+        job, _ = create_or_resume_document_ai_job(document)
+
+        DocumentAIFlow().start(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, DocumentAIJob.Status.PROCESSING_CHUNKS)
+        self.assertGreater(job.total_chunks, 0)
+        self.assertEqual(DocumentAIChunk.objects.filter(job=job).count(), job.total_chunks)
+        delay.assert_called_once_with(str(job.id))
+
+    @patch("apps.ai.tasks.process_next_document_chunk.delay")
+    @patch("apps.ai.services.document_ai_flow.AIClient.complete_prepared")
+    def test_process_next_chunk_calls_provider_once_and_persists_context(self, complete_prepared, delay):
+        document = self.create_ready_document("Chapter 1\nFocus score measures attention.\n\nChapter 2\nReview cards reinforce memory.")
+        job, _ = create_or_resume_document_ai_job(document)
+        DocumentAIFlow().start(str(job.id))
+        delay.reset_mock()
+        complete_prepared.return_value = {
+            "content": (
+                '{"partial_summary":"Focus score measures attention.","key_points":["Focus score measures attention."],'
+                '"important_terms":[],"entities":[],"relationships":[],"open_context":[],'
+                '"flashcard_candidates":[{"question":"What does Focus score measure?","answer":"Attention.","importance":1}],'
+                '"context_updates":[],"updated_context_summary":"Focus score measures attention."}'
+            ),
+            "request_usage_id": None,
+        }
+        job.next_ai_request_at = timezone.now() - timezone.timedelta(seconds=1)
+        job.save(update_fields=["next_ai_request_at"])
+
+        DocumentAIFlow().process_next_chunk(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(complete_prepared.call_count, 1)
+        self.assertEqual(job.completed_chunks, 1)
+        self.assertIn("Focus score", job.rolling_context_summary)
+        self.assertEqual(DocumentAIChunk.objects.filter(job=job, status=DocumentAIChunk.Status.COMPLETED).count(), 1)
+
+    @patch("apps.ai.services.document_ai_flow.AIClient.complete_prepared")
+    def test_summary_respects_shared_document_rate_slot(self, complete_prepared):
+        document = self.create_ready_document()
+        job, _ = create_or_resume_document_ai_job(document)
+        job.status = DocumentAIJob.Status.GENERATING_SUMMARY
+        job.next_ai_request_at = timezone.now() + timezone.timedelta(seconds=60)
+        job.save()
+
+        with patch("apps.ai.tasks.generate_document_short_summary.apply_async") as apply_async, self.captureOnCommitCallbacks(execute=True):
+            result = DocumentAIFlow().generate_summary(str(job.id))
+
+        self.assertEqual(result["status"], "rescheduled")
+        complete_prepared.assert_not_called()
+        apply_async.assert_called_once()
+
+    def test_finalize_is_idempotent_and_requires_ten_flashcards(self):
+        document = self.create_ready_document()
+        job, _ = create_or_resume_document_ai_job(document)
+        summary = DocumentSummary.objects.create(
+            document=document,
+            mode=DocumentSummary.Mode.DETAILED,
+            status=DocumentSummary.Status.COMPLETED,
+            content="Ready",
+            input_checksum="flow-checksum",
+        )
+        deck = FlashcardDeck.objects.create(
+            user=self.user,
+            document=document,
+            title="Ready deck",
+            requested_quantity=10,
+            quantity=10,
+            generated_quantity=10,
+            status=FlashcardDeck.Status.COMPLETED,
+            generation_fingerprint="flow-fingerprint",
+        )
+        Flashcard.objects.bulk_create(
+            [
+                Flashcard(deck=deck, document=document, question=f"Q{index}", answer="A", order=index)
+                for index in range(10)
+            ]
+        )
+        job.summary = summary
+        job.flashcard_deck = deck
+        job.summary_status = DocumentSummary.Status.COMPLETED
+        job.flashcard_status = FlashcardDeck.Status.COMPLETED
+        job.status = DocumentAIJob.Status.FINALIZING
+        job.save()
+
+        DocumentAIFlow().finalize(str(job.id))
+        DocumentAIFlow().finalize(str(job.id))
+
+        job.refresh_from_db()
+        self.assertEqual(job.status, DocumentAIJob.Status.COMPLETED)
+        self.assertEqual(Notification.objects.filter(dedupe_key=f"document-ai-completed:{job.id}").count(), 1)
+
+
 class FakeAIClient:
     def __init__(self, content=None, exc=None):
         self.content = content or (
@@ -1031,12 +2312,13 @@ class FakeAIClient:
         self.exc = exc
         self.calls = []
 
-    def complete_json(self, system_prompt, user_prompt, operation="semantic"):
+    def complete_json(self, system_prompt, user_prompt, operation="semantic", **kwargs):
         self.calls.append(
             {
                 "system_prompt": system_prompt,
                 "user_prompt": user_prompt,
                 "operation": operation,
+                **kwargs,
             }
         )
         if self.exc:
@@ -1188,7 +2470,13 @@ class SessionInsightParserAndFallbackTests(APITestCase):
         )
 
 
+@override_settings(AI_PROVIDER="openrouter", GROQ_API_KEY="", AI_RATE_LIMITER_ENABLED=False)
 class AIClientTests(APITestCase):
+    def setUp(self):
+        AICircuitBreaker("openrouter", "semantic").reset()
+        AICircuitBreaker("openrouter", "document_summary").reset()
+        AICircuitBreaker("openrouter", "flashcard_generation").reset()
+
     def test_missing_api_key_returns_not_configured(self):
         client = AIClient(api_key="", model="", max_retries=0)
 
@@ -1196,6 +2484,87 @@ class AIClientTests(APITestCase):
             client.complete_json("system", "user")
 
         self.assertEqual(error.exception.error_code, "AI_NOT_CONFIGURED")
+
+    def test_tokenizer_registry_rejects_unknown_model(self):
+        with self.assertRaises(AIProviderError) as error:
+            TokenCountingService().get_tokenizer("unknown-model")
+
+        self.assertEqual(error.exception.error_code, "UNSUPPORTED_MODEL_TOKENIZER")
+
+    def test_simple_chat_tokenizer_is_cached_and_counts_template(self):
+        service = TokenCountingService()
+        first = service.get_tokenizer("model")
+        second = service.get_tokenizer("model")
+        request = PreparedAIRequest(
+            operation="semantic",
+            model="model",
+            messages=[{"role": "system", "content": "A"}, {"role": "user", "content": "B"}],
+            response_format={"type": "json_object"},
+            max_completion_tokens=10,
+            prompt_version="test-v1",
+        )
+
+        self.assertIs(first, second)
+        self.assertGreater(service.count_chat_tokens(request), service.count_text_tokens("model", "A B"))
+
+    @override_settings(
+        AI_TARGET_REQUEST_TOKENS=40,
+        AI_MAX_REQUEST_TOKENS=50,
+        AI_INITIAL_CALIBRATION_RATIO=1.0,
+        AI_INITIAL_FIXED_OVERHEAD_TOKENS=0,
+    )
+    def test_budget_validation_rejects_over_target(self):
+        request = PreparedAIRequest(
+            operation="semantic",
+            model="model",
+            messages=[{"role": "user", "content": "word " * 100}],
+            response_format={"type": "json_object"},
+            max_completion_tokens=1,
+            prompt_version="budget-v1",
+        )
+
+        with self.assertRaises(AIProviderError) as error:
+            TokenCountingService().validate_request_budget(request, "openrouter")
+
+        self.assertEqual(error.exception.error_code, "AI_TOKEN_BUDGET_EXCEEDED")
+        self.assertEqual(AIRequestUsage.objects.filter(status=AIRequestUsage.Status.REJECTED).count(), 1)
+
+    def test_p95_uses_configured_percentile(self):
+        self.assertEqual(calculate_p95([1.0, 1.1, 1.2, 2.0], percentile=0.95), 2.0)
+
+    @override_settings(
+        AI_TARGET_REQUEST_TOKENS=60,
+        AI_MAX_REQUEST_TOKENS=80,
+        AI_INITIAL_CALIBRATION_RATIO=1.0,
+        AI_INITIAL_FIXED_OVERHEAD_TOKENS=0,
+        AI_MIN_CURRENT_CHUNK_TOKENS=1,
+    )
+    def test_binary_search_returns_largest_fitting_chunk(self):
+        service = TokenCountingService()
+        tokenizer = service.get_tokenizer("model")
+        source_tokens = tokenizer.encode("one two three four five six seven eight nine ten")
+
+        def build_request(chunk_text):
+            return PreparedAIRequest(
+                operation="document_summary",
+                model="model",
+                messages=[{"role": "user", "content": chunk_text}],
+                response_format={"type": "json_object"},
+                max_completion_tokens=5,
+                prompt_version="chunk-v1",
+            )
+
+        result = find_largest_fitting_chunk(
+            source_tokens,
+            tokenizer.decode,
+            build_request,
+            service,
+            "openrouter",
+            minimum_chunk_tokens=1,
+        )
+
+        self.assertGreater(result.token_count, 0)
+        self.assertLessEqual(result.estimated_total_tokens, 60)
 
     @patch("apps.ai.services.ai_client.urlopen", side_effect=TimeoutError)
     def test_timeout_returns_ai_timeout(self, _urlopen):
@@ -1206,6 +2575,77 @@ class AIClientTests(APITestCase):
 
         self.assertEqual(error.exception.error_code, "AI_TIMEOUT")
 
+    @override_settings(
+        AI_RATE_LIMITER_ENABLED=True,
+        AI_RATE_LIMITER_FAIL_OPEN=False,
+        AI_PROVIDER_TOKEN_LIMIT_PER_MINUTE=100,
+        AI_PROVIDER_REQUEST_LIMIT_PER_MINUTE=30,
+        AI_RATE_LIMITER_SAFETY_MARGIN=0,
+    )
+    def test_provider_rate_limiter_defers_second_request_before_provider_call(self):
+        redis_client = FakeRedisRateLimitClient()
+        limiter = ProviderRateLimiter(redis_client=redis_client)
+
+        first = limiter.reserve("groq", "model", "document_summary", 70)
+
+        self.assertTrue(first.allowed)
+        with self.assertRaises(AIQuotaDeferred) as deferred:
+            limiter.reserve("groq", "model", "document_summary", 40)
+
+        self.assertEqual(deferred.exception.remaining_tokens, 30)
+        self.assertGreaterEqual(deferred.exception.retry_after_seconds, 1)
+
+    @override_settings(
+        AI_RATE_LIMITER_ENABLED=True,
+        AI_RATE_LIMITER_FAIL_OPEN=False,
+        AI_PROVIDER_TOKEN_LIMIT_PER_MINUTE=100,
+        AI_PROVIDER_REQUEST_LIMIT_PER_MINUTE=30,
+        AI_RATE_LIMITER_SAFETY_MARGIN=0,
+    )
+    @patch("apps.ai.services.ai_client.ProviderRateLimiter")
+    @patch("apps.ai.services.ai_client.urlopen")
+    def test_ai_client_quota_defer_does_not_call_provider(self, urlopen_mock, limiter_class):
+        limiter = Mock()
+        limiter.reserve.side_effect = AIQuotaDeferred(
+            retry_after_seconds=42,
+            provider="groq",
+            operation="document_summary",
+            model="model",
+            estimated_tokens=120,
+            remaining_tokens=10,
+        )
+        limiter_class.return_value = limiter
+        client = AIClient(api_key="key", model="model", max_retries=0)
+
+        with self.assertRaises(AIQuotaDeferred) as deferred:
+            client.complete_json("system", "user", operation="document_summary")
+
+        self.assertEqual(deferred.exception.retry_after_seconds, 42)
+        urlopen_mock.assert_not_called()
+
+    @override_settings(
+        AI_RATE_LIMITER_ENABLED=True,
+        AI_RATE_LIMITER_FAIL_OPEN=False,
+        AI_PROVIDER_TOKEN_LIMIT_PER_MINUTE=100,
+        AI_PROVIDER_REQUEST_LIMIT_PER_MINUTE=30,
+        AI_RATE_LIMITER_SAFETY_MARGIN=0,
+    )
+    def test_rate_limiter_429_headers_block_following_reservation(self):
+        redis_client = FakeRedisRateLimitClient()
+        limiter = ProviderRateLimiter(redis_client=redis_client)
+
+        limiter.observe_rate_limit_headers(
+            "groq",
+            "model",
+            "document_summary",
+            {"Retry-After": "9", "x-ratelimit-remaining-tokens": "0"},
+        )
+
+        with self.assertRaises(AIQuotaDeferred) as deferred:
+            limiter.reserve("groq", "model", "document_summary", 1)
+
+        self.assertGreaterEqual(deferred.exception.retry_after_seconds, 1)
+
     @patch(
         "apps.ai.services.ai_client.urlopen",
         side_effect=HTTPError("url", 429, "rate limited", {}, None),
@@ -1213,10 +2653,35 @@ class AIClientTests(APITestCase):
     def test_http_429_returns_rate_limited(self, _urlopen):
         client = AIClient(api_key="key", model="model", max_retries=0)
 
-        with self.assertRaises(AIRateLimited) as error:
+        with self.assertRaises(AIQuotaDeferred) as error:
             client.complete_json("system", "user")
 
-        self.assertEqual(error.exception.error_code, "AI_RATE_LIMITED")
+        self.assertEqual(error.exception.error_code, "AI_QUOTA_DEFERRED")
+        self.assertGreaterEqual(error.exception.retry_after_seconds, 1)
+
+    @patch("apps.ai.services.ai_client.time_module.sleep")
+    @patch(
+        "apps.ai.services.ai_client.urlopen",
+        side_effect=[
+            HTTPError("url", 429, "rate limited", {"Retry-After": "3"}, None),
+            FakeHTTPResponse(
+                b'{"choices":[{"message":{"content":"{\\"ok\\":true}"}}],"model":"m"}'
+            ),
+        ],
+    )
+    def test_retryable_http_error_respects_retry_after_header(self, urlopen_mock, sleep):
+        client = AIClient(
+            api_key="key",
+            model="model",
+            max_retries=1,
+            retry_backoff_seconds=1,
+        )
+
+        result = client.complete_json("system", "user")
+
+        self.assertEqual(result["model"], "m")
+        self.assertEqual(urlopen_mock.call_count, 2)
+        sleep.assert_called_once_with(3)
 
     @patch(
         "apps.ai.services.ai_client.urlopen",
@@ -1297,6 +2762,52 @@ class AIClientTests(APITestCase):
         sleep.assert_called_once_with(1)
         self.assertNotIn("secret-api-key", "\n".join(logs.output))
         self.assertNotIn("user", "\n".join(logs.output))
+
+    @patch(
+        "apps.ai.services.ai_client.urlopen",
+        return_value=FakeHTTPResponse(
+            b'{"id":"req_1","choices":[{"message":{"content":"{\\"ok\\":true}"}}],"model":"m","usage":{"prompt_tokens":30,"completion_tokens":4,"total_tokens":34}}'
+        ),
+    )
+    def test_complete_json_sends_counted_payload_and_stores_usage(self, urlopen_mock):
+        client = AIClient(api_key="key", model="model", max_retries=0)
+
+        result = client.complete_json(
+            "system",
+            "user",
+            operation="document_summary",
+            prompt_version="document-summary-v2-context",
+            max_completion_tokens=20,
+        )
+
+        request = urlopen_mock.call_args[0][0]
+        payload = json.loads(request.data.decode("utf-8"))
+        usage = AIRequestUsage.objects.get(id=result["request_usage_id"])
+        self.assertEqual(payload["messages"][0]["content"], "system")
+        self.assertEqual(payload["max_tokens"], 20)
+        self.assertEqual(usage.status, AIRequestUsage.Status.COMPLETED)
+        self.assertEqual(usage.actual_prompt_tokens, 30)
+        self.assertEqual(usage.payload_hash, TokenCountingService().payload_hash(
+            PreparedAIRequest(
+                operation="document_summary",
+                model="model",
+                messages=[
+                    {"role": "system", "content": "system"},
+                    {"role": "user", "content": "user"},
+                ],
+                response_format={"type": "json_object"},
+                max_completion_tokens=20,
+                prompt_version="document-summary-v2-context",
+            )
+        ))
+        self.assertTrue(
+            AITokenCalibration.objects.filter(
+                provider="openrouter",
+                model="model",
+                operation="document_summary",
+                prompt_version="document-summary-v2-context",
+            ).exists()
+        )
 
     @patch(
         "apps.ai.services.ai_client.urlopen",

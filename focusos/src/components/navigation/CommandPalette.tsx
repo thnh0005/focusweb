@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import {
   Search,
   LayoutDashboard,
@@ -21,7 +22,7 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
-// ─── Types ───────────────────────────────────────────────────────────────────
+// â”€â”€â”€ Types â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export interface CommandPaletteProps {
   isOpen: boolean;
@@ -31,128 +32,127 @@ export interface CommandPaletteProps {
 
 export interface CommandItem {
   id: string;
-  label: string;
-  description?: string;
+  labelKey: string;
+  descriptionKey?: string;
   icon: React.ReactNode;
   shortcut?: string;
   action: () => void;
-  group: string;
+  groupKey: string;
   keywords?: string[];
 }
 
-// ─── Command Registry ─────────────────────────────────────────────────────────
+// â”€â”€â”€ Command Registry â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function useCommandItems(router: ReturnType<typeof useRouter>, onClose: () => void): CommandItem[] {
   return React.useMemo<CommandItem[]>(() => [
     // Navigation
     {
       id: "nav-dashboard",
-      label: "Dashboard",
-      description: "Go to your overview",
+      labelKey: "command.items.dashboard",
+      descriptionKey: "command.items.dashboardDescription",
       icon: <LayoutDashboard className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/dashboard"); onClose(); },
-      group: "Navigation",
+      groupKey: "command.groups.navigation",
       keywords: ["home", "overview", "main"],
     },
     {
       id: "nav-analytics",
-      label: "Analytics",
-      description: "View focus trends and charts",
+      labelKey: "command.items.analytics",
+      descriptionKey: "command.items.analyticsDescription",
       icon: <BarChart3 className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/analytics"); onClose(); },
-      group: "Navigation",
+      groupKey: "command.groups.navigation",
       keywords: ["charts", "data", "stats", "reports"],
     },
     {
       id: "nav-study-tools",
-      label: "AI Docs",
-      description: "AI document summaries and flashcards",
+      labelKey: "command.items.aiDocs",
+      descriptionKey: "command.items.aiDocsDescription",
       icon: <BookOpen className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/study-tools"); onClose(); },
-      group: "Navigation",
+      groupKey: "command.groups.navigation",
       keywords: ["study", "flashcards", "documents", "document", "ai document", "pdf"],
     },
     {
       id: "nav-settings",
-      label: "Settings",
-      description: "Account and preferences",
+      labelKey: "command.items.settings",
+      descriptionKey: "command.items.settingsDescription",
       icon: <Settings2 className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/settings"); onClose(); },
-      group: "Navigation",
+      groupKey: "command.groups.navigation",
       keywords: ["preferences", "account", "profile"],
     },
     // Actions
     {
       id: "action-start-session",
-      label: "Start Focus Session",
-      description: "Begin a new Deep Work or Normal session",
+      labelKey: "command.items.startSession",
+      descriptionKey: "command.items.startSessionDescription",
       icon: <Zap className="h-4 w-4 stroke-[1.5] text-focus-purple" />,
       shortcut: "S",
-      action: () => { router.push("/session"); onClose(); },
-      group: "Actions",
+      action: () => { router.push("/dashboard"); onClose(); },
+      groupKey: "command.groups.actions",
       keywords: ["focus", "timer", "work", "pomodoro", "session", "deep work"],
     },
     {
       id: "action-upload-doc",
-      label: "Upload AI Document",
-      description: "Add a PDF or DOCX for AI analysis",
+      labelKey: "command.items.uploadDocument",
+      descriptionKey: "command.items.uploadDocumentDescription",
       icon: <FileText className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/study-tools/upload"); onClose(); },
-      group: "Actions",
+      groupKey: "command.groups.actions",
       keywords: ["upload", "document", "ai document", "pdf", "notes"],
     },
     {
       id: "action-add-blacklist",
-      label: "Add Blacklist Site",
-      description: "Block a distracting domain",
+      labelKey: "command.items.addBlacklist",
+      descriptionKey: "command.items.addBlacklistDescription",
       icon: <PlusCircle className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/settings/blacklist"); onClose(); },
-      group: "Actions",
+      groupKey: "command.groups.actions",
       keywords: ["block", "blacklist", "distraction", "website"],
     },
     // Settings
     {
       id: "settings-theme",
-      label: "Theme Settings",
-      description: "Cyber, Minimal, or Forest",
+      labelKey: "command.items.theme",
+      descriptionKey: "command.items.themeDescription",
       icon: <Moon className="h-4 w-4 stroke-[1.5]" />,
-      action: () => { router.push("/settings/theme"); onClose(); },
-      group: "Settings",
-      keywords: ["theme", "dark", "appearance", "color"],
+      action: () => { router.push("/dashboard?panel=theme"); onClose(); },
+      groupKey: "command.groups.navigation",
+      keywords: ["theme", "dark", "appearance", "color", "dashboard"],
     },
     {
       id: "settings-notifications",
-      label: "Notification Settings",
-      description: "Reminders and alerts",
+      labelKey: "command.items.notificationSettings",
+      descriptionKey: "command.items.notificationSettingsDescription",
       icon: <Bell className="h-4 w-4 stroke-[1.5]" />,
       action: () => { router.push("/settings/notifications"); onClose(); },
-      group: "Settings",
+      groupKey: "command.groups.settings",
       keywords: ["notifications", "reminders", "alerts"],
     },
     {
       id: "action-logout",
-      label: "Log Out",
-      description: "End your session securely",
+      labelKey: "command.items.logout",
+      descriptionKey: "command.items.logoutDescription",
       icon: <LogOut className="h-4 w-4 stroke-[1.5] text-urgency-coral" />,
       action: () => { /* Handled by auth layer */ onClose(); },
-      group: "Account",
+      groupKey: "command.groups.account",
       keywords: ["logout", "sign out", "exit"],
     },
   ], [router, onClose]);
 }
 
-// ─── Score a command item against query ──────────────────────────────────────
+// â”€â”€â”€ Score a command item against query â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function scoreItem(item: CommandItem, query: string): number {
   const q = query.toLowerCase();
-  if (item.label.toLowerCase().startsWith(q)) return 3;
-  if (item.label.toLowerCase().includes(q)) return 2;
-  if (item.description?.toLowerCase().includes(q)) return 1.5;
+  if (item.labelKey.toLowerCase().includes(q)) return 1;
+  if (item.descriptionKey?.toLowerCase().includes(q)) return 1;
   if (item.keywords?.some((k) => k.includes(q))) return 1;
   return 0;
 }
 
-// ─── Keyboard shortcut hint ───────────────────────────────────────────────────
+// â”€â”€â”€ Keyboard shortcut hint â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 function KbdHint({ children }: { children: React.ReactNode }) {
   return (
@@ -161,11 +161,11 @@ function KbdHint({ children }: { children: React.ReactNode }) {
     </kbd>
   );
 }
-
-// ─── Component ───────────────────────────────────────────────────────────────
+// â”€â”€â”€ Component â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 export function CommandPalette({ isOpen, onClose, className }: CommandPaletteProps) {
   const router = useRouter();
+  const { t } = useTranslation("common");
   const [query, setQuery] = React.useState("");
   const [activeIdx, setActiveIdx] = React.useState(0);
   const inputRef = React.useRef<HTMLInputElement>(null);
@@ -187,9 +187,9 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
   const groups = React.useMemo(() => {
     const map = new Map<string, CommandItem[]>();
     for (const item of filteredItems) {
-      const list = map.get(item.group) ?? [];
+      const list = map.get(item.groupKey) ?? [];
       list.push(item);
-      map.set(item.group, list);
+      map.set(item.groupKey, list);
     }
     return map;
   }, [filteredItems]);
@@ -240,7 +240,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
     return () => window.clearTimeout(timer);
   }, [query]);
 
-  // Global ⌘K / Ctrl+K trigger (passive listener — actual open is handled by parent)
+  // Global âŒ˜K / Ctrl+K trigger (passive listener â€” actual open is handled by parent)
   React.useEffect(() => {
     function handleGlobal(e: KeyboardEvent) {
       if ((e.metaKey || e.ctrlKey) && e.key === "k") {
@@ -273,7 +273,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
           <motion.div
             key="cp-panel"
             role="dialog"
-            aria-label="Command palette"
+            aria-label={t("command.palette")}
             aria-modal="true"
             initial={{ opacity: 0, y: -12, scale: 0.97 }}
             animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -304,7 +304,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
                 }
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search commands, pages, actions…"
+                placeholder={t("command.placeholder")}
                 className={cn(
                   "flex-1 bg-transparent text-sm font-light text-text-primary",
                   "placeholder:text-text-muted outline-none caret-focus-purple"
@@ -318,7 +318,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
             <div
               id="cp-results"
               role="listbox"
-              aria-label="Command results"
+              aria-label={t("command.results")}
               ref={listRef}
               className="max-h-[360px] overflow-y-auto py-2"
             >
@@ -326,7 +326,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
                 <div className="flex flex-col items-center gap-2 py-10 text-center">
                   <Hash aria-hidden="true" className="h-6 w-6 text-text-muted/50 stroke-[1.5]" />
                   <p className="text-sm text-text-muted font-light">
-                    No results for &quot;{query}&quot;
+                    {t("command.noResults", { query })}
                   </p>
                 </div>
               ) : (
@@ -337,7 +337,7 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
                       aria-hidden="true"
                       className="px-4 pt-3 pb-1 text-[10px] font-mono tracking-[0.18em] text-text-muted uppercase"
                     >
-                      {groupName}
+                      {t(groupName)}
                     </p>
 
                     {items.map((item) => {
@@ -375,11 +375,11 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
                           {/* Label + description */}
                           <span className="flex-1 min-w-0">
                             <span className="block text-sm font-light leading-none mb-0.5">
-                              {item.label}
+                              {t(item.labelKey)}
                             </span>
-                            {item.description && (
+                            {item.descriptionKey && (
                               <span className="block text-[11px] text-text-muted font-light truncate">
-                                {item.description}
+                                {t(item.descriptionKey)}
                               </span>
                             )}
                           </span>
@@ -408,14 +408,14 @@ export function CommandPalette({ isOpen, onClose, className }: CommandPalettePro
             <div className="flex items-center gap-4 px-4 py-2.5 border-t border-white/[0.05] bg-white/[0.01]">
               <div className="flex items-center gap-1.5 text-text-muted">
                 <Command aria-hidden="true" className="h-3 w-3 stroke-[1.5]" />
-                <span className="text-[10px] font-mono tracking-wide">Command Palette</span>
+                <span className="text-[10px] font-mono tracking-wide">{t("command.palette")}</span>
               </div>
               <div className="flex items-center gap-3 ml-auto text-[10px] font-mono text-text-muted">
                 <span className="flex items-center gap-1">
-                  <KbdHint>↑↓</KbdHint> Navigate
+                  <KbdHint>â†‘â†“</KbdHint> {t("command.navigate")}
                 </span>
                 <span className="flex items-center gap-1">
-                  <KbdHint>↵</KbdHint> Select
+                  <KbdHint>â†µ</KbdHint> {t("command.select")}
                 </span>
               </div>
             </div>

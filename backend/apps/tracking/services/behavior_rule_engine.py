@@ -70,6 +70,7 @@ class BlacklistRepository:
                     "domain",
                     "severity",
                     "is_default",
+                    "enabled",
                 )
             )
         return self._entries_by_user_id[user_id]
@@ -81,6 +82,8 @@ class BlacklistRepository:
 
         matches = []
         for entry in self.entries_for_user(user):
+            if not entry.enabled:
+                continue
             if domains_match(normalized_domain, entry.domain):
                 matches.append(
                     BlacklistMatch(
@@ -96,6 +99,7 @@ class BlacklistRepository:
         severity_rank = {
             BlacklistEntry.Severity.MEDIUM: 1,
             BlacklistEntry.Severity.HIGH: 2,
+            BlacklistEntry.Severity.LOW: 0,
         }
         return max(matches, key=lambda match: severity_rank.get(match.severity, 0))
 
@@ -161,6 +165,15 @@ class BehaviorRuleEvaluator:
                 self.config.blacklist_high_score,
                 f"Domain matches high severity blacklist entry {match.domain}.",
                 ["BLACKLIST_HIGH"],
+            )
+
+        if match.severity == BlacklistEntry.Severity.LOW:
+            return self.signal(
+                "blacklist",
+                RISK_LOW,
+                0,
+                f"Domain matches low severity blacklist entry {match.domain}.",
+                ["BLACKLIST_LOW"],
             )
 
         return self.signal(

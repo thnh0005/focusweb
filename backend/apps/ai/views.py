@@ -1,4 +1,8 @@
+import mimetypes
+
+from django.core.files.storage import default_storage
 from django.db import transaction
+from django.http import FileResponse
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
@@ -7,7 +11,7 @@ from rest_framework.generics import GenericAPIView
 from rest_framework.parsers import FormParser, MultiPartParser
 from rest_framework.response import Response
 
-from .models import DocumentSummary, Flashcard, FlashcardDeck, FlashcardReviewSession
+from .models import DocumentAIJob, DocumentSummary, FlashcardDeck, FlashcardReviewSession
 from .models import StudyDocument
 from .serializers import (
     CreateReviewSessionSerializer,
@@ -21,8 +25,10 @@ from .serializers import (
     StudyDocumentSerializer,
     StudyDocumentUpdateSerializer,
 )
-from .services.document_parser import extract_document_metadata, text_chunks_for_flashcards
+from .services.document_extraction import build_storage_filename, infer_file_type
 from .services.document_summary import DocumentSummaryError, DocumentSummaryService
+from .services.document_ai_flow import progress_payload
+from .services.extraction_queue import schedule_document_extraction_after_commit
 from .services.flashcard_generation import FlashcardGenerationError, FlashcardGenerationService
 from .tasks import generate_document_flashcards, generate_document_summary
 
@@ -50,89 +56,48 @@ def get_owned_deck(user, deck_id):
         raise NotFound("Flashcard deck was not found.") from exc
 
 
-def build_summary_content(document, mode):
-    text = document.extracted_text.strip()
-    if not text:
-        return "No extracted text is available for this document yet."
-
-    chunks = text_chunks_for_flashcards(text, 6)
-    if mode == DocumentSummary.Mode.KEY_POINTS:
-        return "\n".join(f"- {chunk[:220]}" for chunk in chunks)
-
-    excerpt = "\n\n".join(chunks[:4])
-    return f"### {document.original_name}\n\n{excerpt}"
-
-
-def get_or_create_summary(document, mode):
-    # Summary AI thuộc Dev2. Dev1 lưu fallback để UI có contract ổn định.
-    summary, _ = DocumentSummary.objects.get_or_create(
-        document=document,
-        mode=mode,
-        defaults={
-            "content": build_summary_content(document, mode),
-            "status": DocumentSummary.Status.COMPLETED,
-            "source": "rule_based_fallback",
-            "provider": "rule_based",
-            "generated_at": timezone.now(),
-        },
-    )
-    return summary
-
-
-@transaction.atomic
-def create_fallback_flashcard_deck(document, quantity=5, difficulty="medium", page_range=None):
-    """Tạo deck rule-based tối thiểu; Dev2 có thể thay bằng AI generator."""
-    chunks = text_chunks_for_flashcards(document.extracted_text, quantity)
-    deck = FlashcardDeck.objects.create(
-        user=document.user,
-        document=document,
-        title=f"{document.original_name} review",
-        quantity=len(chunks),
-        generated_quantity=len(chunks),
-        difficulty=difficulty,
-        page_range=page_range or {},
-        provider="rule_based",
-        prompt_version="rule_based_v1",
-    )
-    cards = [
-        Flashcard(
-            deck=deck,
-            document=document,
-            question=f"What is key idea {index + 1} from this document?",
-            answer=chunk[:1000],
-            difficulty=difficulty,
-            page_reference="",
-            order=index,
-        )
-        for index, chunk in enumerate(chunks)
-    ]
-    Flashcard.objects.bulk_create(cards)
-    return FlashcardDeck.objects.prefetch_related("cards").get(pk=deck.pk)
-
-
-def latest_or_fallback_deck(document):
-    deck = (
-        FlashcardDeck.objects.filter(document=document, user=document.user)
-        .prefetch_related("cards")
-        .order_by("-generated_at")
-        .first()
-    )
-    if deck:
-        return deck
-    return create_fallback_flashcard_deck(document)
-
-
 def create_document_from_upload(user, uploaded_file):
-    try:
-        data = extract_document_metadata(uploaded_file)
-    except ValueError as exc:
-        raise ValidationError({"file": [str(exc)]}) from exc
+    original_name = uploaded_file.name
+    file_type = infer_file_type(original_name)
+    filename = build_storage_filename(original_name, file_type)
+
+    source_path = default_storage.save(
+        f"study-documents/{user.id}/{filename}",
+        uploaded_file,
+    )
+    metadata = {
+        "source_file": {
+            "path": source_path,
+            "content_type": getattr(uploaded_file, "content_type", "") or "",
+        },
+        "extraction": {
+            "status": "pending",
+            "error_code": "",
+            "error_message": "",
+            "queued_at": timezone.now().isoformat(),
+        },
+    }
 
     return StudyDocument.objects.create(
         user=user,
-        status=StudyDocument.Status.READY,
-        processed_at=timezone.now(),
-        **data,
+        filename=filename,
+        original_name=original_name,
+        file_type=file_type,
+        file_size_bytes=getattr(uploaded_file, "size", 0) or 0,
+        page_count=0,
+        extracted_text="",
+        metadata=metadata,
+        status=StudyDocument.Status.UPLOADED,
+        processed_at=None,
+    )
+
+
+def enqueue_document_extraction(document):
+    schedule_document_extraction_after_commit(
+        str(document.id),
+        previous_status=document.status,
+        recovery_action="upload_enqueue",
+        attempt=0,
     )
 
 
@@ -150,6 +115,7 @@ class DocumentListView(GenericAPIView):
         file_type = request.query_params.get("fileType")
         sort_by = request.query_params.get("sortBy", "date")
         sort_order = request.query_params.get("sortOrder", "desc")
+        limit = request.query_params.get("limit")
 
         if search:
             documents = documents.filter(original_name__icontains=search)
@@ -165,6 +131,12 @@ class DocumentListView(GenericAPIView):
         if sort_order != "asc":
             ordering = f"-{ordering}"
         documents = documents.order_by(ordering)
+        if limit:
+            try:
+                limit_value = max(1, min(int(limit), 50))
+            except (TypeError, ValueError):
+                raise ValidationError({"limit": ["Limit must be a positive integer."]})
+            documents = documents[:limit_value]
         return Response(StudyDocumentSerializer(documents, many=True).data)
 
     @extend_schema(
@@ -175,7 +147,9 @@ class DocumentListView(GenericAPIView):
     def post(self, request):
         serializer = DocumentUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        document = create_document_from_upload(request.user, serializer.validated_data["file"])
+        with transaction.atomic():
+            document = create_document_from_upload(request.user, serializer.validated_data["file"])
+            enqueue_document_extraction(document)
         return Response(
             StudyDocumentSerializer(document).data,
             status=status.HTTP_201_CREATED,
@@ -194,11 +168,30 @@ class DocumentUploadView(GenericAPIView):
     def post(self, request):
         serializer = DocumentUploadSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        document = create_document_from_upload(request.user, serializer.validated_data["file"])
+        with transaction.atomic():
+            document = create_document_from_upload(request.user, serializer.validated_data["file"])
+            enqueue_document_extraction(document)
         return Response(
             StudyDocumentSerializer(document).data,
             status=status.HTTP_201_CREATED,
         )
+
+
+class DocumentAIJobStatusView(GenericAPIView):
+    @extend_schema(operation_id="document_ai_job_status")
+    def get(self, request, document_id):
+        document = get_owned_document(request.user, document_id)
+        job = DocumentAIJob.objects.filter(document=document, user=request.user).first()
+        if job is None:
+            return Response(
+                {
+                    "status": "not_started",
+                    "document_id": str(document.id),
+                    "job_id": None,
+                    "message": "Document AI job has not been requested.",
+                }
+            )
+        return Response(progress_payload(job))
 
 
 class DocumentDetailView(GenericAPIView):
@@ -227,6 +220,42 @@ class DocumentDetailView(GenericAPIView):
         return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+class DocumentFileView(GenericAPIView):
+    @extend_schema(operation_id="document_source_file")
+    def get(self, request, document_id):
+        document = get_owned_document(request.user, document_id)
+        source_info = (document.metadata or {}).get("source_file") or {}
+        source_path = source_info.get("path")
+        if not source_path or not default_storage.exists(source_path):
+            raise NotFound("Document source file was not found.")
+
+        content_type = (
+            source_info.get("content_type")
+            or
+            mimetypes.guess_type(document.original_name)[0]
+            or "application/octet-stream"
+        )
+        return FileResponse(
+            default_storage.open(source_path, "rb"),
+            as_attachment=False,
+            filename=document.original_name,
+            content_type=content_type,
+        )
+
+
+class DocumentSourceTextView(GenericAPIView):
+    @extend_schema(operation_id="document_source_text")
+    def get(self, request, document_id):
+        document = get_owned_document(request.user, document_id)
+        return Response(
+            {
+                "text": document.extracted_text,
+                "fileType": document.file_type,
+                "filename": document.original_name,
+            }
+        )
+
+
 class DocumentSummaryView(GenericAPIView):
     serializer_class = DocumentSummarySerializer
 
@@ -249,13 +278,40 @@ class DocumentSummaryView(GenericAPIView):
     def summary_lookup(self, document, mode):
         summary = DocumentSummary.objects.filter(document=document, mode=mode).first()
         if summary is None:
-            summary = get_or_create_summary(document, mode)
+            return {
+                "id": "",
+                "documentId": str(document.id),
+                "document_id": str(document.id),
+                "mode": mode,
+                "status": "not_generated",
+                "content": None,
+                "structured_content": {},
+                "input_checksum": "",
+                "model_name": "",
+                "provider": "",
+                "source": "ai",
+                "prompt_version": "",
+                "source_character_count": 0,
+                "source_word_count": 0,
+                "chunk_count": 0,
+                "source_truncated": False,
+                "generation_attempts": 0,
+                "error_code": "",
+                "error_message": "",
+                "generated_at": None,
+                "created_at": None,
+                "updated_at": None,
+                "stale": False,
+            }
         data = DocumentSummarySerializer(summary).data
         if summary.status != DocumentSummary.Status.COMPLETED:
             data["content"] = None
             data["structured_content"] = {}
         current_checksum = DocumentSummaryService().current_checksum(document)
-        data["stale"] = bool(summary.input_checksum and summary.input_checksum != current_checksum)
+        data["stale"] = bool(
+            (summary.input_checksum and summary.input_checksum != current_checksum)
+            or (summary.prompt_version and summary.prompt_version != DocumentSummaryService().prompt_builder.PROMPT_VERSION)
+        )
         return data
 
     def parse_mode(self, value, required=False):
@@ -344,7 +400,40 @@ class DocumentFlashcardsView(GenericAPIView):
     @extend_schema(operation_id="document_flashcards", responses=FlashcardDeckSerializer)
     def get(self, request, document_id):
         document = get_owned_document(request.user, document_id)
-        return Response(FlashcardDeckSerializer(latest_or_fallback_deck(document)).data)
+        deck = (
+            FlashcardDeck.objects.filter(document=document, user=document.user)
+            .filter(status__in=[FlashcardDeck.Status.PENDING, FlashcardDeck.Status.PROCESSING])
+            .prefetch_related("cards")
+            .order_by("-updated_at")
+            .first()
+        )
+        if deck is None:
+            deck = (
+                FlashcardDeck.objects.filter(document=document, user=document.user)
+                .prefetch_related("cards")
+                .order_by("-generated_at")
+                .first()
+            )
+        if deck is None:
+            return Response(
+                {
+                    "status": "not_generated",
+                    "cached": False,
+                    "reused": False,
+                    "document_id": str(document.id),
+                    "deck": None,
+                }
+            )
+        cached = deck.status in {FlashcardDeck.Status.COMPLETED, FlashcardDeck.Status.PARTIAL}
+        return Response(
+            {
+                "status": deck.status,
+                "cached": cached,
+                "reused": deck.status in {FlashcardDeck.Status.PENDING, FlashcardDeck.Status.PROCESSING},
+                "document_id": str(document.id),
+                "deck": FlashcardDeckSerializer(deck).data,
+            }
+        )
 
     @extend_schema(
         operation_id="document_flashcards_generate",
@@ -356,26 +445,47 @@ class DocumentFlashcardsView(GenericAPIView):
         data = {"scope": "full_document", **request.data}
         serializer = GenerateFlashcardsSerializer(data=data)
         serializer.is_valid(raise_exception=True)
-        values = serializer.validated_data
-        deck = create_fallback_flashcard_deck(
+        config = FlashcardGenerationService().normalize_config(serializer.validated_data)
+        force = config.pop("force", False)
+        try:
+            result = FlashcardGenerationService().request_generation(
+                document,
+                config,
+                force=force,
+            )
+        except FlashcardGenerationError as exc:
+            return Response(exc.response_data(), status=exc.status_code)
+
+        payload = DocumentFlashcardsGenerateView().deck_payload(
+            result.deck,
             document,
-            quantity=values["quantity"],
-            difficulty=values["difficulty"],
-            page_range=values.get("page_range") or {},
+            cached=result.cached,
+            reused=result.reused,
         )
-        return Response(FlashcardDeckSerializer(deck).data, status=status.HTTP_201_CREATED)
+        if result.should_enqueue:
+            task_config = {**config, "force": False}
+            transaction.on_commit(
+                lambda: generate_document_flashcards.delay(
+                    str(document.id),
+                    task_config,
+                    force=False,
+                )
+            )
+            return Response(payload, status=status.HTTP_202_ACCEPTED)
+        return Response(payload, status=status.HTTP_200_OK)
 
 
 class DocumentFlashcardsGenerateView(GenericAPIView):
     serializer_class = FlashcardDeckSerializer
 
-    def deck_payload(self, deck, document, cached=False):
+    def deck_payload(self, deck, document, cached=False, reused=False):
         data = FlashcardDeckSerializer(deck).data
         if deck.status not in {FlashcardDeck.Status.COMPLETED, FlashcardDeck.Status.PARTIAL}:
             data["cards"] = []
         return {
             "status": deck.status,
             "cached": cached,
+            "reused": reused,
             "document_id": str(document.id),
             "deck": data,
         }
@@ -401,20 +511,20 @@ class DocumentFlashcardsGenerateView(GenericAPIView):
             return Response(exc.response_data(), status=exc.status_code)
 
         if result.should_enqueue:
-            task_config = {**config, "force": force}
+            task_config = {**config, "force": False}
             transaction.on_commit(
                 lambda: generate_document_flashcards.delay(
                     str(document.id),
                     task_config,
-                    force=force,
+                    force=False,
                 )
             )
             return Response(
-                self.deck_payload(result.deck, document, cached=False),
+                self.deck_payload(result.deck, document, cached=False, reused=result.reused),
                 status=status.HTTP_202_ACCEPTED,
             )
         return Response(
-            self.deck_payload(result.deck, document, cached=result.cached),
+            self.deck_payload(result.deck, document, cached=result.cached, reused=result.reused),
             status=status.HTTP_200_OK,
         )
 

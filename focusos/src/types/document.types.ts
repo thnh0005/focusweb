@@ -20,6 +20,8 @@ export interface StudyDocument {
   fileType: DocumentFileType;
   fileSizeBytes: number;
   pageCount?: number;
+  sourceFileUrl?: string;
+  canReadInline?: boolean;
   status: DocumentStatus;
   hasSummary: boolean;
   hasFlashcards: boolean;
@@ -32,6 +34,7 @@ export interface StudyDocument {
 export type SummaryMode = "key-points" | "key_points" | "detailed";
 
 export type DocumentSummaryStatus =
+  | "not_generated"
   | "pending"
   | "processing"
   | "completed"
@@ -45,6 +48,8 @@ export interface DocumentSummary {
   mode: SummaryMode;
   status?: DocumentSummaryStatus;
   content: string | null; // Markdown formatted when completed
+  structuredContent?: DocumentSummaryStructuredContent;
+  structured_content?: DocumentSummaryStructuredContent;
   generatedAt?: string | null;
   generated_at?: string | null;
   errorCode?: string;
@@ -58,6 +63,32 @@ export interface DocumentSummary {
   stale?: boolean;
   isStreaming?: boolean;
 }
+
+export interface DocumentSourceText {
+  text: string;
+  fileType: DocumentFileType;
+  filename: string;
+}
+
+export type DocumentSummaryStructuredContent =
+  | {
+      language?: string;
+      key_points?: Array<{
+        title: string;
+        content: string;
+      }>;
+    }
+  | {
+      language?: string;
+      title?: string;
+      overview?: string;
+      sections?: Array<{
+        heading: string;
+        content: string;
+      }>;
+      conclusion?: string;
+    }
+  | Record<string, unknown>;
 
 export interface DocumentSummaryResponse {
   status?: DocumentSummaryStatus;
@@ -78,6 +109,7 @@ export interface GenerateSummaryPayload {
 
 export type FlashcardDifficulty = "easy" | "medium" | "hard";
 export type FlashcardDeckStatus =
+  | "not_generated"
   | "pending"
   | "processing"
   | "completed"
@@ -118,7 +150,11 @@ export interface FlashcardDeck {
   errorCode?: string;
   errorMessage?: string;
   cards: Flashcard[];
-  generatedAt: string;
+  createdAt?: string | null;
+  generatedAt: string | null;
+  retryAt?: string | null;
+  retryAfterSeconds?: number | null;
+  processingStartedAt?: string | null;
 }
 
 export interface FlashcardPageRange {
@@ -126,7 +162,7 @@ export interface FlashcardPageRange {
   endPage: number;
 }
 
-export type FlashcardQuantity = 5 | 10 | 20 | number;
+export type FlashcardQuantity = 5 | 10 | 15 | 20 | number;
 
 export interface FlashcardSectionRange {
   startSection: number;
@@ -156,8 +192,10 @@ export type GenerateFlashcardsPayload =
 export interface GenerateFlashcardsResponse {
   status: FlashcardDeckStatus;
   cached: boolean;
+  reused?: boolean;
   document_id: string;
-  deck: FlashcardDeck;
+  documentId?: string;
+  deck: FlashcardDeck | null;
 }
 
 // ── Review Session ────────────────────────────────────────────
@@ -190,4 +228,5 @@ export interface DocumentFilters {
   fileType?: DocumentFileType | "all";
   sortBy?: "date" | "name" | "size";
   sortOrder?: "asc" | "desc";
+  limit?: number;
 }

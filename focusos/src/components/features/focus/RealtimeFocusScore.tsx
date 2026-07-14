@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { motion, AnimatePresence, useReducedMotion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils/cn";
 import type { FocusScoreMetrics } from "@/hooks/useFocusScore";
 
@@ -16,8 +17,11 @@ export function RealtimeFocusScore({
   isActive,
   className,
 }: RealtimeFocusScoreProps) {
+  const { t } = useTranslation("focus");
   const prefersReduced = useReducedMotion();
-  const { score, displayLabel, colorClass, glowColor, microcopy } = metrics;
+  const { score, label, colorClass, glowColor } = metrics;
+  const displayLabel = t(`scoreLabels.${label}`);
+  const microcopy = t(`scoreMicrocopy.${label}`);
 
   return (
     <div
@@ -25,8 +29,8 @@ export function RealtimeFocusScore({
       role="status"
       aria-label={
         score === null
-          ? `Focus score: ${displayLabel}`
-          : `Focus score: ${score} out of 100, ${displayLabel}`
+          ? `${t("focusScore")}: ${displayLabel}`
+          : `${t("focusScore")}: ${score} out of 100, ${displayLabel}`
       }
       aria-live="polite"
     >
@@ -66,7 +70,7 @@ export function RealtimeFocusScore({
               {displayLabel}
             </motion.span>
           </AnimatePresence>
-          <span className="text-[9px] font-mono text-text-muted tracking-wider uppercase">Focus Score</span>
+          <span className="text-[9px] font-mono text-text-muted tracking-wider uppercase">{t("focusScore")}</span>
         </div>
 
         {/* Active pulse dot */}

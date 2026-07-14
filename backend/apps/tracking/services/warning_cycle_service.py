@@ -138,14 +138,9 @@ class WarningCycleService:
         cycle.status = self.STATUS_BY_LEVEL[next_level]
         if next_level >= self.max_level:
             cycle.next_warning_at = None
-            if cycle.mode == FocusSession.Mode.DEEP_WORK:
-                cycle.status = WarningCycle.Status.AUTO_PAUSE_REQUIRED
-                cycle.auto_pause_required = True
-                cycle.action = WarningCycle.Action.AUTO_PAUSE
-            else:
-                cycle.status = WarningCycle.Status.COMPLETED
-                cycle.auto_pause_required = False
-                cycle.action = WarningCycle.Action.NONE
+            cycle.status = WarningCycle.Status.COMPLETED
+            cycle.auto_pause_required = False
+            cycle.action = WarningCycle.Action.NONE
         else:
             cycle.next_warning_at = now + timedelta(seconds=self.interval_seconds)
         cycle.save()
@@ -176,10 +171,7 @@ class WarningCycleService:
         return self.serialize_cycle(cycle)
 
     def create_warning_event(self, cycle, level, session):
-        auto_pause_required = (
-            level >= self.max_level
-            and cycle.mode == FocusSession.Mode.DEEP_WORK
-        )
+        auto_pause_required = False
         warning, _ = WarningEvent.objects.get_or_create(
             warning_cycle=cycle,
             warning_level=level,

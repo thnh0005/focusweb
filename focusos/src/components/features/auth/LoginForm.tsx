@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { LogIn } from "lucide-react";
 import { useAuthStore } from "@/stores/auth.store";
 import { Button } from "@/components/ui/Button";
@@ -20,6 +21,7 @@ import {
 
 export function LoginForm() {
   const router = useRouter();
+  const { t } = useTranslation("auth");
   const { login, isLoading } = useAuthStore();
 
   const [email, setEmail] = React.useState("");
@@ -36,18 +38,18 @@ export function LoginForm() {
     setSubmitError("");
 
     if (!email) {
-      setEmailError("Email is required");
+      setEmailError(t("validation.emailRequired"));
       isValid = false;
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError("Please enter a valid email address");
+      setEmailError(t("validation.emailInvalid"));
       isValid = false;
     }
 
     if (!password) {
-      setPasswordError("Password is required");
+      setPasswordError(t("validation.passwordRequired"));
       isValid = false;
     } else if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+      setPasswordError(t("validation.passwordMin6"));
       isValid = false;
     }
 
@@ -62,9 +64,8 @@ export function LoginForm() {
       await login({ email, password });
       const { onboardingComplete } = useAuthStore.getState();
       router.push(onboardingComplete ? "/dashboard" : "/onboarding");
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Invalid email or password";
-      setSubmitError(errorMsg);
+    } catch {
+      setSubmitError(t("errors.invalidCredentials"));
     }
   };
 
@@ -81,10 +82,10 @@ export function LoginForm() {
           </div>
           <div className="space-y-2">
             <CardTitle className="text-2xl font-light text-text-primary">
-              Welcome back to your focus space
+              {t("login.title")}
             </CardTitle>
             <CardDescription className="mx-auto max-w-[30ch] text-sm leading-6 text-text-secondary">
-              Pick up where you left off and settle into your next session.
+              {t("login.description")}
             </CardDescription>
           </div>
         </CardHeader>
@@ -102,8 +103,8 @@ export function LoginForm() {
 
             <Input
               type="email"
-              label="Email address"
-              placeholder="minh@example.com"
+              label={t("login.emailLabel")}
+              placeholder={t("login.emailPlaceholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={emailError}
@@ -116,18 +117,18 @@ export function LoginForm() {
             <div className="space-y-1.5">
               <div className="flex items-center justify-between gap-3">
                 <label className="text-xs font-medium text-text-secondary">
-                  Password
+                  {t("login.password")}
                 </label>
                 <Link
                   href="/forgot-password"
                   className="rounded-lg text-xs text-focus-green transition-colors hover:text-focus-green/80 focus-ring-soft"
                 >
-                  Forgot password?
+                  {t("login.forgot")}
                 </Link>
               </div>
               <input
                 type="password"
-                placeholder="Enter your password"
+                placeholder={t("login.passwordPlaceholder")}
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 disabled={isLoading}
@@ -154,10 +155,10 @@ export function LoginForm() {
               {isLoading ? (
                 <>
                   <Spinner className="h-4 w-4 text-primary-foreground" />
-                  <span>Opening your space...</span>
+                  <span>{t("login.submitting")}</span>
                 </>
               ) : (
-                <span>Enter focus space</span>
+                <span>{t("login.submit")}</span>
               )}
             </Button>
           </form>
@@ -165,12 +166,12 @@ export function LoginForm() {
 
         <CardFooter className="justify-center border-t border-white/[0.06] px-6 pb-6 pt-5 sm:px-8">
           <p className="text-sm text-text-muted">
-            New to FocusOS?{" "}
+            {t("login.noAccount")}{" "}
             <Link
               href="/register"
               className="font-medium text-focus-green transition-colors hover:text-focus-green/80 focus-ring-soft"
             >
-              Create your space
+              {t("login.register")}
             </Link>
           </p>
         </CardFooter>

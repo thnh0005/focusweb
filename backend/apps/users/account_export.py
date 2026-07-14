@@ -168,6 +168,7 @@ class AccountDataExportBuilder:
             "workspace_background_url": preferences.workspace_background_url,
             "auto_resume_session": preferences.auto_resume_session,
             "extension_installed": preferences.extension_installed,
+            "language": preferences.language,
             "created_at": preferences.created_at,
             "updated_at": preferences.updated_at,
         }

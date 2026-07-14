@@ -82,13 +82,14 @@ export default function AuthenticatedLayout({
     return null;
   }
 
-  // Session, dashboard, settings, and AI documents are immersive routes that own their full viewport.
+  // Immersive routes own their full viewport and do not use the legacy app shell.
   const isSessionRoute = pathname.startsWith("/session");
   const isDashboardRoute = pathname === "/dashboard";
+  const isAnalyticsRoute = pathname.startsWith("/analytics");
   const isSettingsRoute = pathname.startsWith("/settings");
   const isStudyToolsRoute = pathname.startsWith("/study-tools");
 
-  if (isSessionRoute || isDashboardRoute || isSettingsRoute || isStudyToolsRoute) {
+  if (isSessionRoute || isDashboardRoute || isAnalyticsRoute || isSettingsRoute || isStudyToolsRoute) {
     return <ExtensionBridgeProvider>{children}</ExtensionBridgeProvider>;
   }
 

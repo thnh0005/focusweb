@@ -22,3 +22,4 @@ export type { CommandItem } from "./useCommandPalette";
 export { useKeyboardShortcuts } from "./useKeyboardShortcuts";
 export type { ShortcutBinding } from "./useKeyboardShortcuts";
 export { usePageLeaveGuard } from "./usePageLeaveGuard";
+export { useDraggablePopup } from "./useDraggablePopup";

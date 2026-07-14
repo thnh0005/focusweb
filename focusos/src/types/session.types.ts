@@ -56,6 +56,7 @@ export interface ActiveSession {
   tags: string[];
   targetDurationSeconds: number;
   elapsedActiveSeconds?: number;
+  extensionBridgeToken?: string;
   startedAt: string;
   status: SessionStatus;
 }
@@ -165,6 +166,7 @@ export interface SessionSummary {
     hasSemanticAi?: boolean;
     hasWarningEvents?: boolean;
     browserEventCount?: number;
+    tabSwitchCount?: number;
     warningCount?: number;
     warningCycleCount?: number;
     semanticAnalysisCount?: number;

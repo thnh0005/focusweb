@@ -326,6 +326,10 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
         source="auto_resume_session",
         required=False,
     )
+    language = serializers.ChoiceField(
+        choices=UserPreference.Language.choices,
+        required=False,
+    )
     goalTemplates = serializers.SerializerMethodField()
     customBlacklist = serializers.SerializerMethodField()
 
@@ -356,6 +360,7 @@ class UserPreferenceSerializer(serializers.ModelSerializer):
             "themeAccent",
             "workspaceBackgroundUrl",
             "autoResumeSession",
+            "language",
         ]
         extra_kwargs = {"theme": {"required": False}}
 

@@ -43,7 +43,7 @@ export function ImmersiveSessionShell({
         <div className="relative z-10 flex min-h-[calc(100dvh-2.5rem)] flex-col">
           <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-6 pb-40 pt-8 text-center sm:gap-8 sm:pb-44 md:pb-48">
             {goalHeader}
-            <div className="w-full rounded-[2rem] border border-white/[0.08] bg-black/10 px-4 py-7 shadow-glass backdrop-blur-[2px] sm:px-8 sm:py-9">
+            <div className="w-full max-w-[48rem] rounded-[2rem] border border-white/[0.08] bg-black/10 px-4 py-7 shadow-glass backdrop-blur-[2px] sm:px-8 sm:py-9">
               {timer}
             </div>
             <div className="flex flex-col items-center gap-5">

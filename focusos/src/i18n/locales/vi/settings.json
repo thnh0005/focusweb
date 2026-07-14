@@ -1,0 +1,250 @@
+{
+  "layout": {
+    "backDashboard": "Tổng quan",
+    "eyebrow": "Cài đặt FocusOS",
+    "title": "Tùy chỉnh không gian",
+    "description": "Giữ không gian tập trung yên tĩnh, cá nhân và luôn sẵn sàng.",
+    "sectionsLabel": "Các mục cài đặt",
+    "categories": {
+      "account": "Tài khoản",
+      "experience": "Trải nghiệm",
+      "tools": "Công cụ"
+    },
+    "items": {
+      "profile": "Hồ sơ",
+      "profileHint": "Danh tính",
+      "account": "Tài khoản",
+      "accountHint": "Dữ liệu & xóa tài khoản",
+      "notifications": "Thông báo",
+      "notificationsHint": "Nhắc nhở",
+      "extension": "Tiện ích",
+      "extensionHint": "Trình duyệt",
+      "boundaries": "Ranh giới",
+      "boundariesHint": "Mất tập trung"
+    }
+  },
+  "language": {
+    "title": "Ngôn ngữ",
+    "description": "Chọn ngôn ngữ dùng trong FocusOS.",
+    "selectLabel": "Chọn ngôn ngữ",
+    "vi": "Tiếng Việt",
+    "en": "English",
+    "saving": "Đang lưu ngôn ngữ...",
+    "saveFailed": "Ngôn ngữ đã đổi trên thiết bị này, nhưng chưa đồng bộ được với tài khoản.",
+    "switchTo": "Chuy?n sang {{language}}"
+  },
+  "blacklist": {
+    "eyebrow": "Ranh giới",
+    "title": "Ranh giới mất tập trung",
+    "description": "Chọn tên miền nên nhắc nhẹ khi dùng trong phiên Focus thường.",
+    "addTitle": "Thêm ranh giới",
+    "domainPlaceholder": "ví dụ: facebook.com",
+    "domainAria": "Tên miền cần thêm",
+    "severityAria": "Mức rủi ro của ranh giới",
+    "add": "Thêm",
+    "adding": "Đang thêm",
+    "protectedTitle": "Vùng chú ý được bảo vệ",
+    "domainCount_one": "{{count}} tên miền",
+    "domainCount_other": "{{count}} tên miền",
+    "loading": "Đang tải ranh giới...",
+    "empty": "Chưa có ranh giới nào.",
+    "defaultBoundary": "Ranh giới mặc định",
+    "customBoundary": "Ranh giới tùy chỉnh",
+    "enabled": "đang bật",
+    "disabled": "đang tắt",
+    "enable": "Bật",
+    "disable": "Tắt",
+    "removeAria": "Xóa {{domain}}",
+    "domainAriaFor": "Tên miền cho {{domain}}",
+    "severityAriaFor": "Mức rủi ro cho {{domain}}",
+    "successAdded": "Đã thêm ranh giới",
+    "successRemoved": "Đã xóa ranh giới",
+    "successSeverity": "Đã cập nhật mức rủi ro",
+    "successEnabled": "Đã bật ranh giới",
+    "successDisabled": "Đã tắt ranh giới",
+    "successDomain": "Đã cập nhật tên miền",
+    "errors": {
+      "load": "Không tải được danh sách chặn",
+      "add": "Không thêm được tên miền",
+      "remove": "Không xóa được tên miền",
+      "severity": "Không cập nhật được mức rủi ro",
+      "boundary": "Không cập nhật được ranh giới",
+      "domain": "Không cập nhật được tên miền"
+    },
+    "highRisk": "Cao",
+    "mediumRisk": "Trung bình",
+    "lowRisk": "Thấp"
+  },
+  "account": {
+    "eyebrow": "Tài khoản",
+    "title": "Dữ liệu và xóa tài khoản",
+    "description": "Xuất dữ liệu tài khoản hoặc bắt đầu quy trình xóa tài khoản.",
+    "exportTitle": "Xuất tài khoản",
+    "exportDescription": "Yêu cầu file ZIP gồm hồ sơ, tùy chọn, phiên và dữ liệu học.",
+    "requesting": "Đang yêu cầu",
+    "requestExport": "Yêu cầu xuất",
+    "job": "Job {{id}}",
+    "checking": "Đang kiểm tra",
+    "checkStatus": "Kiểm tra trạng thái",
+    "downloadZip": "Tải ZIP",
+    "deleteTitle": "Xóa tài khoản",
+    "deleteDescription": "Thao tác này tạo job xóa tài khoản trên backend và đăng xuất bạn. Nhập mật khẩu và gõ DELETE để xác nhận.",
+    "currentPassword": "Mật khẩu hiện tại",
+    "typeDelete": "Gõ DELETE",
+    "deleting": "Đang xóa",
+    "deletionQueued": "Job xóa đã xếp hàng: {{id}}",
+    "messages": {
+      "exportPending": "Đang chuẩn bị bản xuất tài khoản. Dùng Kiểm tra trạng thái để làm mới.",
+      "exportReady": "Bản xuất tài khoản đã sẵn sàng để tải.",
+      "exportExpired": "Bản xuất này đã hết hạn. Hãy yêu cầu bản mới.",
+      "exportCreated": "Đã tạo yêu cầu xuất tài khoản."
+    },
+    "errors": {
+      "exportRequest": "Không thể yêu cầu xuất tài khoản",
+      "exportRefresh": "Không thể làm mới bản xuất tài khoản",
+      "delete": "Không thể xóa tài khoản"
+    }
+  },
+  "profile": {
+    "eyebrow": "Tài khoản",
+    "title": "Hồ sơ",
+    "description": "Danh tính hiển thị quanh không gian tập trung.",
+    "card": "Thẻ tài khoản",
+    "emailManaged": "Email được quản lý bởi xác thực.",
+    "emailAddress": "Địa chỉ email",
+    "loading": "Đang tải...",
+    "notAvailable": "Không có",
+    "emailHelp": "Liên hệ hỗ trợ nếu bạn cần đổi email này.",
+    "displayName": "Tên hiển thị",
+    "displayNamePlaceholder": "Nhập tên hiển thị",
+    "saved": "Hồ sơ đã cập nhật",
+    "saveChanges": "Lưu thay đổi",
+    "accountStatus": "Trạng thái tài khoản",
+    "memberSince": "Thành viên từ",
+    "status": "Trạng thái",
+    "active": "Hoạt động",
+    "signOut": "Đăng xuất",
+    "signOutDescription": "Đăng xuất sẽ đóng phiên trình duyệt này.",
+    "logout": "Đăng xuất",
+    "errors": {
+      "load": "Không thể tải hồ sơ",
+      "save": "Không thể lưu hồ sơ",
+      "required": "Tên hiển thị là bắt buộc",
+      "min": "Tên hiển thị phải có ít nhất 2 ký tự",
+      "max": "Tên hiển thị phải dưới 50 ký tự"
+    },
+    "saving": "Đang lưu"
+  },
+  "notificationsPage": {
+    "eyebrow": "Thông báo",
+    "title": "Nhắc nhở êm",
+    "description": "Chọn tín hiệu nào nên ngắt lời bạn và tín hiệu nào có thể chờ.",
+    "session": "Phiên",
+    "notifications": "Thông báo",
+    "notificationsDescription": "Cho phép tín hiệu thông báo của FocusOS.",
+    "sessionReminders": "Nhắc phiên",
+    "sessionRemindersDescription": "Nhắc bắt đầu phiên tập trung hằng ngày.",
+    "distractionWarnings": "Cảnh báo xao nhãng",
+    "distractionWarningsDescription": "Được quản lý bởi ranh giới tập trung của tiện ích.",
+    "reflection": "Nhìn lại",
+    "weeklyReport": "Báo cáo tuần",
+    "weeklyReportDescription": "Phân tích mẫu tập trung hằng tuần.",
+    "deepWorkSuggestions": "Gợi ý Deep Work",
+    "deepWorkSuggestionsDescription": "Ý tưởng về thời điểm lên lịch làm việc sâu.",
+    "dailyDigest": "Tóm tắt ngày",
+    "noEndpoint": "Chưa có endpoint backend.",
+    "achievements": "Thành tựu",
+    "communication": "Liên lạc",
+    "productUpdates": "Cập nhật sản phẩm",
+    "center": "Trung tâm thông báo",
+    "centerDescription": "Backend hiện hỗ trợ cài đặt thông báo và tạo thông báo thử, nhưng chưa có danh sách thông báo hoặc endpoint đánh dấu đã đọc.",
+    "creatingTest": "Đang tạo thử",
+    "createTest": "Tạo thông báo thử",
+    "testCreated": "Đã tạo thông báo thử: {{title}}",
+    "saved": "Cài đặt thông báo đã lưu",
+    "save": "Lưu thông báo",
+    "loading": "Đang tải",
+    "saving": "Đang lưu",
+    "errors": {
+      "load": "Không thể tải cài đặt thông báo",
+      "save": "Không thể lưu cài đặt thông báo",
+      "test": "Không thể tạo thông báo thử"
+    }
+  },
+  "extensionPage": {
+    "eyebrow": "Tiện ích",
+    "title": "Cầu nối trình duyệt",
+    "description": "Tiện ích giúp FocusOS hiểu ngữ cảnh tab trong phiên đang hoạt động.",
+    "connected": "Tiện ích đã kết nối",
+    "notDetected": "Chưa phát hiện tiện ích",
+    "connectedDescription": "Phát hiện xao nhãng trực tiếp đã sẵn sàng cho phiên tiếp theo.",
+    "notDetectedDescription": "Bạn vẫn có thể bắt đầu phiên, nhưng phát hiện tab trực tiếp có thể bị giới hạn.",
+    "version": "Phiên bản {{version}}",
+    "ready": "Sẵn sàng",
+    "needsSetup": "Cần thiết lập",
+    "installTitle": "Cài tiện ích",
+    "installDescription": "Cài tiện ích trình duyệt FocusOS để hỗ trợ phát hiện xao nhãng và chấm điểm tập trung theo thời gian thực.",
+    "install": "Cài từ Chrome Web Store",
+    "needsTitle": "Tiện ích cần gì",
+    "needs": {
+      "tabs": "Đọc ngữ cảnh tab trong phiên tập trung.",
+      "warnings": "Hiển thị cảnh báo xao nhãng khi vượt ranh giới.",
+      "metadata": "Dùng metadata trang để hỗ trợ chấm điểm liên quan Deep Work.",
+      "https": "Giao tiếp với FocusOS qua HTTPS."
+    }
+  },
+  "themePage": {
+    "eyebrow": "Giao diện",
+    "title": "Diện mạo không gian",
+    "description": "Xem trước ngôn ngữ hình ảnh trong FocusOS. Giao diện và accent được lưu vào tài khoản.",
+    "previews": "Xem trước giao diện",
+    "accent": "Tông accent",
+    "background": "Nền không gian",
+    "backgroundDescription": "Tải ảnh cục bộ cho nền phòng tập trung.",
+    "chooseImage": "Chọn ảnh nền",
+    "imageHelp": "JPG, PNG hoặc WebP tối đa 2.5 MB",
+    "customImage": "Ảnh tùy chỉnh",
+    "defaultAmbient": "Nền mặc định",
+    "removeBackground": "Gỡ nền tùy chỉnh",
+    "display": "Hiển thị",
+    "displayDescription": "Các điều khiển hiển thị này chưa có hỗ trợ backend.",
+    "reduceMotion": "Giảm chuyển động",
+    "compactMode": "Chế độ gọn",
+    "comingSoon": "Sắp có",
+    "saved": "Cài đặt giao diện đã lưu",
+    "save": "Lưu giao diện",
+    "loading": "Đang tải",
+    "saving": "Đang lưu",
+    "accents": {
+      "moss": "Rêu",
+      "rain": "Mưa",
+      "ember": "Than hồng"
+    },
+    "errors": {
+      "load": "Không thể tải cài đặt giao diện",
+      "save": "Không thể lưu cài đặt giao diện",
+      "imageType": "Hãy tải file ảnh.",
+      "imageSize": "Ảnh phải từ 2.5 MB trở xuống.",
+      "imageRead": "Không thể đọc ảnh này.",
+      "browserStorage": "Ảnh này quá lớn cho lưu trữ trình duyệt."
+    },
+    "themes": {
+      "minimal": {
+        "label": "Tối giản",
+        "description": "Giảm tương phản để lập kế hoạch yên tĩnh."
+      },
+      "forest": {
+        "label": "Rừng",
+        "description": "Không gian xanh nguyên bản."
+      },
+      "aurora-night": {
+        "label": "Cực quang",
+        "description": "Không khí cực quang dịu."
+      },
+      "rain-room": {
+        "label": "Phòng mưa",
+        "description": "Bề mặt đọc mát hơn."
+      }
+    }
+  }
+}

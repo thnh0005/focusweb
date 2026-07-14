@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { Notification } from "@/components/navigation";
 
 export interface Toast {
   id: string;
@@ -10,16 +11,26 @@ export interface Toast {
 
 export interface NotificationState {
   toasts: Toast[];
+  notifications: Notification[];
   permission: NotificationPermission | null;
 
   // Actions
   addToast: (toast: Omit<Toast, "id">) => void;
+  addNotification: (notification: Omit<Notification, "id" | "isRead" | "createdAt"> & {
+    id?: string;
+    isRead?: boolean;
+    createdAt?: Date | string;
+  }) => void;
   removeToast: (id: string) => void;
+  markNotificationRead: (id: string) => void;
+  markAllNotificationsRead: () => void;
+  dismissNotification: (id: string) => void;
   requestPermission: () => Promise<void>;
 }
 
 export const useNotificationStore = create<NotificationState>((set) => ({
   toasts: [],
+  notifications: [],
   permission: typeof window !== "undefined" ? Notification.permission : null,
 
   addToast: (toast) => {
@@ -39,9 +50,49 @@ export const useNotificationStore = create<NotificationState>((set) => ({
     }, duration);
   },
 
+  addNotification: (notification) => {
+    const id = notification.id ?? Math.random().toString(36).substring(2, 9);
+    const nextNotification: Notification = {
+      ...notification,
+      id,
+      isRead: notification.isRead ?? false,
+      createdAt: notification.createdAt ?? new Date(),
+    };
+
+    set((state) => ({
+      notifications: [
+        nextNotification,
+        ...state.notifications.filter((item) => item.id !== id),
+      ].slice(0, 40),
+    }));
+  },
+
   removeToast: (id) => {
     set((state) => ({
       toasts: state.toasts.filter((toast) => toast.id !== id),
+    }));
+  },
+
+  markNotificationRead: (id) => {
+    set((state) => ({
+      notifications: state.notifications.map((notification) =>
+        notification.id === id ? { ...notification, isRead: true } : notification
+      ),
+    }));
+  },
+
+  markAllNotificationsRead: () => {
+    set((state) => ({
+      notifications: state.notifications.map((notification) => ({
+        ...notification,
+        isRead: true,
+      })),
+    }));
+  },
+
+  dismissNotification: (id) => {
+    set((state) => ({
+      notifications: state.notifications.filter((notification) => notification.id !== id),
     }));
   },
 

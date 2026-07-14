@@ -22,6 +22,12 @@ export type { ExtensionState } from "./extension.store";
 export { useNotificationStore } from "./notification.store";
 export type { NotificationState, Toast } from "./notification.store";
 
+export { useDocumentGenerationStore } from "./document-generation.store";
+export type {
+  DocumentGenerationJob,
+  DocumentGenerationState,
+} from "./document-generation.store";
+
 export { useMusicStore } from "./music.store";
 export type { MusicState } from "./music.store";
 

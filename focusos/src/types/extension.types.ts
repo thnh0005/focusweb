@@ -31,6 +31,7 @@ export type ExtensionMessageType =
   | "SESSION_END"
   | "SESSION_CANCEL"
   | "BLACKLIST_SYNC"
+  | "LANGUAGE_SYNC"
   | "GET_STATUS";
 
 export interface ExtensionMessage {
@@ -44,19 +45,25 @@ export interface ExtensionSessionStartPayload {
   mode: SessionMode;
   blacklist: BlacklistPayload[];
   backendApiUrl?: string;
+  extensionToken?: string;
   appUrl?: string;
   plannedDurationMinutes?: number;
+  language?: "vi" | "en";
 }
 
 export interface BlacklistPayload {
   domain: string;
-  severity: "high" | "medium";
+  severity: "high" | "medium" | "low";
+  enabled?: boolean;
+  source?: "DEFAULT" | "USER";
+  updatedAt?: string;
 }
 
 export type ExtensionMessagePayload =
   | ExtensionSessionStartPayload
   | { sessionId: string }
   | { entries: BlacklistPayload[] }
+  | { language: "vi" | "en" }
   | Record<string, never>;
 
 // ── Extension Events (Extension → Web App) ────────────────────

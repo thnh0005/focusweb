@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import {
   LayoutDashboard,
   BarChart3,
@@ -42,25 +43,25 @@ export interface SidebarProps {
 
 const NAV_ITEMS = [
   {
-    label: "Dashboard",
+    labelKey: "nav.dashboard",
     href: "/dashboard",
     icon: LayoutDashboard,
     matchPrefix: true,
   },
   {
-    label: "Analytics",
+    labelKey: "nav.analytics",
     href: "/analytics",
     icon: BarChart3,
     matchPrefix: true,
   },
   {
-    label: "AI Docs",
+    labelKey: "nav.aiDocs",
     href: "/study-tools",
     icon: BookOpen,
     matchPrefix: true,
   },
   {
-    label: "Settings",
+    labelKey: "nav.settings",
     href: "/settings",
     icon: Settings2,
     matchPrefix: true,
@@ -90,13 +91,15 @@ function RailNavButton({
   item: (typeof NAV_ITEMS)[number];
   isActive: boolean;
 }) {
+  const { t } = useTranslation("common");
   const Icon = item.icon;
+  const label = t(item.labelKey);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
         <Link
           href={item.href}
-          aria-label={item.label}
+          aria-label={label}
           aria-current={isActive ? "page" : undefined}
           className={cn(
             "relative flex h-10 w-10 items-center justify-center rounded-xl",
@@ -125,7 +128,7 @@ function RailNavButton({
         </Link>
       </TooltipTrigger>
       <TooltipContent side="right" sideOffset={14}>
-        {item.label}
+        {label}
       </TooltipContent>
     </Tooltip>
   );
@@ -144,7 +147,9 @@ function ExpandedNavItem({
   onClose: () => void;
   index: number;
 }) {
+  const { t } = useTranslation("common");
   const Icon = item.icon;
+  const label = t(item.labelKey);
   return (
     <motion.div
       initial={{ opacity: 0, x: -10 }}
@@ -177,7 +182,7 @@ function ExpandedNavItem({
           )}
         />
         <span className="flex-1 font-light tracking-[0.01em] leading-none">
-          {item.label}
+          {label}
         </span>
         <ChevronRight
           aria-hidden="true"
@@ -201,6 +206,7 @@ export function Sidebar({
   className,
 }: SidebarProps) {
   const pathname = usePathname();
+  const { t } = useTranslation("common");
   const [internalExpanded, setInternalExpanded] = React.useState(false);
 
   // Support both controlled and uncontrolled expansion
@@ -235,7 +241,7 @@ export function Sidebar({
       {/* ── Icon Rail (64px, always visible on md+) ──────────────────── */}
       <aside
         role="navigation"
-        aria-label="Main navigation rail"
+        aria-label={t("nav.home")}
         className={cn(
           "hidden md:flex fixed left-0 top-0 h-[100dvh] w-16 z-40 flex-col",
           "items-center py-5 justify-between select-none",
@@ -252,7 +258,7 @@ export function Sidebar({
             <TooltipTrigger asChild>
               <Link
                 href="/dashboard"
-                aria-label="FocusOS — Back to Dashboard"
+                aria-label={`${t("appName")} - ${t("nav.dashboard")}`}
                 className={cn(
                   "flex h-9 w-9 items-center justify-center rounded-xl",
                   "bg-focus-purple/[0.12] border border-focus-purple/[0.25]",
@@ -272,13 +278,13 @@ export function Sidebar({
           </Tooltip>
 
           {/* Nav items */}
-          <nav aria-label="Primary navigation" className="flex flex-col gap-2 w-full items-center">
+          <nav aria-label={t("nav.home")} className="flex flex-col gap-2 w-full items-center">
             {NAV_ITEMS.map((item) => {
               const isActive = item.matchPrefix
                 ? pathname.startsWith(item.href)
                 : pathname === item.href;
               return (
-                <RailNavButton key={item.label} item={item} isActive={isActive} />
+                <RailNavButton key={item.labelKey} item={item} isActive={isActive} />
               );
             })}
           </nav>
@@ -291,7 +297,7 @@ export function Sidebar({
             <Tooltip>
               <TooltipTrigger asChild>
                 <div
-                  aria-label={`${streakCount} day focus streak`}
+                  aria-label={t("time.dayStreak", { count: streakCount })}
                   className={cn(
                     "flex h-10 w-10 items-center justify-center rounded-xl cursor-default",
                     "bg-white/[0.03] border border-white/[0.06]",
@@ -305,7 +311,7 @@ export function Sidebar({
                 </div>
               </TooltipTrigger>
               <TooltipContent side="right" sideOffset={14}>
-                {streakCount} Day Streak
+                {t("time.dayStreak", { count: streakCount })}
               </TooltipContent>
             </Tooltip>
           )}
@@ -362,7 +368,7 @@ export function Sidebar({
             exit={{ x: -8, opacity: 0 }}
             transition={{ duration: 0.32, ease: [0.16, 1, 0.3, 1] }}
             role="navigation"
-            aria-label="Expanded navigation"
+            aria-label={t("nav.home")}
             className={cn(
               "hidden md:flex fixed left-16 top-0 h-[100dvh] w-48 z-30 flex-col",
               "pt-[72px] pb-6 px-3",
@@ -382,14 +388,14 @@ export function Sidebar({
             </p>
 
             {/* Nav items with stagger */}
-            <nav aria-label="Expanded primary navigation" className="flex flex-col gap-0.5">
+            <nav aria-label={t("nav.home")} className="flex flex-col gap-0.5">
               {NAV_ITEMS.map((item, idx) => {
                 const isActive = item.matchPrefix
                   ? pathname.startsWith(item.href)
                   : pathname === item.href;
                 return (
                   <ExpandedNavItem
-                    key={item.label}
+                    key={item.labelKey}
                     item={item}
                     isActive={isActive}
                     onClose={() => setExpanded(false)}

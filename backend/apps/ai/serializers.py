@@ -12,6 +12,8 @@ class StudyDocumentSerializer(serializers.ModelSerializer):
     fileType = serializers.ChoiceField(source="file_type", choices=StudyDocument.FileType.choices)
     fileSizeBytes = serializers.IntegerField(source="file_size_bytes", read_only=True)
     pageCount = serializers.IntegerField(source="page_count", read_only=True)
+    sourceFileUrl = serializers.SerializerMethodField()
+    canReadInline = serializers.SerializerMethodField()
     hasSummary = serializers.SerializerMethodField()
     hasFlashcards = serializers.SerializerMethodField()
     uploadedAt = serializers.DateTimeField(source="uploaded_at", read_only=True)
@@ -27,6 +29,8 @@ class StudyDocumentSerializer(serializers.ModelSerializer):
             "fileType",
             "fileSizeBytes",
             "pageCount",
+            "sourceFileUrl",
+            "canReadInline",
             "status",
             "hasSummary",
             "hasFlashcards",
@@ -40,6 +44,8 @@ class StudyDocumentSerializer(serializers.ModelSerializer):
             "fileType",
             "fileSizeBytes",
             "pageCount",
+            "sourceFileUrl",
+            "canReadInline",
             "status",
             "uploadedAt",
             "processedAt",
@@ -50,6 +56,16 @@ class StudyDocumentSerializer(serializers.ModelSerializer):
 
     def get_hasFlashcards(self, instance) -> bool:
         return instance.flashcard_decks.filter(cards__isnull=False).distinct().exists()
+
+    def get_sourceFileUrl(self, instance) -> str:
+        source_path = ((instance.metadata or {}).get("source_file") or {}).get("path")
+        if not source_path:
+            return ""
+        return f"/api/documents/{instance.id}/file/"
+
+    def get_canReadInline(self, instance) -> bool:
+        source_path = ((instance.metadata or {}).get("source_file") or {}).get("path")
+        return bool(source_path or instance.extracted_text)
 
 
 class DocumentUploadSerializer(serializers.Serializer):
@@ -166,9 +182,9 @@ class GenerateFlashcardsSerializer(serializers.Serializer):
     section_start = serializers.IntegerField(required=False)
     section_end = serializers.IntegerField(required=False)
     quantity = serializers.IntegerField(
-        min_value=settings.FLASHCARD_GENERATION_MIN_QUANTITY,
-        max_value=settings.FLASHCARD_GENERATION_MAX_QUANTITY,
-        default=5,
+        min_value=5,
+        max_value=20,
+        default=10,
     )
     difficulty = serializers.ChoiceField(
         choices=FlashcardDeck.Difficulty.choices,
@@ -210,6 +226,7 @@ class GenerateFlashcardsSerializer(serializers.Serializer):
 class FlashcardDeckSerializer(serializers.ModelSerializer):
     documentId = serializers.UUIDField(source="document_id", read_only=True)
     pageRange = serializers.JSONField(source="page_range", read_only=True)
+    scope = serializers.SerializerMethodField()
     requestedQuantity = serializers.IntegerField(source="requested_quantity", read_only=True)
     generatedQuantity = serializers.IntegerField(source="generated_quantity", read_only=True)
     generationFingerprint = serializers.CharField(source="generation_fingerprint", read_only=True)
@@ -221,7 +238,33 @@ class FlashcardDeckSerializer(serializers.ModelSerializer):
     errorCode = serializers.CharField(source="error_code", read_only=True)
     errorMessage = serializers.CharField(source="error_message", read_only=True)
     cards = FlashcardSerializer(many=True, read_only=True)
-    generatedAt = serializers.DateTimeField(source="generated_at", read_only=True)
+    createdAt = serializers.SerializerMethodField()
+    generatedAt = serializers.SerializerMethodField()
+    retryAt = serializers.SerializerMethodField()
+    retryAfterSeconds = serializers.SerializerMethodField()
+    processingStartedAt = serializers.SerializerMethodField()
+
+    def get_scope(self, obj):
+        scope = dict(obj.scope or {})
+        scope.pop("processing_context", None)
+        return scope
+
+    def get_createdAt(self, obj):
+        return obj.generated_at
+
+    def get_generatedAt(self, obj):
+        if obj.status in {FlashcardDeck.Status.COMPLETED, FlashcardDeck.Status.PARTIAL}:
+            return obj.generated_at
+        return None
+
+    def get_retryAt(self, obj):
+        return ((obj.scope or {}).get("processing_context") or {}).get("retry_at")
+
+    def get_retryAfterSeconds(self, obj):
+        return ((obj.scope or {}).get("processing_context") or {}).get("retry_after_seconds")
+
+    def get_processingStartedAt(self, obj):
+        return ((obj.scope or {}).get("processing_context") or {}).get("processing_started_at")
 
     class Meta:
         model = FlashcardDeck
@@ -247,7 +290,11 @@ class FlashcardDeckSerializer(serializers.ModelSerializer):
             "errorCode",
             "errorMessage",
             "cards",
+            "createdAt",
             "generatedAt",
+            "retryAt",
+            "retryAfterSeconds",
+            "processingStartedAt",
         ]
 
 

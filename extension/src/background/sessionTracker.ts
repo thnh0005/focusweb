@@ -13,7 +13,10 @@ import {
   setStorageValue,
 } from "../shared/storage";
 import { normalizeBlacklist } from "./blacklist";
+import { clearBlacklistEnforcement } from "./blacklistEnforcement";
+import { sendHeartbeat } from "./apiClient";
 import { clearQueue, flushQueue, getQueue } from "./eventQueue";
+import { normalizeExtensionLanguage, saveExtensionLanguage } from "../i18n";
 import {
   captureActiveTab,
   recordCurrentTabDuration,
@@ -59,6 +62,8 @@ export async function saveActiveSession(
 }
 
 export async function clearActiveSession(): Promise<void> {
+  const session = await getActiveSession();
+  if (session) clearBlacklistEnforcement(session.sessionId);
   await removeStorageValue(STORAGE_KEYS.activeSession);
 }
 
@@ -88,8 +93,10 @@ export async function startSession(
     status: "active",
     startedAt: new Date().toISOString(),
     backendApiUrl: payload.backendApiUrl || DEFAULT_BACKEND_API_URL,
+    extensionToken: payload.extensionToken,
     appUrl: payload.appUrl || DEFAULT_APP_URL,
     plannedDurationMinutes: payload.plannedDurationMinutes,
+    language: normalizeExtensionLanguage(payload.language),
     blacklist: normalizeBlacklist(payload.blacklist),
     tabSwitchCount: 0,
   };
@@ -98,14 +105,10 @@ export async function startSession(
   await saveActiveSession(session);
   await ensureAlarms();
 
+  const pong = await heartbeat();
   await broadcastToFocusOS({
     type: EVENT_TYPES.pong,
-    payload: {
-      installed: true,
-      connected: true,
-      version: VERSION,
-      timestamp: Date.now(),
-    },
+    payload: pong,
   });
 
   return { ok: true, session };
@@ -121,8 +124,10 @@ export async function pauseSession(sessionId: string): Promise<{ ok: boolean }> 
   await saveActiveSession({
     ...updated,
     status: "paused",
+    blacklistEnforcement: [],
     pausedAt: new Date().toISOString(),
   });
+  clearBlacklistEnforcement(sessionId);
   await flushActiveSession();
 
   return { ok: true };
@@ -157,6 +162,7 @@ export async function endSession(sessionId: string): Promise<{ ok: boolean }> {
   await flushActiveSession();
   await clearActiveSession();
   await clearAlarms();
+  clearBlacklistEnforcement(sessionId);
 
   await broadcastToFocusOS({
     type: EVENT_TYPES.disconnected,
@@ -187,11 +193,52 @@ export async function syncBlacklist(payload: unknown): Promise<{ ok: boolean }> 
   return { ok: true };
 }
 
+export async function syncLanguage(payload: unknown): Promise<{ ok: boolean }> {
+  if (!isObject(payload)) return { ok: false };
+  const language = normalizeExtensionLanguage(payload.language);
+  await saveExtensionLanguage(language);
+  const session = await getActiveSession();
+  if (session) {
+    await saveActiveSession({
+      ...session,
+      language,
+    });
+  }
+  return { ok: true };
+}
+
+async function focusApp(payload: unknown): Promise<{ ok: boolean }> {
+  const session = await getActiveSession();
+  const appUrl =
+    isObject(payload) && typeof payload.appUrl === "string"
+      ? payload.appUrl
+      : session?.appUrl || DEFAULT_APP_URL;
+  const tabs = await chrome.tabs.query({ url: `${appUrl.replace(/\/+$/, "")}/*` });
+  const tab = tabs.find((item) => typeof item.id === "number");
+  if (tab?.id) {
+    await chrome.tabs.update(tab.id, { active: true });
+    if (tab.windowId) await chrome.windows.update(tab.windowId, { focused: true });
+    return { ok: true };
+  }
+  await chrome.tabs.create({ url: appUrl });
+  return { ok: true };
+}
+
 export async function flushActiveSession(): Promise<void> {
   const session = await getActiveSession();
   if (!session) return;
 
   const result = await flushQueue(session);
+  if (result.sessionClosed) {
+    await clearActiveSession();
+    await clearAlarms();
+    await broadcastToFocusOS({
+      type: EVENT_TYPES.disconnected,
+      payload: { sessionId: session.sessionId },
+    });
+    return;
+  }
+
   await saveActiveSession({
     ...session,
     lastSyncAt: result.ok ? new Date().toISOString() : session.lastSyncAt,
@@ -202,13 +249,39 @@ export async function flushActiveSession(): Promise<void> {
 export async function heartbeat(): Promise<{
   installed: boolean;
   connected: boolean;
+  backendConnected: boolean;
   version: string;
   timestamp: number;
 }> {
   const session = await getActiveSession();
+  if (!session) {
+    return {
+      installed: true,
+      connected: false,
+      backendConnected: false,
+      version: VERSION,
+      timestamp: Date.now(),
+    };
+  }
+
+  const result = await sendHeartbeat(
+    session.backendApiUrl,
+    VERSION,
+    session.sessionId,
+    session.extensionToken
+  );
+  const now = new Date().toISOString();
+  await saveActiveSession({
+    ...session,
+    backendConnected: result.ok ? Boolean(result.data?.connected) : false,
+    lastBackendHeartbeatAt: result.ok ? (result.data?.last_seen ?? now) : session.lastBackendHeartbeatAt,
+    lastError: result.ok ? undefined : result.error,
+  });
+
   return {
     installed: true,
-    connected: Boolean(session),
+    connected: true,
+    backendConnected: result.ok ? Boolean(result.data?.connected) : false,
     version: VERSION,
     timestamp: Date.now(),
   };
@@ -224,6 +297,8 @@ export async function getSnapshot(): Promise<ExtensionSnapshot> {
     activeSession: session,
     pendingEvents: queue.length,
     lastSyncAt: session?.lastSyncAt,
+    backendConnected: session?.backendConnected,
+    lastBackendHeartbeatAt: session?.lastBackendHeartbeatAt,
     lastError: session?.lastError,
     currentDomain: session?.currentTab?.domain,
     currentTitle: session?.currentTab?.title,
@@ -255,6 +330,12 @@ export async function handleRuntimeMessage(
     }
     case "BLACKLIST_SYNC":
       return syncBlacklist(message.payload);
+    case "LANGUAGE_SYNC":
+      return syncLanguage(message.payload);
+    case "BLACKLIST_RETURN_TO_FOCUS":
+      return focusApp(message.payload);
+    case "BLACKLIST_OVERLAY_DISMISSED":
+      return { ok: true };
     case "GET_STATUS":
       return getSnapshot();
     default:

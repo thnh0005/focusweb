@@ -9,6 +9,7 @@ class Notification(models.Model):
         SESSION_REMINDER = "session_reminder", "Session reminder"
         WEEKLY_SUMMARY = "weekly_summary", "Weekly summary"
         DEEP_WORK_SUGGESTION = "deep_work_suggestion", "Deep work suggestion"
+        DOCUMENT_AI_COMPLETED = "document_ai_completed", "Document AI completed"
         TEST = "test", "Test"
 
     class Status(models.TextChoices):
@@ -49,4 +50,3 @@ class Notification(models.Model):
 
     def __str__(self):
         return f"{self.user_id}: {self.notification_type}"
-

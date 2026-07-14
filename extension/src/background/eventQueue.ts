@@ -57,10 +57,22 @@ export async function flushQueue(
   const result = await sendEventBatch(
     session.backendApiUrl,
     session.sessionId,
-    batch.map(toBackendEvent)
+    batch.map(toBackendEvent),
+    session.extensionToken
   );
 
   if (!result.ok) {
+    if (result.sessionClosed) {
+      const retained = queue.filter((event) => event.sessionId !== session.sessionId);
+      await replaceQueue(retained);
+      return {
+        ok: false,
+        sent: 0,
+        retained: retained.length,
+        error: result.error,
+        sessionClosed: true,
+      };
+    }
     return {
       ok: false,
       sent: 0,

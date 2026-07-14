@@ -3,6 +3,7 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { ShieldAlert, ArrowLeft, CheckCircle2, Lock } from "lucide-react";
 import { authApi } from "@/services/auth.api";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,7 @@ export interface ResetPasswordFormProps {
 }
 
 export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
+  const { t } = useTranslation("auth");
   const [password, setPassword] = React.useState("");
   const [passwordConfirm, setPasswordConfirm] = React.useState("");
   const [isLoading, setIsLoading] = React.useState(false);
@@ -32,23 +34,23 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
     let isValid = true;
 
     if (!token) {
-      setSubmitError("Reset token is missing or expired. Please request another link.");
+      setSubmitError(t("errors.missingToken"));
       return false;
     }
 
     if (!password) {
-      setPasswordError("New password is required");
+      setPasswordError(t("validation.newPasswordRequired"));
       isValid = false;
     } else if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters");
+      setPasswordError(t("validation.passwordMin6"));
       isValid = false;
     }
 
     if (!passwordConfirm) {
-      setConfirmError("Please confirm your new password");
+      setConfirmError(t("validation.confirmNewPasswordRequired"));
       isValid = false;
     } else if (password !== passwordConfirm) {
-      setConfirmError("Passwords do not match");
+      setConfirmError(t("validation.passwordMismatch"));
       isValid = false;
     }
 
@@ -64,9 +66,8 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
       await authApi.confirmPasswordReset(token, password, passwordConfirm);
       setIsSuccess(true);
       setIsLoading(false);
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Failed to reset password. The link may have expired.";
-      setSubmitError(errorMsg);
+    } catch {
+      setSubmitError(t("errors.resetFailed"));
       setIsLoading(false);
     }
   };
@@ -84,15 +85,15 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
               <ShieldAlert className="h-6 w-6 stroke-[1.5]" />
             </div>
             <CardTitle className="text-2xl font-light tracking-wide text-text-primary mt-2">
-              Invalid Token
+              {t("resetPassword.invalidTitle")}
             </CardTitle>
             <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-              No reset token was found in the URL.
+              {t("resetPassword.invalidDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-text-muted font-light leading-relaxed">
-              Password reset actions require a unique, secure token. Please request a new recovery link from the Forgot Password page.
+              {t("resetPassword.invalidNote")}
             </p>
           </CardContent>
           <CardFooter className="flex justify-center border-t border-white/[0.05] pt-4 mt-2">
@@ -101,7 +102,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
               className="text-xs text-focus-purple hover:text-focus-purple/80 transition-colors font-medium flex items-center gap-1.5"
             >
               <ArrowLeft className="h-3.5 w-3.5 stroke-[1.5]" />
-              <span>Back to Reset Password</span>
+              <span>{t("resetPassword.backToReset")}</span>
             </Link>
           </CardFooter>
         </Card>
@@ -122,15 +123,15 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
               <CheckCircle2 className="h-6 w-6 stroke-[1.5]" />
             </div>
             <CardTitle className="text-2xl font-light tracking-wide text-text-primary mt-2">
-              Password Updated
+              {t("resetPassword.successTitle")}
             </CardTitle>
             <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-              Your credentials have been successfully updated
+              {t("resetPassword.successDescription")}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <p className="text-xs text-text-muted font-light leading-relaxed">
-              Your password has been changed. You can now use your new credentials to sign in and enter your FocusOS sanctuary.
+              {t("resetPassword.successNote")}
             </p>
           </CardContent>
           <CardFooter className="flex justify-center border-t border-white/[0.05] pt-4 mt-2">
@@ -139,7 +140,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
               className="text-xs text-focus-purple hover:text-focus-purple/80 transition-colors font-medium flex items-center gap-1.5"
             >
               <ArrowLeft className="h-3.5 w-3.5 stroke-[1.5]" />
-              <span>Sign In with New Password</span>
+              <span>{t("resetPassword.signInNewPassword")}</span>
             </Link>
           </CardFooter>
         </Card>
@@ -159,10 +160,10 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
             <Lock className="h-6 w-6 stroke-[1.5]" />
           </div>
           <CardTitle className="text-2xl font-light tracking-wide text-text-primary mt-2">
-            Set New Password
+            {t("resetPassword.title")}
           </CardTitle>
           <CardDescription className="text-text-muted text-sm font-light leading-relaxed">
-            Enter your new credentials below to secure your account
+            {t("resetPassword.description")}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -178,8 +179,8 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
             
             <Input
               type="password"
-              label="New Password"
-              placeholder="Min. 6 characters"
+              label={t("resetPassword.newPasswordLabel")}
+              placeholder={t("resetPassword.newPasswordPlaceholder")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={passwordError}
@@ -190,8 +191,8 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
 
             <Input
               type="password"
-              label="Confirm New Password"
-              placeholder="Re-enter your new password"
+              label={t("resetPassword.confirmPasswordLabel")}
+              placeholder={t("resetPassword.confirmPasswordPlaceholder")}
               value={passwordConfirm}
               onChange={(e) => setPasswordConfirm(e.target.value)}
               error={confirmError}
@@ -210,10 +211,10 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
               {isLoading ? (
                 <>
                   <Spinner className="h-4 w-4 text-primary-foreground" />
-                  <span>Saving new password...</span>
+                  <span>{t("resetPassword.submitting")}</span>
                 </>
               ) : (
-                <span>Update Password</span>
+                <span>{t("resetPassword.submit")}</span>
               )}
             </Button>
           </form>
@@ -224,7 +225,7 @@ export function ResetPasswordForm({ token }: ResetPasswordFormProps) {
             className="text-xs text-text-muted hover:text-text-secondary transition-colors font-light flex items-center gap-1.5"
           >
             <ArrowLeft className="h-3.5 w-3.5 stroke-[1.5]" />
-            <span>Cancel and return to Sign In</span>
+            <span>{t("resetPassword.cancel")}</span>
           </Link>
         </CardFooter>
       </Card>

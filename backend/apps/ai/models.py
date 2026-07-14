@@ -1,6 +1,7 @@
 import uuid
 
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db import models
 from django.utils import timezone
 
@@ -146,6 +147,244 @@ class StudyDocument(models.Model):
     def __str__(self):
         return self.original_name
 
+    def delete(self, *args, **kwargs):
+        source_path = ((self.metadata or {}).get("source_file") or {}).get("path")
+        super().delete(*args, **kwargs)
+        if source_path and default_storage.exists(source_path):
+            default_storage.delete(source_path)
+
+
+class AITokenCalibration(models.Model):
+    provider = models.CharField(max_length=64)
+    model = models.CharField(max_length=160)
+    operation = models.CharField(max_length=64)
+    prompt_version = models.CharField(max_length=64)
+    sample_count = models.PositiveIntegerField(default=0)
+    p95_ratio = models.FloatField(default=1.0)
+    fixed_overhead_tokens = models.PositiveIntegerField(default=0)
+    window_size = models.PositiveIntegerField(default=200)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["provider", "model", "operation", "prompt_version"],
+                name="unique_ai_token_calibration_scope",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["provider", "model", "operation", "prompt_version"]),
+        ]
+
+
+class AIRequestUsage(models.Model):
+    class Status(models.TextChoices):
+        STARTED = "started", "Started"
+        COMPLETED = "completed", "Completed"
+        FAILED = "failed", "Failed"
+        REJECTED = "rejected", "Rejected"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job_id = models.CharField(max_length=100, blank=True)
+    document = models.ForeignKey(
+        StudyDocument,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ai_request_usages",
+    )
+    chunk_id = models.CharField(max_length=100, blank=True)
+    provider = models.CharField(max_length=64)
+    model = models.CharField(max_length=160)
+    operation = models.CharField(max_length=64)
+    prompt_version = models.CharField(max_length=64)
+    payload_hash = models.CharField(max_length=64)
+    tokenizer_name = models.CharField(max_length=200)
+    local_prompt_tokens = models.PositiveIntegerField(default=0)
+    calibration_ratio = models.FloatField(default=1.0)
+    fixed_overhead_tokens = models.PositiveIntegerField(default=0)
+    calibrated_prompt_tokens = models.PositiveIntegerField(default=0)
+    reserved_output_tokens = models.PositiveIntegerField(default=0)
+    estimated_total_tokens = models.PositiveIntegerField(default=0)
+    actual_prompt_tokens = models.PositiveIntegerField(null=True, blank=True)
+    actual_completion_tokens = models.PositiveIntegerField(null=True, blank=True)
+    actual_total_tokens = models.PositiveIntegerField(null=True, blank=True)
+    ratio = models.FloatField(null=True, blank=True)
+    difference_tokens = models.IntegerField(null=True, blank=True)
+    status = models.CharField(
+        max_length=16,
+        choices=Status.choices,
+        default=Status.STARTED,
+    )
+    attempt = models.PositiveSmallIntegerField(default=1)
+    provider_request_id = models.CharField(max_length=160, blank=True)
+    error_code = models.CharField(max_length=64, blank=True)
+    request_started_at = models.DateTimeField(null=True, blank=True)
+    request_completed_at = models.DateTimeField(null=True, blank=True)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["provider", "model", "operation", "prompt_version", "created_at"]),
+            models.Index(fields=["job_id", "created_at"]),
+            models.Index(fields=["document", "created_at"]),
+            models.Index(fields=["status"]),
+        ]
+
+
+class AITokenCalibrationSample(models.Model):
+    calibration = models.ForeignKey(
+        AITokenCalibration,
+        on_delete=models.CASCADE,
+        related_name="samples",
+    )
+    usage = models.OneToOneField(
+        AIRequestUsage,
+        on_delete=models.CASCADE,
+        related_name="calibration_sample",
+    )
+    local_prompt_tokens = models.PositiveIntegerField()
+    actual_prompt_tokens = models.PositiveIntegerField()
+    ratio = models.FloatField()
+    difference_tokens = models.IntegerField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        indexes = [
+            models.Index(fields=["calibration", "created_at"]),
+        ]
+
+
+class DocumentAIJob(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        EXTRACTING = "EXTRACTING", "Extracting"
+        CHUNKING = "CHUNKING", "Chunking"
+        PROCESSING_CHUNKS = "PROCESSING_CHUNKS", "Processing chunks"
+        REDUCING = "REDUCING", "Reducing"
+        GENERATING_SUMMARY = "GENERATING_SUMMARY", "Generating summary"
+        GENERATING_FLASHCARDS = "GENERATING_FLASHCARDS", "Generating flashcards"
+        FINALIZING = "FINALIZING", "Finalizing"
+        COMPLETED = "COMPLETED", "Completed"
+        FAILED = "FAILED", "Failed"
+        CANCELLED = "CANCELLED", "Cancelled"
+
+    class NotificationStatus(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        SENT = "SENT", "Sent"
+        SKIPPED = "SKIPPED", "Skipped"
+
+    TERMINAL_STATUSES = {Status.COMPLETED, Status.FAILED, Status.CANCELLED}
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    document = models.OneToOneField(
+        StudyDocument,
+        on_delete=models.CASCADE,
+        related_name="ai_job",
+    )
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.CASCADE,
+        related_name="document_ai_jobs",
+    )
+    status = models.CharField(max_length=32, choices=Status.choices, default=Status.PENDING)
+    current_operation = models.CharField(max_length=64, blank=True)
+    current_chunk_index = models.PositiveSmallIntegerField(default=0)
+    total_chunks = models.PositiveSmallIntegerField(default=0)
+    completed_chunks = models.PositiveSmallIntegerField(default=0)
+    rolling_context_summary = models.TextField(blank=True)
+    entity_memory_json = models.JSONField(default=dict, blank=True)
+    open_context_json = models.JSONField(default=list, blank=True)
+    chunk_summaries_json = models.JSONField(default=list, blank=True)
+    flashcard_candidates_json = models.JSONField(default=list, blank=True)
+    last_ai_request_at = models.DateTimeField(null=True, blank=True)
+    next_ai_request_at = models.DateTimeField(null=True, blank=True)
+    summary_status = models.CharField(max_length=32, default="pending")
+    flashcard_status = models.CharField(max_length=32, default="pending")
+    notification_status = models.CharField(
+        max_length=32,
+        choices=NotificationStatus.choices,
+        default=NotificationStatus.PENDING,
+    )
+    summary = models.ForeignKey(
+        "ai.DocumentSummary",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ai_jobs",
+    )
+    flashcard_deck = models.ForeignKey(
+        "ai.FlashcardDeck",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="ai_jobs",
+    )
+    source_checksum = models.CharField(max_length=64, blank=True)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    error_code = models.CharField(max_length=64, blank=True)
+    error_message = models.TextField(blank=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    completed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["user", "created_at"]),
+            models.Index(fields=["document", "status"]),
+            models.Index(fields=["status", "next_ai_request_at"]),
+        ]
+
+
+class DocumentAIChunk(models.Model):
+    class Status(models.TextChoices):
+        PENDING = "PENDING", "Pending"
+        PROCESSING = "PROCESSING", "Processing"
+        COMPLETED = "COMPLETED", "Completed"
+        RETRY_SCHEDULED = "RETRY_SCHEDULED", "Retry scheduled"
+        FAILED = "FAILED", "Failed"
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    job = models.ForeignKey(
+        DocumentAIJob,
+        on_delete=models.CASCADE,
+        related_name="chunks",
+    )
+    chunk_index = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=24, choices=Status.choices, default=Status.PENDING)
+    attempt_count = models.PositiveSmallIntegerField(default=0)
+    text = models.TextField()
+    metadata = models.JSONField(default=dict, blank=True)
+    partial_result = models.JSONField(default=dict, blank=True)
+    updated_context_summary = models.TextField(blank=True)
+    provider_request_usage = models.ForeignKey(
+        AIRequestUsage,
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="document_ai_chunks",
+    )
+    error_code = models.CharField(max_length=64, blank=True)
+    error_message = models.TextField(blank=True)
+    processed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["chunk_index"]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["job", "chunk_index"],
+                name="unique_document_ai_chunk_index",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["job", "status", "chunk_index"]),
+        ]
+
 
 class DocumentSummary(models.Model):
     """Persist document summaries so the API has a stable read contract."""
@@ -271,6 +510,13 @@ class FlashcardDeck(models.Model):
             models.Index(fields=["document", "generated_at"]),
             models.Index(fields=["generation_fingerprint"]),
             models.Index(fields=["document", "status"]),
+        ]
+        constraints = [
+            models.UniqueConstraint(
+                fields=["generation_fingerprint"],
+                condition=~models.Q(generation_fingerprint=""),
+                name="unique_flashcard_generation_fingerprint",
+            ),
         ]
 
     def __str__(self):

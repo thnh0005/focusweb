@@ -1,7 +1,9 @@
 import type { ExtensionSnapshot } from "../../background/types";
+import { translateExtension, type ExtensionLanguage } from "../../i18n";
 
 interface SessionCardProps {
   snapshot: ExtensionSnapshot;
+  language: ExtensionLanguage;
 }
 
 function formatStartedAt(value?: string) {
@@ -12,36 +14,39 @@ function formatStartedAt(value?: string) {
   }).format(new Date(value));
 }
 
-export function SessionCard({ snapshot }: SessionCardProps) {
+export function SessionCard({ snapshot, language }: SessionCardProps) {
   const session = snapshot.activeSession;
+  const modeLabel = session?.mode === "deep-work"
+    ? translateExtension(language, "modeDeepWork")
+    : translateExtension(language, "modeFocus");
 
   return (
     <section className="panel">
       <div className="section-heading">
-        <span className="label">Session</span>
-        {session && <span className="pill">{session.mode}</span>}
+        <span className="label">{translateExtension(language, "session")}</span>
+        {session && <span className="pill">{modeLabel}</span>}
       </div>
 
       {session ? (
         <>
-          <h2>{session.goal || "Focus session"}</h2>
+          <h2>{session.goal || translateExtension(language, "focusSession")}</h2>
           <dl className="details">
             <div>
-              <dt>Started</dt>
+              <dt>{translateExtension(language, "started")}</dt>
               <dd>{formatStartedAt(session.startedAt)}</dd>
             </div>
             <div>
-              <dt>Current</dt>
-              <dd>{snapshot.currentDomain ?? "No trackable tab"}</dd>
+              <dt>{translateExtension(language, "current")}</dt>
+              <dd>{snapshot.currentDomain ?? translateExtension(language, "noTrackableTab")}</dd>
             </div>
             <div>
-              <dt>Switches</dt>
+              <dt>{translateExtension(language, "switches")}</dt>
               <dd>{session.tabSwitchCount}</dd>
             </div>
           </dl>
         </>
       ) : (
-        <p className="muted">Start a FocusOS session and this bridge will begin tracking active-tab context.</p>
+        <p className="muted">{translateExtension(language, "noActiveSession")}</p>
       )}
     </section>
   );

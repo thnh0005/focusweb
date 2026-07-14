@@ -1,4 +1,5 @@
 import React from "react";
+import { useTranslation } from "react-i18next";
 
 interface LoadingStateProps {
   message?: string;
@@ -57,6 +58,8 @@ export function LoadingState({
 }
 
 export function PageLoadingState() {
+  const { t } = useTranslation("common");
+
   return (
     <div className="flex flex-col items-center justify-center min-h-screen gap-4">
       <div className="relative w-16 h-16">
@@ -85,9 +88,9 @@ export function PageLoadingState() {
         </svg>
       </div>
       <div className="text-center">
-        <p className="text-text-primary font-light">Preparing your sanctuary...</p>
+        <p className="text-text-primary font-light">{t("states.pageLoadingTitle")}</p>
         <p className="text-xs text-text-muted font-light mt-2">
-          FocusOS is loading
+          {t("states.pageLoadingDescription")}
         </p>
       </div>
     </div>

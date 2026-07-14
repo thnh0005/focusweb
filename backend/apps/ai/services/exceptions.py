@@ -51,6 +51,33 @@ class AIRateLimited(AIServiceError):
     safe_message = "AI provider rate limit was reached."
 
 
+class AIQuotaDeferred(AIRateLimited):
+    error_code = "AI_QUOTA_DEFERRED"
+    safe_message = "AI provider quota is temporarily reserved by other work."
+
+    def __init__(
+        self,
+        message="",
+        retry_after_seconds=60,
+        provider="",
+        operation="",
+        model="",
+        estimated_tokens=0,
+        remaining_tokens=0,
+        reset_at=None,
+    ):
+        super().__init__(
+            message or self.safe_message,
+            provider=provider,
+            operation=operation,
+        )
+        self.retry_after_seconds = max(1, int(retry_after_seconds or 1))
+        self.model = model
+        self.estimated_tokens = int(estimated_tokens or 0)
+        self.remaining_tokens = int(remaining_tokens or 0)
+        self.reset_at = reset_at
+
+
 class AIProviderUnavailable(AIServiceError):
     error_code = "AI_PROVIDER_UNAVAILABLE"
     retryable = True

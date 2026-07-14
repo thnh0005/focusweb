@@ -1,0 +1,6 @@
+{
+  "required": "Vui lòng nhập trường này.",
+  "invalidEmail": "Email không hợp lệ.",
+  "minLength": "Vui lòng nhập ít nhất {{count}} ký tự.",
+  "maxLength": "Vui lòng nhập tối đa {{count}} ký tự."
+}

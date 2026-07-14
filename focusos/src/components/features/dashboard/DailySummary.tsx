@@ -3,6 +3,7 @@
 import * as React from "react";
 import { motion } from "framer-motion";
 import { Award, Compass } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import type { DashboardStats } from "@/types/analytics.types";
 
@@ -11,6 +12,7 @@ export interface DailySummaryProps {
 }
 
 export function DailySummary({ stats }: DailySummaryProps) {
+  const { t } = useTranslation("dashboard");
   const currentMinutes = stats?.totalFocusMinutes ?? 0;
   const dailyTargetMinutes = 90; // Default daily focus target
   const percentComplete = Math.min(100, Math.round((currentMinutes / dailyTargetMinutes) * 100));
@@ -28,10 +30,10 @@ export function DailySummary({ stats }: DailySummaryProps) {
     >
       <CardHeader className="p-5 pb-3">
         <CardTitle className="text-base font-light tracking-wide text-text-primary">
-          Daily Summary
+          {t("dailySummary.title")}
         </CardTitle>
         <CardDescription className="text-text-muted text-xs font-light">
-          Track today&apos;s deep work focus achievements
+          {t("dailySummary.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 pt-0 flex-1 flex flex-col items-center justify-center gap-6">
@@ -66,7 +68,7 @@ export function DailySummary({ stats }: DailySummaryProps) {
               {percentComplete}%
             </span>
             <span className="text-[9px] text-text-muted font-light tracking-wider uppercase select-none">
-              Of Target
+              {t("dailySummary.ofTarget")}
             </span>
           </div>
         </div>
@@ -76,7 +78,7 @@ export function DailySummary({ stats }: DailySummaryProps) {
           <div className="flex justify-between items-center text-xs font-light border-b border-white/[0.04] pb-2">
             <span className="text-text-secondary flex items-center gap-1.5">
               <Compass className="h-3.5 w-3.5 text-focus-purple stroke-[1.5]" />
-              <span>Minutes Focus</span>
+              <span>{t("dailySummary.minutesFocus")}</span>
             </span>
             <span className="font-mono text-text-primary">
               {currentMinutes} / {dailyTargetMinutes}m
@@ -86,7 +88,7 @@ export function DailySummary({ stats }: DailySummaryProps) {
           <div className="flex justify-between items-center text-xs font-light">
             <span className="text-text-secondary flex items-center gap-1.5">
               <Award className="h-3.5 w-3.5 text-urgency-amber stroke-[1.5]" />
-              <span>Completion Rate</span>
+              <span>{t("dailySummary.completionRate")}</span>
             </span>
             <span className="font-mono text-text-primary">
               {stats?.completionRate ? `${Math.round(stats.completionRate)}%` : "0%"}
@@ -95,8 +97,8 @@ export function DailySummary({ stats }: DailySummaryProps) {
 
           <p className="text-[10px] text-text-muted font-light text-center leading-relaxed pt-1">
             {percentComplete >= 100
-              ? "Daily focus goal fully complete! Excellent mindfulness."
-              : `Focus for ${dailyTargetMinutes - currentMinutes} more minutes today to lock in your daily target.`}
+              ? t("dailySummary.complete")
+              : t("dailySummary.remaining", { count: dailyTargetMinutes - currentMinutes })}
           </p>
         </div>
       </CardContent>

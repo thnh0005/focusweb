@@ -10,7 +10,9 @@ import {
   Moon,
   TrainFront,
   Trees,
+  X,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { FOCUS_SCENES, type FocusScene } from "@/constants/focus-scenes";
 import { cn } from "@/lib/utils/cn";
 import { useMusicStore } from "@/stores/music.store";
@@ -27,9 +29,11 @@ const sceneIcons: Record<FocusScene["id"], React.ComponentType<{ className?: str
 export interface SceneSwitcherProps {
   className?: string;
   mode?: "fixed" | "inline";
+  onClose?: () => void;
 }
 
-export function SceneSwitcher({ className, mode = "fixed" }: SceneSwitcherProps) {
+export function SceneSwitcher({ className, mode = "fixed", onClose }: SceneSwitcherProps) {
+  const { t } = useTranslation("dashboard");
   const currentSceneId = useMusicStore((state) => state.currentSceneId);
   const setCurrentSceneId = useMusicStore((state) => state.setCurrentSceneId);
 
@@ -38,20 +42,34 @@ export function SceneSwitcher({ className, mode = "fixed" }: SceneSwitcherProps)
       className={cn(
         "rounded-[1.6rem] border border-white/[0.14] bg-black/35 p-3 text-text-primary shadow-glass backdrop-blur-2xl",
         mode === "fixed" &&
-          "fixed right-4 top-24 z-30 hidden max-h-[calc(100dvh-7rem)] w-[20rem] overflow-y-auto xl:block 2xl:right-8",
+          "fixed inset-x-3 bottom-24 z-30 max-h-[calc(100dvh-8rem)] overflow-y-auto md:inset-x-auto md:bottom-auto md:right-4 md:top-24 md:w-[20rem] 2xl:right-8",
         mode === "inline" && "w-full",
         className
       )}
-      aria-label="Choose focus scene"
+      aria-label={t("focusHome.sceneSwitcher.aria")}
     >
-      <div className="mb-3 px-1">
-        <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-text-muted">
-          Study room
-        </p>
-        <h2 className="mt-1 text-lg font-light text-text-primary">Choose your scene</h2>
-        <p className="mt-1 text-xs leading-relaxed text-text-secondary">
-          Switch scene instantly. Music and ambient mix follow the selected room.
-        </p>
+      <div className="mb-3 flex items-start justify-between gap-3 px-1">
+        <div>
+          <p className="text-[10px] font-mono uppercase tracking-[0.22em] text-text-muted">
+            {t("focusHome.sceneSwitcher.eyebrow")}
+          </p>
+          <h2 className="mt-1 text-lg font-light text-text-primary">
+            {t("focusHome.sceneSwitcher.title")}
+          </h2>
+          <p className="mt-1 text-xs leading-relaxed text-text-secondary">
+            {t("focusHome.sceneSwitcher.description")}
+          </p>
+        </div>
+        {onClose && (
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-muted transition-colors hover:bg-white/[0.08] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            aria-label={t("focusHome.sceneSwitcher.close")}
+          >
+            <X className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
+          </button>
+        )}
       </div>
 
       <div className="grid gap-2.5">
@@ -94,13 +112,15 @@ export function SceneSwitcher({ className, mode = "fixed" }: SceneSwitcherProps)
                   <Icon className="h-4.5 w-4.5 stroke-[1.6]" aria-hidden="true" />
                 </span>
                 <span className="rounded-full border border-white/10 bg-black/30 px-2 py-1 text-[10px] text-text-muted backdrop-blur-md">
-                  {scene.ambientLabel}
+                  {t(`focusHome.scenes.${scene.id}.ambientLabel`)}
                 </span>
               </div>
 
               <div className="relative mt-3">
                 <div className="flex items-center gap-2">
-                  <p className="text-sm font-medium text-text-primary">{scene.name}</p>
+                  <p className="text-sm font-medium text-text-primary">
+                    {t(`focusHome.scenes.${scene.id}.name`)}
+                  </p>
                   {isActive && (
                     <span className="flex h-5 w-5 items-center justify-center rounded-full bg-white/15 text-text-primary backdrop-blur-md">
                       <Check className="h-3 w-3 stroke-[1.8]" aria-hidden="true" />
@@ -108,7 +128,7 @@ export function SceneSwitcher({ className, mode = "fixed" }: SceneSwitcherProps)
                   )}
                 </div>
                 <p className="mt-1 line-clamp-2 text-[11px] leading-relaxed text-text-secondary">
-                  {scene.description}
+                  {t(`focusHome.scenes.${scene.id}.description`)}
                 </p>
               </div>
             </button>

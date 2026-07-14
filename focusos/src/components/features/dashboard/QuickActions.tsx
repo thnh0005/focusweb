@@ -3,31 +3,33 @@
 import * as React from "react";
 import Link from "next/link";
 import { Play, Upload, ShieldAlert } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/Card";
 import { cn } from "@/lib/utils/cn";
 
 export function QuickActions() {
+  const { t } = useTranslation("dashboard");
   const actions = [
     {
       id: "start-session",
-      label: "Start Focus Session",
-      description: "Launch a deep work blocks countdown timer",
-      href: "/session",
+      label: t("quickActions.startSession"),
+      description: t("quickActions.startSessionDescription"),
+      href: "/dashboard",
       icon: Play,
       colorClass: "bg-focus-purple/10 text-focus-purple border-focus-purple/20 hover:bg-focus-purple/15",
     },
     {
       id: "upload-doc",
-      label: "Upload Study Materials",
-      description: "Convert textbook chapters to flashcards & summaries",
+      label: t("quickActions.uploadDoc"),
+      description: t("quickActions.uploadDocDescription"),
       href: "/study-tools",
       icon: Upload,
       colorClass: "bg-blue-500/10 text-blue-400 border-blue-500/20 hover:bg-blue-500/15",
     },
     {
       id: "blacklist",
-      label: "Blacklist Manager",
-      description: "Restrict distracting websites during active session",
+      label: t("quickActions.blacklist"),
+      description: t("quickActions.blacklistDescription"),
       href: "/settings/blacklist",
       icon: ShieldAlert,
       colorClass: "bg-urgency-amber/10 text-urgency-amber border-urgency-amber/20 hover:bg-urgency-amber/15",
@@ -41,10 +43,10 @@ export function QuickActions() {
     >
       <CardHeader className="p-5 pb-3">
         <CardTitle className="text-base font-light tracking-wide text-text-primary">
-          Quick Actions
+          {t("quickActions.title")}
         </CardTitle>
         <CardDescription className="text-text-muted text-xs font-light">
-          Sanctuary controls for immediate deep work blocks
+          {t("quickActions.description")}
         </CardDescription>
       </CardHeader>
       <CardContent className="p-5 pt-0 flex-1 flex flex-col justify-center gap-3">

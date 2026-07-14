@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 import { motion, useReducedMotion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { readOnboardingDraft, saveOnboardingDraft } from "@/lib/onboarding/storage";
 import { Button } from "@/components/ui/Button";
 
@@ -10,21 +11,19 @@ const durations = [
   {
     id: "25",
     label: "25 min",
-    description: "A short reset for starting, reviewing, or warming up.",
   },
   {
     id: "50",
     label: "50 min",
-    description: "A steady default for reading, coding, or deep study.",
   },
   {
     id: "90",
     label: "90 min",
-    description: "A longer block for work that needs full immersion.",
   },
 ];
 
 export default function OnboardingDurationPage() {
+  const { t } = useTranslation("onboarding");
   const router = useRouter();
   const reduceMotion = useReducedMotion();
   const [selected, setSelected] = React.useState<string>(() => {
@@ -48,8 +47,8 @@ export default function OnboardingDurationPage() {
     >
       <div className="space-y-3">
         <div className="flex items-center justify-between gap-4 text-xs text-text-muted">
-          <span>Step 2 of 3</span>
-          <span>Session rhythm</span>
+          <span>{t("progress", { current: 2, total: 3 })}</span>
+          <span>{t("duration.context")}</span>
         </div>
         <div className="h-1 overflow-hidden rounded-full bg-white/10">
           <div className="h-full w-2/3 rounded-full bg-focus-green transition-all duration-300" />
@@ -58,10 +57,10 @@ export default function OnboardingDurationPage() {
 
       <div className="space-y-3">
         <h1 className="font-display text-3xl font-light leading-tight text-text-primary sm:text-4xl">
-          How long should your default focus room stay open?
+          {t("duration.title")}
         </h1>
         <p className="max-w-[54ch] text-sm leading-6 text-text-secondary sm:text-base">
-          This becomes the first timer suggestion. You can still adjust every session later.
+          {t("duration.description")}
         </p>
       </div>
 
@@ -85,7 +84,7 @@ export default function OnboardingDurationPage() {
                   {duration.label}
                 </span>
                 <span className="mt-1 block max-w-[38ch] text-sm leading-6 text-text-secondary">
-                  {duration.description}
+                  {t(`duration.options.${duration.id}`)}
                 </span>
               </span>
               <span
@@ -107,10 +106,10 @@ export default function OnboardingDurationPage() {
           className="h-12 rounded-2xl"
           onClick={() => router.back()}
         >
-          Back
+          {t("actions.back")}
         </Button>
         <Button onClick={handleContinue} className="h-12 rounded-2xl">
-          Next
+          {t("actions.next")}
         </Button>
       </div>
     </motion.div>

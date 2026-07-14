@@ -1,22 +1,26 @@
 "use client";
 
 import * as React from "react";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Clock, Download, Layers3, RefreshCw, Sparkles, Target } from "lucide-react";
-import { analyticsApi } from "@/services/analytics.api";
-import { AmbientScene } from "@/components/ambient/AmbientScene";
+import { ArrowLeft, BarChart3, Clock, Download, Layers3, RefreshCw, Sparkles, Target } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { AmbientWorkspaceBackground } from "@/components/focus-home";
+import { DistractionSourcesChart } from "@/components/features/analytics/DistractionSourcesChart";
+import { FocusTrendChart } from "@/components/features/analytics/FocusTrendChart";
+import { SessionBreakdownChart } from "@/components/features/analytics/SessionBreakdownChart";
+import { TimeHeatmap } from "@/components/features/analytics/TimeHeatmap";
+import { WeeklyProgressSnapshot } from "@/components/features/analytics/WeeklyProgressSnapshot";
 import { Button } from "@/components/ui/Button";
-import { Card } from "@/components/ui/Card";
 import { Spinner } from "@/components/ui/Spinner";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/Tabs";
-import { FocusTrendChart } from "@/components/features/analytics/FocusTrendChart";
-import { DistractionSourcesChart } from "@/components/features/analytics/DistractionSourcesChart";
-import { TimeHeatmap } from "@/components/features/analytics/TimeHeatmap";
-import { SessionBreakdownChart } from "@/components/features/analytics/SessionBreakdownChart";
-import { WeeklyProgressSnapshot } from "@/components/features/analytics/WeeklyProgressSnapshot";
+import { cn } from "@/lib/utils/cn";
+import { analyticsApi } from "@/services/analytics.api";
 import type { DateRange, ReportExportFormat, ReportExportJob } from "@/types/analytics.types";
 
 export default function AnalyticsPage() {
+  const { t } = useTranslation("analytics");
+  const router = useRouter();
   const [dateRange, setDateRange] = React.useState<DateRange>("7d");
   const [exportFormat, setExportFormat] = React.useState<ReportExportFormat>("json");
   const [isExporting, setIsExporting] = React.useState(false);
@@ -61,6 +65,7 @@ export default function AnalyticsPage() {
     totalSessions > 0
       ? Math.round(((stats?.deepWorkSessionCount ?? 0) / totalSessions) * 100)
       : 0;
+  const averageFocusScore = Math.round(stats?.averageFocusScore ?? 0);
 
   const trendData =
     focusTrend?.dataPoints.map((point) => ({
@@ -85,7 +90,12 @@ export default function AnalyticsPage() {
         lastWeekScore: weeklySnapshot.lastWeek.averageFocusScore ?? 0,
         thisWeekDeepWork: weeklySnapshot.thisWeek.deepWorkCount,
         lastWeekDeepWork: weeklySnapshot.lastWeek.deepWorkCount,
-        aiRecommendation: weeklySnapshot.aiRecommendation ?? "",
+        aiRecommendation:
+          weeklySnapshot.aiRecommendation ??
+          weeklySnapshot.recommendations?.[0]?.message ??
+          weeklySnapshot.recommendations?.[0]?.title ??
+          "",
+        recommendationReasonCode: weeklySnapshot.recommendations?.[0]?.reason_code,
       }
     : null;
 
@@ -102,9 +112,9 @@ export default function AnalyticsPage() {
       });
       setExportJob(job);
       handleReportDownload(job);
-      setExportMessage(statusMessage(job));
+      setExportMessage(statusMessage(job, t));
     } catch (error) {
-      setExportError(getErrorMessage(error, "Could not create report export"));
+      setExportError(getErrorMessage(error, t("errors.exportCreate")));
     } finally {
       setIsExporting(false);
     }
@@ -119,9 +129,9 @@ export default function AnalyticsPage() {
       const job = await analyticsApi.getReportExportJob(exportJob.jobId);
       setExportJob(job);
       handleReportDownload(job);
-      setExportMessage(statusMessage(job));
+      setExportMessage(statusMessage(job, t));
     } catch (error) {
-      setExportError(getErrorMessage(error, "Could not refresh export status"));
+      setExportError(getErrorMessage(error, t("errors.exportRefresh")));
     } finally {
       setIsRefreshingExport(false);
     }
@@ -129,125 +139,148 @@ export default function AnalyticsPage() {
 
   if (isLoading) {
     return (
-      <AmbientScene variant="minimal" intensity="low" className="min-h-[60dvh] rounded-[2rem]">
-        <div className="flex min-h-[420px] flex-col items-center justify-center gap-4 px-4 text-center">
+      <AmbientWorkspaceBackground className="min-h-[100dvh]">
+        <div className="flex min-h-[100dvh] flex-col items-center justify-center gap-4 px-4 text-center">
           <div className="glass-panel flex h-20 w-20 items-center justify-center rounded-3xl">
             <Spinner className="h-7 w-7 text-primary" />
           </div>
-          <p className="text-sm text-text-muted">Loading focus reflection</p>
+          <p className="text-sm text-text-muted">{t("loading")}</p>
         </div>
-      </AmbientScene>
+      </AmbientWorkspaceBackground>
     );
   }
 
   return (
-    <AmbientScene variant="forest" intensity="low" className="rounded-[2rem]">
-      <main className="space-y-8 p-4 sm:p-6 lg:p-8">
-        <header className="flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="text-sm text-text-muted">Analytics</p>
-            <h1 className="mt-2 text-4xl font-light leading-tight text-text-primary sm:text-5xl">
-              Focus reflection
-            </h1>
-            <p className="mt-3 max-w-[42rem] text-sm font-light leading-relaxed text-text-secondary">
-              Patterns from recent sessions, softened into signals you can act on.
-            </p>
+    <AmbientWorkspaceBackground className="min-h-[100dvh]">
+      <main className="mx-auto flex h-[100dvh] w-full max-w-[1480px] flex-col gap-4 overflow-hidden px-4 py-4 sm:px-5 lg:px-6">
+        <section className="min-w-0 shrink-0 rounded-[1.75rem] border border-white/10 bg-[rgb(10_13_10/0.58)] p-4 shadow-[0_24px_90px_rgba(0,0,0,0.38)] backdrop-blur-2xl sm:p-5">
+          <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between" aria-label={t("title")}>
+            <div className="flex min-w-0 items-center gap-2">
+              <button
+                type="button"
+                onClick={() => router.push("/dashboard")}
+                className="inline-flex h-8 items-center gap-2 rounded-full border border-white/10 bg-white/[0.045] px-3 text-xs text-text-secondary transition-all duration-fast hover:bg-white/[0.08] hover:text-text-primary active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                aria-label={t("backHome")}
+              >
+                <ArrowLeft className="h-3.5 w-3.5 stroke-[1.6]" aria-hidden="true" />
+                {t("backHome")}
+              </button>
+              <span className="w-fit rounded-full border border-white/10 bg-white/[0.04] px-3 py-1 text-xs text-text-muted">
+                {t("title")}
+              </span>
+            </div>
+            <Tabs
+              value={dateRange}
+              onValueChange={(value) => {
+                if (value === "7d" || value === "30d" || value === "all") {
+                  setDateRange(value);
+                  if (value === "all" && exportFormat === "pdf") {
+                    setExportFormat("json");
+                  }
+                }
+              }}
+              className="w-full sm:w-auto"
+            >
+              <TabsList className="grid w-full grid-cols-3 rounded-full border border-white/10 bg-white/[0.045] p-1 backdrop-blur-xl sm:w-[330px]">
+                <TabsTrigger value="7d" className="rounded-full">{t("ranges.7d")}</TabsTrigger>
+                <TabsTrigger value="30d" className="rounded-full">{t("ranges.30d")}</TabsTrigger>
+                <TabsTrigger value="all" className="rounded-full">{t("ranges.all")}</TabsTrigger>
+              </TabsList>
+            </Tabs>
           </div>
 
-          <Tabs
-            value={dateRange}
-            onValueChange={(value) => {
-              if (value === "7d" || value === "30d" || value === "all") {
-                setDateRange(value);
-                if (value === "all" && exportFormat === "pdf") {
-                  setExportFormat("json");
-                }
-              }
-            }}
-            className="w-full sm:w-auto"
-          >
-            <TabsList className="grid w-full grid-cols-3 rounded-full border border-white/10 bg-white/[0.045] p-1 sm:w-[330px]">
-              <TabsTrigger value="7d" className="rounded-full">7 days</TabsTrigger>
-              <TabsTrigger value="30d" className="rounded-full">30 days</TabsTrigger>
-              <TabsTrigger value="all" className="rounded-full">All time</TabsTrigger>
-            </TabsList>
-          </Tabs>
-        </header>
+          <div className="grid min-w-0 gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,320px)] xl:items-stretch">
+            <div className="min-w-0 flex flex-col justify-between">
+              <div>
+                <h1 className="max-w-3xl text-balance text-3xl font-light leading-tight text-text-primary sm:text-4xl">
+                  {t("headline")}
+                </h1>
+                <p className="mt-3 max-w-[42rem] text-sm font-light leading-relaxed text-text-secondary">
+                  {t("description")}
+                </p>
+              </div>
+
+              <section className="mt-4 grid min-w-0 gap-2 sm:grid-cols-2 xl:grid-cols-4" aria-label={t("metrics.top")}>
+                <QuietStat icon={Clock} label={t("metrics.totalFocusHours")} value={`${Math.round((stats?.totalFocusMinutes ?? 0) / 60)}h`} />
+                <QuietStat icon={Target} label={t("metrics.averageScore")} value={`${averageFocusScore}%`} />
+                <QuietStat icon={BarChart3} label={t("metrics.sessions")} value={totalSessions} />
+                <QuietStat icon={Layers3} label={t("metrics.deepWorkShare")} value={`${deepWorkPercent}%`} />
+              </section>
+            </div>
+
+            <ReportExportPanel
+              dateRange={dateRange}
+              format={exportFormat}
+              onFormatChange={setExportFormat}
+              onExport={handleExport}
+              onRefresh={refreshExportJob}
+              isExporting={isExporting}
+              isRefreshing={isRefreshingExport}
+              job={exportJob}
+              error={exportError}
+              message={exportMessage}
+            />
+          </div>
+        </section>
 
         {statsError && (
-          <Card className="rounded-3xl border-urgency-amber/25 bg-urgency-amber/10 p-5">
+          <AnalyticsPanel className="mt-5 border-urgency-amber/25 bg-urgency-amber/10">
             <p className="text-sm text-urgency-amber">
-              Analytics could not refresh. Existing charts will reappear once the connection recovers.
+              {t("errors.load")}
             </p>
-          </Card>
+          </AnalyticsPanel>
         )}
 
-        <ReportExportPanel
-          dateRange={dateRange}
-          format={exportFormat}
-          onFormatChange={setExportFormat}
-          onExport={handleExport}
-          onRefresh={refreshExportJob}
-          isExporting={isExporting}
-          isRefreshing={isRefreshingExport}
-          job={exportJob}
-          error={exportError}
-          message={exportMessage}
-        />
-
         {totalSessions === 0 && (
-          <Card className="rounded-3xl p-6">
+          <AnalyticsPanel className="shrink-0">
             <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
-                <h2 className="text-xl font-light text-text-primary">Complete a few sessions to reveal patterns</h2>
+                <h2 className="text-xl font-light text-text-primary">{t("empty.title")}</h2>
                 <p className="mt-2 text-sm font-light text-text-secondary">
-                  Focus trends, heatmaps, and distraction sources become useful after several completed sessions.
+                  {t("empty.description")}
                 </p>
               </div>
               <Sparkles className="h-8 w-8 shrink-0 text-primary" aria-hidden="true" />
             </div>
-          </Card>
+          </AnalyticsPanel>
         )}
 
-        <section className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4" aria-label="Top focus metrics">
-          <QuietStat icon={Clock} label="Total focus hours" value={`${Math.round((stats?.totalFocusMinutes ?? 0) / 60)}h`} />
-          <QuietStat icon={Target} label="Average score" value={`${stats?.averageFocusScore ?? 0}%`} />
-          <QuietStat icon={BarChart3} label="Sessions" value={totalSessions} />
-          <QuietStat icon={Layers3} label="Deep work share" value={`${deepWorkPercent}%`} />
-        </section>
+        <section className="grid min-h-0 min-w-0 flex-1 gap-4 lg:grid-cols-2 2xl:grid-cols-[minmax(0,1.04fr)_minmax(0,0.96fr)_minmax(300px,330px)]">
+          <div className="min-h-0 min-w-0">
+            <FocusTrendChart data={trendData} isLoading={trendLoading} compact />
+          </div>
 
-        <section className="grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(340px,0.85fr)]">
-          <FocusTrendChart data={trendData} isLoading={trendLoading} />
-          {weeklyData ? (
-            <WeeklyProgressSnapshot data={weeklyData} isLoading={weeklyLoading} />
-          ) : (
-            <Card className="rounded-3xl p-6">
-              <h2 className="text-lg font-light text-text-primary">Weekly progress</h2>
-              <p className="mt-3 text-sm text-text-muted">No weekly snapshot is available yet.</p>
-            </Card>
-          )}
-        </section>
+          <div className="grid min-h-0 min-w-0 gap-4">
+            <TimeHeatmap data={heatmapData} isLoading={heatmapLoading} compact />
+            <DistractionSourcesChart
+              data={(distractions?.topSources ?? []).map((source) => ({
+                domain: source.domain,
+                warningCount: source.warningCount,
+                sessionPercentage: source.percentageOfSessions,
+              }))}
+              isLoading={distractionsLoading}
+              compact
+            />
+          </div>
 
-        <section className="grid gap-6 xl:grid-cols-2">
-          <DistractionSourcesChart
-            data={(distractions?.topSources ?? []).map((source) => ({
-              domain: source.domain,
-              warningCount: source.warningCount,
-              sessionPercentage: source.percentageOfSessions,
-            }))}
-            isLoading={distractionsLoading}
-          />
-          <SessionBreakdownChart
-            normalMode={Math.max(0, totalSessions - (stats?.deepWorkSessionCount ?? 0))}
-            deepWorkMode={stats?.deepWorkSessionCount ?? 0}
-          />
-        </section>
-
-        <section>
-          <TimeHeatmap data={heatmapData} isLoading={heatmapLoading} />
+          <aside className="grid min-h-0 min-w-0 gap-4 lg:col-span-2 lg:grid-cols-2 2xl:col-span-1 2xl:grid-cols-1">
+            {weeklyData ? (
+              <WeeklyProgressSnapshot data={weeklyData} isLoading={weeklyLoading} compact />
+            ) : (
+              <AnalyticsPanel>
+                <h2 className="text-lg font-light text-text-primary">{t("weekly.title")}</h2>
+                <p className="mt-3 text-sm text-text-muted">{t("empty.weekly")}</p>
+              </AnalyticsPanel>
+            )}
+            <SessionBreakdownChart
+              normalMode={Math.max(0, totalSessions - (stats?.deepWorkSessionCount ?? 0))}
+              deepWorkMode={stats?.deepWorkSessionCount ?? 0}
+              compact
+            />
+          </aside>
         </section>
       </main>
-    </AmbientScene>
+    </AmbientWorkspaceBackground>
   );
 }
 
@@ -263,19 +296,38 @@ function QuietStat({
   value: string | number;
 }) {
   return (
-    <Card className="rounded-3xl p-5">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <p className="text-sm text-text-muted">{label}</p>
-          <p className="mt-3 text-3xl font-light tabular-nums text-text-primary">
+    <div className="rounded-[0.95rem] border border-white/10 bg-white/[0.035] p-2.5">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="line-clamp-2 min-h-6 text-[10px] leading-3 text-text-muted">{label}</p>
+          <p className="mt-1.5 truncate text-lg font-light tabular-nums leading-none text-text-primary">
             {value}
           </p>
         </div>
-        <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-white/10 bg-white/[0.045] text-primary">
-          <Icon className="h-4 w-4 stroke-[1.6]" aria-hidden />
+        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[0.8rem] border border-white/10 bg-white/[0.045] text-primary">
+          <Icon className="h-3 w-3 stroke-[1.6]" aria-hidden />
         </span>
       </div>
-    </Card>
+    </div>
+  );
+}
+
+function AnalyticsPanel({
+  className,
+  children,
+}: {
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section
+      className={cn(
+        "min-w-0 overflow-hidden rounded-[1.75rem] border border-white/10 bg-[rgb(10_13_10/0.56)] p-5 shadow-[0_20px_70px_rgba(0,0,0,0.28)] backdrop-blur-2xl sm:p-6",
+        className
+      )}
+    >
+      {children}
+    </section>
   );
 }
 
@@ -302,29 +354,28 @@ function ReportExportPanel({
   error: string;
   message: string;
 }) {
+  const { t } = useTranslation("analytics");
   const isPending = job?.status === "pending" || job?.status === "processing";
 
   return (
-    <Card className="rounded-3xl p-5">
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div>
-          <p className="text-sm text-text-muted">Report export</p>
-          <h2 className="mt-2 text-xl font-light text-text-primary">Export focus report</h2>
-          <p className="mt-2 max-w-[42rem] text-sm font-light leading-relaxed text-text-secondary">
-            Export the current {dateRange} analytics range. JSON and HTML are returned immediately when ready; PDF may be generated as a background job.
-          </p>
-        </div>
+    <section className="flex min-h-full min-w-0 flex-col justify-between overflow-hidden rounded-[1.5rem] border border-white/10 bg-white/[0.045] p-4 backdrop-blur-2xl sm:p-5">
+      <div>
+        <p className="text-xs text-text-muted">{t("export.eyebrow")}</p>
+        <h2 className="mt-1 text-lg font-light text-text-primary">{t("export.title")}</h2>
+        <p className="mt-1 line-clamp-2 text-xs font-light leading-relaxed text-text-secondary">
+          {t("export.description", { range: t(`ranges.${dateRange}`) })}
+        </p>
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="mt-4 grid grid-cols-[minmax(0,1fr)_auto] gap-2">
           <label className="sr-only" htmlFor="report-export-format">
-            Report format
+            {t("export.format")}
           </label>
           <select
             id="report-export-format"
             value={format}
             onChange={(event) => onFormatChange(event.target.value as ReportExportFormat)}
             disabled={isExporting}
-            className="h-11 rounded-full border border-white/10 bg-white/[0.045] px-4 text-sm text-text-primary outline-none transition-colors focus:border-primary/45 focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
+            className="h-10 min-w-0 rounded-full border border-white/10 bg-white/[0.045] px-3 text-sm text-text-primary outline-none transition-colors focus:border-primary/45 focus:ring-2 focus:ring-primary/20 disabled:opacity-50"
           >
             <option value="json">JSON</option>
             <option value="html">HTML</option>
@@ -335,10 +386,10 @@ function ReportExportPanel({
             variant="session"
             onClick={onExport}
             disabled={isExporting}
-            className="rounded-full px-5"
+            className="h-10 rounded-full px-4"
           >
-            <Download className="mr-2 h-4 w-4 stroke-[1.6]" aria-hidden="true" />
-            {isExporting ? "Exporting" : "Export report"}
+            <Download className="h-4 w-4 stroke-[1.6] sm:mr-2" aria-hidden="true" />
+            <span className="hidden sm:inline">{isExporting ? t("export.exporting") : t("export.export")}</span>
           </Button>
           {isPending && (
             <Button
@@ -346,21 +397,21 @@ function ReportExportPanel({
               variant="outline"
               onClick={onRefresh}
               disabled={isRefreshing}
-              className="rounded-full px-5"
+              className="col-span-2 h-10 rounded-full px-4"
             >
               <RefreshCw className="mr-2 h-4 w-4 stroke-[1.6]" aria-hidden="true" />
-              {isRefreshing ? "Checking" : "Check status"}
+              {isRefreshing ? t("export.checking") : t("export.checkStatus")}
             </Button>
           )}
         </div>
       </div>
 
       {job && (
-        <div className="mt-4 rounded-2xl border border-white/10 bg-white/[0.035] p-4">
+        <div className="mt-3 rounded-2xl border border-white/10 bg-white/[0.035] p-3">
           <div className="flex flex-col gap-2 text-sm text-text-secondary sm:flex-row sm:items-center sm:justify-between">
-            <span>Job {job.jobId}</span>
+            <span>{t("export.job", { id: job.jobId })}</span>
             <span className="font-mono text-xs uppercase tracking-[0.16em] text-text-muted">
-              {job.status} · {job.progress}%
+              {job.status} / {job.progress}%
             </span>
           </div>
           {job.errorMessage && (
@@ -377,7 +428,7 @@ function ReportExportPanel({
           {error}
         </p>
       )}
-    </Card>
+    </section>
   );
 }
 
@@ -423,17 +474,17 @@ function downloadBlob(content: string, filename: string, type: string) {
   URL.revokeObjectURL(url);
 }
 
-function statusMessage(job: ReportExportJob) {
+function statusMessage(job: ReportExportJob, t: (key: string) => string) {
   if (job.status === "pending" || job.status === "processing") {
-    return "Report export has been queued. Use Check status to refresh the job.";
+    return t("export.queued");
   }
   if (job.status === "failed") {
     return "";
   }
   if (job.status === "expired") {
-    return "This export has expired. Create a new export to download it again.";
+    return t("export.expired");
   }
-  return "Report export is ready.";
+  return t("export.ready");
 }
 
 function escapeHtml(value: string) {

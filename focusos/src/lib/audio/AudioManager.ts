@@ -68,19 +68,21 @@ class AudioManagerSingleton {
     return this.toUnitVolume(volume * this.ambientMasterVolume);
   }
 
-  private async playElement(loop: ManagedLoop, unitVolume?: number): Promise<void> {
+  private async playElement(loop: ManagedLoop, unitVolume?: number): Promise<boolean> {
     try {
       loop.element.volume = this.muted
         ? 0
         : unitVolume ?? this.toUnitVolume(loop.volume);
       await loop.element.play();
+      return true;
     } catch (error) {
       console.warn("[AudioManager] Playback was blocked or unavailable:", error);
+      return false;
     }
   }
 
-  async playMusic(id: MusicTrackId, url: string, volume: number): Promise<void> {
-    if (!url) return;
+  async playMusic(id: MusicTrackId, url: string, volume: number): Promise<boolean> {
+    if (!url) return false;
 
     if (this.music && this.music.id !== id) {
       this.stopMusic();
@@ -90,9 +92,9 @@ class AudioManagerSingleton {
       this.music = this.createLoop(id, url, volume);
     }
 
-    if (!this.music) return;
+    if (!this.music) return false;
     this.music.volume = volume;
-    await this.playElement(this.music);
+    return this.playElement(this.music);
   }
 
   stopMusic(): void {
@@ -108,8 +110,8 @@ class AudioManagerSingleton {
     this.music.element.volume = this.muted ? 0 : this.toUnitVolume(volume);
   }
 
-  async playAmbient(id: AmbientLoopId, url: string, volume: number): Promise<void> {
-    if (!url) return;
+  async playAmbient(id: AmbientLoopId, url: string, volume: number): Promise<boolean> {
+    if (!url) return false;
 
     const existing = this.ambientLoops.get(id);
     if (existing && existing.url !== url) {
@@ -119,14 +121,14 @@ class AudioManagerSingleton {
     let loop: ManagedLoop | null | undefined = this.ambientLoops.get(id);
     if (!loop) {
       loop = this.createLoop(id, url, volume);
-      if (!loop) return;
+      if (!loop) return false;
       this.ambientLoops.set(id, loop);
     }
 
     loop.volume = volume;
     const effectiveVolume = this.effectiveAmbientUnitVolume(volume);
     loop.element.volume = this.muted ? 0 : effectiveVolume;
-    await this.playElement(loop, effectiveVolume);
+    return this.playElement(loop, effectiveVolume);
   }
 
   stopAmbient(id: AmbientLoopId): void {

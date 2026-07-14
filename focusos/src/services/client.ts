@@ -114,11 +114,19 @@ async function ensureCsrfToken(): Promise<string | null> {
   if (csrf || typeof document === "undefined") return csrf;
 
   try {
-    await fetch(`${API_BASE_URL}/auth/csrf/`, {
+    const response = await fetch(`${API_BASE_URL}/auth/csrf/`, {
       method: "GET",
       headers: { Accept: "application/json" },
       credentials: "include",
     });
+    if (response.ok) {
+      const body = (await response.json().catch(() => null)) as {
+        csrfToken?: string;
+      } | null;
+      if (body?.csrfToken) {
+        return body.csrfToken;
+      }
+    }
   } catch {
     return null;
   }

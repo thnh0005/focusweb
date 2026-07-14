@@ -26,13 +26,26 @@ class ActiveSessionResponseSerializer(serializers.Serializer):
 
 class BlacklistEntrySerializer(serializers.ModelSerializer):
     isDefault = serializers.BooleanField(source="is_default", read_only=True)
+    source = serializers.SerializerMethodField()
     addedAt = serializers.DateTimeField(source="created_at", read_only=True)
     updatedAt = serializers.DateTimeField(source="updated_at", read_only=True)
 
     class Meta:
         model = BlacklistEntry
-        fields = ["id", "domain", "severity", "isDefault", "addedAt", "updatedAt"]
+        fields = [
+            "id",
+            "domain",
+            "severity",
+            "enabled",
+            "source",
+            "isDefault",
+            "addedAt",
+            "updatedAt",
+        ]
         read_only_fields = ["id", "isDefault", "addedAt", "updatedAt"]
+
+    def get_source(self, instance):
+        return "DEFAULT" if instance.is_default else "USER"
 
     def validate_domain(self, value):
         domain = normalize_domain(value)
@@ -58,7 +71,8 @@ class BlacklistEntrySerializer(serializers.ModelSerializer):
 class BlacklistSyncEntrySerializer(serializers.Serializer):
     domain = serializers.CharField()
     severity = serializers.ChoiceField(choices=BlacklistEntry.Severity.choices)
-    source = serializers.ChoiceField(choices=["default", "custom"])
+    enabled = serializers.BooleanField()
+    source = serializers.ChoiceField(choices=["DEFAULT", "USER"])
     updatedAt = serializers.DateTimeField()
 
 

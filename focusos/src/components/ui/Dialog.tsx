@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
-import { X } from "lucide-react";
+import { GripHorizontal, X } from "lucide-react";
+import { useTranslation } from "react-i18next";
+import { useDraggablePopup } from "@/hooks";
 import { cn } from "@/lib/utils/cn";
 
 const Dialog = DialogPrimitive.Root;
@@ -31,25 +33,50 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 const DialogContent = React.forwardRef<
   React.ElementRef<typeof DialogPrimitive.Content>,
   React.ComponentPropsWithoutRef<typeof DialogPrimitive.Content>
->(({ className, children, ...props }, ref) => (
-  <DialogPortal>
-    <DialogOverlay />
-    <DialogPrimitive.Content
-      ref={ref}
-      className={cn(
-        "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg translate-x-[-50%] translate-y-[-50%] gap-4 glass-widget p-6 shadow-glass duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-1/2 data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-1/2 rounded-3xl md:max-w-md",
-        className
-      )}
-      {...props}
-    >
-      {children}
-      <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 opacity-60 transition-all duration-120 hover:opacity-100 hover:bg-white/5 border border-transparent hover:border-white/10 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
-        <X className="h-4 w-4 text-text-secondary" />
-        <span className="sr-only">Close</span>
-      </DialogPrimitive.Close>
-    </DialogPrimitive.Content>
-  </DialogPortal>
-));
+>(({ className, children, style, ...props }, ref) => {
+  const { t } = useTranslation("common");
+  const { popupRef, dragHandleProps, dragStyle, isDragging } =
+    useDraggablePopup<React.ElementRef<typeof DialogPrimitive.Content>>({
+      baseTransform: "translate(-50%, -50%)",
+    });
+
+  return (
+    <DialogPortal>
+      <DialogOverlay />
+      <DialogPrimitive.Content
+        ref={(node) => {
+          popupRef.current = node;
+          if (typeof ref === "function") {
+            ref(node);
+          } else if (ref) {
+            ref.current = node;
+          }
+        }}
+        className={cn(
+          "fixed left-[50%] top-[50%] z-50 grid w-full max-w-lg gap-4 glass-widget p-6 shadow-glass duration-200 data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 data-[state=closed]:slide-out-to-left-1/2 data-[state=closed]:slide-out-to-top-1/2 data-[state=open]:slide-in-from-left-1/2 data-[state=open]:slide-in-from-top-1/2 rounded-3xl md:max-w-md",
+          isDragging && "cursor-grabbing",
+          className
+        )}
+        style={{ ...style, ...dragStyle }}
+        {...props}
+      >
+        <div
+          {...dragHandleProps}
+          className="absolute left-1/2 top-3 flex h-6 w-16 -translate-x-1/2 touch-none cursor-grab items-center justify-center rounded-full text-text-muted transition-colors hover:bg-white/[0.06] hover:text-text-primary active:cursor-grabbing"
+          title={t("states.dragPopup")}
+          aria-hidden="true"
+        >
+          <GripHorizontal className="h-4 w-4 stroke-[1.6]" />
+        </div>
+        {children}
+        <DialogPrimitive.Close className="absolute right-4 top-4 rounded-full p-1.5 opacity-60 transition-all duration-120 hover:opacity-100 hover:bg-white/5 border border-transparent hover:border-white/10 focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2">
+          <X className="h-4 w-4 text-text-secondary" />
+          <span className="sr-only">{t("actions.close")}</span>
+        </DialogPrimitive.Close>
+      </DialogPrimitive.Content>
+    </DialogPortal>
+  );
+});
 DialogContent.displayName = DialogPrimitive.Content.displayName;
 
 const DialogHeader = ({

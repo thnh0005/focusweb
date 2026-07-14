@@ -3,6 +3,7 @@ import uuid
 from pathlib import Path
 
 from django.conf import settings
+from django.core.files.storage import default_storage
 from django.db import transaction
 from django.utils import timezone
 
@@ -74,45 +75,69 @@ class DocumentExtractionService:
         mime_type="",
         force=False,
     ):
-        document = self.get_document(document_or_id)
-        existing = (document.metadata or {}).get("extraction", {})
-
-        if content is None:
-            if document.extracted_text and not force:
+        with transaction.atomic():
+            document = self.lock_document(document_or_id)
+            existing = (document.metadata or {}).get("extraction", {})
+            if not force and document.status == StudyDocument.Status.PROCESSING:
                 return {
-                    "status": "completed",
+                    "status": "processing",
+                    "document_id": str(document.id),
+                    "skipped": True,
+                    "reason": "already_processing",
+                }
+            if (
+                content is None
+                and not force
+                and document.status == StudyDocument.Status.READY
+                and document.extracted_text
+            ):
+                return {
+                    "status": existing.get("status", "completed"),
                     "document_id": str(document.id),
                     "skipped": True,
                     "reason": "already_extracted",
                 }
-            self.mark_failed(document, FileNotFoundError())
-            raise FileNotFoundError()
+            try:
+                source_content = content if content is not None else self.read_source_file(document)
+            except FileNotFoundError as exc:
+                self.mark_failed(document, exc)
+                return {
+                    "status": "failed",
+                    "document_id": str(document.id),
+                    "skipped": False,
+                    "error_code": exc.error_code,
+                    "message": exc.safe_message,
+                }
+            source_content = self.ensure_bytes(source_content)
+            checksum = self.checksum(source_content)
+            if (
+                not force
+                and existing.get("checksum") == checksum
+                and existing.get("status") in {"completed", "empty"}
+            ):
+                return {
+                    "status": existing["status"],
+                    "document_id": str(document.id),
+                    "skipped": True,
+                    "reason": "checksum_unchanged",
+                }
 
-        content = self.ensure_bytes(content)
-        checksum = self.checksum(content)
-        if (
-            not force
-            and existing.get("checksum") == checksum
-            and existing.get("status") in {"completed", "empty"}
-        ):
-            return {
-                "status": existing["status"],
-                "document_id": str(document.id),
-                "skipped": True,
-                "reason": "checksum_unchanged",
+            metadata = document.metadata or {}
+            metadata["extraction"] = {
+                **existing,
+                "status": "processing",
+                "checksum": checksum,
+                "parser_version": PARSER_VERSION,
+                "started_at": timezone.now().isoformat(),
+                "error_code": "",
+                "error_message": "",
+                "attempt_count": int(existing.get("attempt_count") or 0) + 1,
             }
+            document.status = StudyDocument.Status.PROCESSING
+            document.metadata = metadata
+            document.save(update_fields=["status", "metadata"])
 
-        document.status = StudyDocument.Status.PROCESSING
-        metadata = document.metadata or {}
-        metadata["extraction"] = {
-            **existing,
-            "status": "processing",
-            "checksum": checksum,
-            "parser_version": PARSER_VERSION,
-            "started_at": timezone.now().isoformat(),
-        }
-        document.metadata = metadata
-        document.save(update_fields=["status", "metadata"])
+        content = source_content
 
         try:
             extraction = self.extract_content(
@@ -141,6 +166,14 @@ class DocumentExtractionService:
         if len(content) > self.max_upload_size:
             raise FileTooLargeError()
         return content
+
+    def read_source_file(self, document):
+        source_info = (document.metadata or {}).get("source_file") or {}
+        source_path = source_info.get("path")
+        if not source_path or not default_storage.exists(source_path):
+            raise FileNotFoundError()
+        with default_storage.open(source_path, "rb") as source_file:
+            return source_file.read()
 
     def extract_content(self, content, filename, mime_type=""):
         content = self.ensure_bytes(content)
@@ -239,6 +272,10 @@ class DocumentExtractionService:
         if isinstance(document_or_id, StudyDocument):
             return document_or_id
         return StudyDocument.objects.get(pk=document_or_id)
+
+    def lock_document(self, document_or_id):
+        pk = document_or_id.pk if isinstance(document_or_id, StudyDocument) else document_or_id
+        return StudyDocument.objects.select_for_update().get(pk=pk)
 
     def ensure_bytes(self, content):
         if isinstance(content, bytes):

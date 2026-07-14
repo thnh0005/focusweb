@@ -108,6 +108,7 @@ class ActiveSessionSerializer(serializers.ModelSerializer):
     userId = serializers.UUIDField(source="user_id", read_only=True)
     tags = serializers.SlugRelatedField(many=True, slug_field="name", read_only=True)
     elapsedActiveSeconds = serializers.SerializerMethodField()
+    extensionBridgeToken = serializers.SerializerMethodField()
     targetDurationSeconds = serializers.IntegerField(
         source="target_duration_seconds",
         read_only=True,
@@ -124,12 +125,16 @@ class ActiveSessionSerializer(serializers.ModelSerializer):
             "tags",
             "targetDurationSeconds",
             "elapsedActiveSeconds",
+            "extensionBridgeToken",
             "startedAt",
             "status",
         ]
 
     def get_elapsedActiveSeconds(self, instance) -> int:
         return instance.calculate_actual_duration()
+
+    def get_extensionBridgeToken(self, instance) -> str:
+        return instance.ensure_extension_bridge_token()
 
 
 class CreateSessionSerializer(serializers.Serializer):
@@ -245,6 +250,8 @@ class EndSessionSerializer(serializers.Serializer):
         required=False,
         max_length=3,
     )
+    reason = serializers.CharField(required=False, allow_blank=True, max_length=120)
+    metadata = serializers.DictField(required=False)
 
 
 class SmartPresetSerializer(serializers.Serializer):

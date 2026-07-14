@@ -11,6 +11,8 @@ export * from "./CenterFocusClock";
 export * from "./DeepWorkModal";
 export * from "./FloatingFocusDock";
 export * from "./CompactSoundscapeWidget";
+export * from "./DashboardControlPopover";
+export * from "./ThemeControlWidget";
 export * from "./StatsBottomSheet";
 export * from "./HistoryBottomSheet";
 export * from "./FlocusLikeDashboard";

@@ -102,6 +102,11 @@ export interface WeeklySnapshot {
     deepWorkCount: number;
   };
   aiRecommendation?: string;
+  recommendations?: Array<{
+    reason_code?: string;
+    message?: string;
+    title?: string;
+  }>;
   trendDirection: TrendDirection;
 }
 

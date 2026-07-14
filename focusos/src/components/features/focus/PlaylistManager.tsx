@@ -1,6 +1,7 @@
 "use client";
 
 import * as React from "react";
+import { useTranslation } from "react-i18next";
 import { useMusicStore } from "@/stores/music.store";
 import { cn } from "@/lib/utils/cn";
 import { Card } from "@/components/ui/Card";
@@ -24,6 +25,7 @@ export function PlaylistManager({
   tracks,
   onSelectTrack,
 }: PlaylistManagerProps) {
+  const { t } = useTranslation("focus");
   const { currentTrack } = useMusicStore();
 
   const grouped = React.useMemo(() => {
@@ -39,7 +41,7 @@ export function PlaylistManager({
 
   return (
     <div className="space-y-4">
-      <h2 className="text-lg font-light text-text-primary">Ambient Library</h2>
+      <h2 className="text-lg font-light text-text-primary">{t("playlist.title")}</h2>
 
       <div className="space-y-4">
         {Object.entries(TRACK_CATEGORIES).map(([category, meta]) => {
@@ -49,7 +51,7 @@ export function PlaylistManager({
           return (
             <div key={category} className="space-y-2">
               <p className="text-xs text-text-muted font-mono uppercase tracking-wide">
-                {meta.icon} {meta.label}
+                {meta.icon} {t(`playlist.categories.${category}`)}
               </p>
               <div className="grid grid-cols-2 gap-2">
                 {categoryTracks.map((track) => (

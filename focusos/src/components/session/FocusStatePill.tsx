@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Activity } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils/cn";
 import type { FocusScoreMetrics } from "@/hooks/useFocusScore";
 
@@ -16,6 +17,9 @@ export function FocusStatePill({
   isActive,
   className,
 }: FocusStatePillProps) {
+  const { t } = useTranslation("focus");
+  const translatedLabel = t(`scoreLabels.${metrics.label}`);
+
   return (
     <div
       className={cn(
@@ -26,8 +30,8 @@ export function FocusStatePill({
       aria-live="polite"
       aria-label={
         metrics.score === null
-          ? `Focus state ${metrics.displayLabel}`
-          : `Focus state ${metrics.displayLabel}, score ${metrics.score} out of 100`
+          ? t("active.focusState", { label: translatedLabel })
+          : t("active.focusStateScore", { label: translatedLabel, score: metrics.score })
       }
     >
       <span
@@ -41,14 +45,14 @@ export function FocusStatePill({
       </span>
       <span className="flex flex-col leading-none">
         <span className="text-sm font-medium text-text-primary">
-          {metrics.displayLabel}
+          {translatedLabel}
         </span>
         <span className="mt-1 text-[11px] font-mono text-text-muted">
           {metrics.score === null
             ? isActive
-              ? "waiting for signals"
-              : "paused"
-            : `${metrics.score}/100 ${isActive ? "live" : "paused"}`}
+              ? t("active.waiting")
+              : t("active.paused")
+            : `${metrics.score}/100 ${isActive ? t("active.live") : t("active.paused")}`}
         </span>
       </span>
     </div>

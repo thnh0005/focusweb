@@ -106,6 +106,10 @@ class UserPreference(models.Model):
         DIRECT_AUDIO = "direct_audio", "Direct Audio"
         EXTERNAL = "external", "External"
 
+    class Language(models.TextChoices):
+        VI = "vi", "Vietnamese"
+        EN = "en", "English"
+
     user = models.OneToOneField(
         settings.AUTH_USER_MODEL,
         on_delete=models.CASCADE,
@@ -150,6 +154,11 @@ class UserPreference(models.Model):
     workspace_background_url = models.URLField(blank=True)
     auto_resume_session = models.BooleanField(default=False)
     extension_installed = models.BooleanField(default=False)
+    language = models.CharField(
+        max_length=2,
+        choices=Language.choices,
+        default=Language.VI,
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

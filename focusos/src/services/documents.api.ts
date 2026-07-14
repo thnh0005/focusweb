@@ -1,6 +1,7 @@
-import { apiClient } from "./client";
+import { apiClient, API_BASE_URL } from "./client";
 import type {
   StudyDocument,
+  DocumentSourceText,
   DocumentSummary,
   DocumentSummaryResponse,
   FlashcardDeck,
@@ -37,6 +38,8 @@ function unwrapDocumentSummary(response: DocumentSummaryResponse | DocumentSumma
         response.document_id ??
         "",
       generatedAt: response.summary.generatedAt ?? response.summary.generated_at ?? null,
+      structuredContent:
+        response.summary.structuredContent ?? response.summary.structured_content ?? {},
       errorCode: response.summary.errorCode ?? response.summary.error_code,
       errorMessage: response.summary.errorMessage ?? response.summary.error_message,
       modelName: response.summary.modelName ?? response.summary.model_name,
@@ -46,10 +49,67 @@ function unwrapDocumentSummary(response: DocumentSummaryResponse | DocumentSumma
   return {
     ...response,
     generatedAt: response.generatedAt ?? response.generated_at ?? null,
+    structuredContent: response.structuredContent ?? response.structured_content ?? {},
     errorCode: response.errorCode ?? response.error_code,
     errorMessage: response.errorMessage ?? response.error_message,
     modelName: response.modelName ?? response.model_name,
   };
+}
+
+function emptyFlashcardDeck(docId: string): FlashcardDeck {
+  return {
+    id: "",
+    documentId: docId,
+    title: "",
+    quantity: 0,
+    requestedQuantity: 0,
+    generatedQuantity: 0,
+    difficulty: "medium",
+    status: "not_generated",
+    pageRange: undefined,
+    scope: {},
+    cards: [],
+    createdAt: null,
+    generatedAt: null,
+  };
+}
+
+function unwrapFlashcardDeck(
+  docId: string,
+  response: GenerateFlashcardsResponse | FlashcardDeck
+): FlashcardDeck {
+  const normalize = (deck: FlashcardDeck, fallbackDocId: string): FlashcardDeck => ({
+    ...deck,
+    documentId:
+      deck.documentId ??
+      (deck as FlashcardDeck & { document_id?: string }).document_id ??
+      fallbackDocId,
+    generatedAt:
+      deck.generatedAt ??
+      (deck as FlashcardDeck & { generated_at?: string | null }).generated_at ??
+      null,
+    createdAt:
+      deck.createdAt ??
+      (deck as FlashcardDeck & { created_at?: string | null }).created_at ??
+      null,
+    errorCode: deck.errorCode ?? (deck as FlashcardDeck & { error_code?: string }).error_code,
+    errorMessage: deck.errorMessage ?? (deck as FlashcardDeck & { error_message?: string }).error_message,
+    modelName: deck.modelName ?? (deck as FlashcardDeck & { model_name?: string }).model_name,
+    cards: deck.cards ?? [],
+  });
+
+  if ("deck" in response) {
+    if (!response.deck) {
+      return emptyFlashcardDeck(response.documentId || response.document_id || docId);
+    }
+    return normalize(response.deck, response.documentId || response.document_id || docId);
+  }
+  return normalize(response, docId);
+}
+
+function buildApiUrl(endpoint: string) {
+  const normalizedEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
+  return `${API_BASE_URL}${normalizedEndpoint}`;
 }
 
 function buildGenerateFlashcardsBody(payload: GenerateFlashcardsPayload): GenerateFlashcardsRequestBody {
@@ -99,6 +159,21 @@ export const documentsApi = {
     return apiClient.get<StudyDocument>(`/documents/${docId}/`);
   },
 
+  async getDocumentFileBlob(docId: string): Promise<Blob> {
+    const response = await fetch(buildApiUrl(`/documents/${docId}/file/`), {
+      method: "GET",
+      credentials: "include",
+    });
+    if (!response.ok) {
+      throw new Error(`Document source file could not be loaded (${response.status}).`);
+    }
+    return response.blob();
+  },
+
+  getDocumentSourceText(docId: string): Promise<DocumentSourceText> {
+    return apiClient.get<DocumentSourceText>(`/documents/${docId}/text/`);
+  },
+
   /**
    * Fetch a generated summary by document ID and mode.
    */
@@ -123,8 +198,11 @@ export const documentsApi = {
   /**
    * Fetch a generated flashcard deck for study document.
    */
-  getFlashcardDeck(docId: string): Promise<FlashcardDeck> {
-    return apiClient.get<FlashcardDeck>(`/documents/${docId}/flashcards/`);
+  async getFlashcardDeck(docId: string): Promise<FlashcardDeck> {
+    const response = await apiClient.get<GenerateFlashcardsResponse | FlashcardDeck>(
+      `/documents/${docId}/flashcards/`
+    );
+    return unwrapFlashcardDeck(docId, response);
   },
 
   /**
@@ -136,7 +214,7 @@ export const documentsApi = {
       buildGenerateFlashcardsBody(payload)
     );
 
-    return response.deck;
+    return unwrapFlashcardDeck(payload.documentId, response);
   },
 
   /**

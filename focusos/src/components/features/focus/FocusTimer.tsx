@@ -53,7 +53,7 @@ export function FocusTimer({
   return (
     <div
       className={cn(
-        "relative mx-auto flex w-full max-w-5xl select-none flex-col items-center justify-center px-2",
+        "relative mx-auto flex w-full max-w-[42rem] select-none flex-col items-center justify-center px-2",
         className
       )}
       onDoubleClick={onDoubleClick}
@@ -62,7 +62,7 @@ export function FocusTimer({
       aria-live="polite"
     >
       <div
-        className="pointer-events-none absolute inset-x-[12%] top-1/2 h-32 -translate-y-1/2 rounded-full blur-3xl transition-all duration-slow"
+        className="pointer-events-none absolute inset-x-[8%] top-1/2 h-32 -translate-y-1/2 rounded-full blur-3xl transition-all duration-slow"
         style={{
           background: glowColor,
           opacity: isActive && !isAutoPaused ? 0.34 : isAutoPaused ? 0.22 : 0.14,
@@ -102,7 +102,7 @@ export function FocusTimer({
         )}
 
         <div
-          className="mt-7 h-1.5 w-full max-w-xl overflow-hidden rounded-full bg-white/[0.08]"
+          className="mt-7 h-1.5 w-full max-w-md overflow-hidden rounded-full bg-white/[0.08]"
           role="progressbar"
           aria-label="Session time remaining"
           aria-valuemin={0}

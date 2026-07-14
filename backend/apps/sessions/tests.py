@@ -9,7 +9,7 @@ from rest_framework.test import APITestCase
 
 from apps.ai.models import AIAnalysisResult, SessionInsight
 from apps.ai.services.ai_client import AIClient
-from apps.scoring.models import FocusScore
+from apps.scoring.models import FocusScore, ScoreComponent
 from apps.tracking.models import BrowserEvent, WarningEvent
 
 from .models import (
@@ -124,6 +124,23 @@ class SessionSummaryDataTests(APITestCase):
             session_id=session.id,
             event_type="url_change",
             domain="youtube.com",
+            tab_switch_count=7,
+        )
+        score = FocusScore.objects.create(
+            user=self.user,
+            session=session,
+            total_score=82,
+            focus_state=FocusScore.State.FOCUSED,
+            source="server-final",
+            metadata={"source": "tracking_signals"},
+        )
+        ScoreComponent.objects.create(
+            score=score,
+            key=ScoreComponent.Key.TAB_STABILITY,
+            label="Tab stability",
+            value=65,
+            weight=0.15,
+            metadata={"browserEventCount": 1, "tabSwitchCount": 7},
         )
         WarningEvent.objects.create(
             session_id=session.id,
@@ -146,6 +163,7 @@ class SessionSummaryDataTests(APITestCase):
         self.assertEqual(response.data["warningLog"][0]["decisionState"], "DISTRACTED")
         self.assertEqual(response.data["topDistractionDomains"][0]["domain"], "youtube.com")
         self.assertEqual(response.data["browserEventCount"], 1)
+        self.assertEqual(response.data["scoreMetadata"]["tabSwitchCount"], 7)
 
 
 class SessionLifecycleApiTests(APITestCase):
@@ -377,6 +395,22 @@ class SessionLifecycleApiTests(APITestCase):
         self.assertEqual(response.data["aiInsights"], [])
         self.assertFalse(response.data["isAiInsightReady"])
         self.assertTrue(FocusScore.objects.filter(session_id=session_id).exists())
+
+    def test_end_session_creates_pending_ai_insight_and_enqueues_after_commit(self):
+        create = self.create_session()
+        session_id = create.data["id"]
+
+        with patch("apps.ai.tasks.generate_session_insight.delay") as delay:
+            with self.captureOnCommitCallbacks(execute=True):
+                response = self.client.post(f"/api/sessions/{session_id}/end/", format="json")
+
+        insight = SessionInsight.objects.get(session_id=session_id)
+        summary = self.client.get(f"/api/sessions/{session_id}/summary/")
+
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        self.assertEqual(insight.status, SessionInsight.Status.PENDING)
+        delay.assert_called_once_with(str(session_id))
+        self.assertEqual(summary.data["aiInsightStatus"], SessionInsight.Status.PENDING)
 
     def test_week_4_tag_crud_and_history_filter(self):
         create_tag = self.client.post(

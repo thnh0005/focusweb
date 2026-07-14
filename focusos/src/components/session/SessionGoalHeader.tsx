@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Target } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/lib/utils/cn";
 import type { SessionMode } from "@/types/session.types";
 
@@ -18,7 +19,8 @@ export function SessionGoalHeader({
   durationMinutes,
   className,
 }: SessionGoalHeaderProps) {
-  const modeLabel = mode === "deep-work" ? "Deep Work" : "Focus";
+  const { t } = useTranslation("focus");
+  const modeLabel = mode === "deep-work" ? t("deepWorkMode") : t("normalMode");
 
   return (
     <header className={cn("mx-auto flex max-w-3xl flex-col items-center text-center", className)}>
@@ -26,11 +28,11 @@ export function SessionGoalHeader({
         <Target className="h-3.5 w-3.5 stroke-[1.6]" aria-hidden="true" />
         <span>{modeLabel}</span>
         <span aria-hidden="true">/</span>
-        <span>{durationMinutes} min</span>
+        <span>{t("active.minutes", { count: durationMinutes })}</span>
       </div>
-      <p className="text-sm text-text-muted">Today&apos;s focus</p>
+      <p className="text-sm text-text-muted">{t("active.todayFocus")}</p>
       <h1 className="mt-2 max-w-[34rem] text-balance text-2xl font-light leading-tight text-text-primary md:text-4xl">
-        {goal?.trim() || "Stay with the session in front of you."}
+        {goal?.trim() || t("active.fallbackGoal")}
       </h1>
     </header>
   );

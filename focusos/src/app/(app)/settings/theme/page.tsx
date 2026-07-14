@@ -2,7 +2,9 @@
 
 import * as React from "react";
 import { ImagePlus, Moon, Palette, Trash2 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { userApi } from "@/services/user.api";
+import { THEME_OPTIONS, getThemeOption, getThemeSwatches } from "@/constants/theme-options";
 import { Button } from "@/components/ui/Button";
 import { Card } from "@/components/ui/Card";
 import {
@@ -13,67 +15,17 @@ import {
 } from "@/lib/preferences/background";
 import type { AppTheme } from "@/types/user.types";
 
-type ThemeOption = {
-  id: AppTheme;
-  label: string;
-  description: string;
-  swatches: string[];
-};
-
-const THEME_OPTIONS: ThemeOption[] = [
-  {
-    id: "cyber",
-    label: "Cyber",
-    description: "High-contrast neon focus shell.",
-    swatches: ["#05070d", "#24d3ee", "#b9f64d"],
-  },
-  {
-    id: "minimal",
-    label: "Minimal",
-    description: "Reduced contrast for quiet planning.",
-    swatches: ["#0b0c0d", "#d7d2c6", "#6f766d"],
-  },
-  {
-    id: "forest",
-    label: "Forest",
-    description: "Original green workspace.",
-    swatches: ["#071008", "#355b3a", "#9dbb7f"],
-  },
-  {
-    id: "minimal-dark",
-    label: "Minimal Dark",
-    description: "Quiet charcoal workspace.",
-    swatches: ["#070806", "#171b15", "#f3efe5"],
-  },
-  {
-    id: "aurora-night",
-    label: "Aurora Night",
-    description: "Muted aurora atmosphere.",
-    swatches: ["#070806", "#718f74", "#8f5866"],
-  },
-  {
-    id: "forest-calm",
-    label: "Forest Calm",
-    description: "Green-tinted focus room.",
-    swatches: ["#0b0d0b", "#557a5d", "#8fa974"],
-  },
-  {
-    id: "rain-room",
-    label: "Rain Room",
-    description: "Cooler reading surface.",
-    swatches: ["#0b1010", "#6f9b99", "#7d8896"],
-  },
-];
-
 const ACCENT_COLORS = [
-  { id: "moss", name: "Moss", bg: "bg-primary" },
-  { id: "rain", name: "Rain", bg: "bg-ambient-cyan" },
-  { id: "ember", name: "Ember", bg: "bg-urgency-amber" },
+  { id: "moss", bg: "bg-primary" },
+  { id: "rain", bg: "bg-ambient-cyan" },
+  { id: "ember", bg: "bg-urgency-amber" },
 ];
 
 export default function ThemeSettingsPage() {
+  const { t } = useTranslation("settings");
+  const tRef = React.useRef(t);
   const fileInputRef = React.useRef<HTMLInputElement>(null);
-  const [theme, setTheme] = React.useState<AppTheme>("forest-calm");
+  const [theme, setTheme] = React.useState<AppTheme>("forest");
   const [accentColor, setAccentColor] = React.useState("moss");
   const [backgroundImage, setBackgroundImage] = React.useState(() => readWorkspaceBackground());
   const [backgroundError, setBackgroundError] = React.useState("");
@@ -81,6 +33,10 @@ export default function ThemeSettingsPage() {
   const [isSaving, setIsSaving] = React.useState(false);
   const [saveSuccess, setSaveSuccess] = React.useState(false);
   const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -91,7 +47,7 @@ export default function ThemeSettingsPage() {
       try {
         const currentTheme = await userApi.getThemePreferences();
         if (!isMounted) return;
-        setTheme(currentTheme.theme);
+        setTheme(getThemeOption(currentTheme.theme).id);
         setAccentColor(currentTheme.themeAccent || "moss");
 
         if (currentTheme.workspaceBackgroundUrl) {
@@ -102,7 +58,7 @@ export default function ThemeSettingsPage() {
         }
       } catch (loadError) {
         if (!isMounted) return;
-        setError(getErrorMessage(loadError, "Failed to load theme settings"));
+        setError(getErrorMessage(loadError, tRef.current("themePage.errors.load")));
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -122,12 +78,12 @@ export default function ThemeSettingsPage() {
     if (!file) return;
 
     if (!file.type.startsWith("image/")) {
-      setBackgroundError("Upload an image file.");
+      setBackgroundError(t("themePage.errors.imageType"));
       return;
     }
 
     if (file.size > MAX_WORKSPACE_BACKGROUND_BYTES) {
-      setBackgroundError("Image must be 2.5 MB or smaller.");
+      setBackgroundError(t("themePage.errors.imageSize"));
       return;
     }
 
@@ -135,17 +91,17 @@ export default function ThemeSettingsPage() {
     reader.onload = () => {
       const result = typeof reader.result === "string" ? reader.result : "";
       if (!result) {
-        setBackgroundError("Could not read this image.");
+        setBackgroundError(t("themePage.errors.imageRead"));
         return;
       }
       try {
         saveWorkspaceBackground(result);
         setBackgroundImage(result);
       } catch {
-        setBackgroundError("This image is too large for browser storage.");
+        setBackgroundError(t("themePage.errors.browserStorage"));
       }
     };
-    reader.onerror = () => setBackgroundError("Could not read this image.");
+    reader.onerror = () => setBackgroundError(t("themePage.errors.imageRead"));
     reader.readAsDataURL(file);
   };
 
@@ -172,7 +128,7 @@ export default function ThemeSettingsPage() {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (saveError) {
-      setError(getErrorMessage(saveError, "Failed to save theme settings"));
+      setError(getErrorMessage(saveError, t("themePage.errors.save")));
     } finally {
       setIsSaving(false);
     }
@@ -181,17 +137,17 @@ export default function ThemeSettingsPage() {
   return (
     <div className="max-w-4xl space-y-6">
       <header>
-        <p className="text-sm text-text-muted">Theme</p>
-        <h1 className="mt-2 text-4xl font-light text-text-primary">Ambient appearance</h1>
+        <p className="text-sm text-text-muted">{t("themePage.eyebrow")}</p>
+        <h1 className="mt-2 text-4xl font-light text-text-primary">{t("themePage.title")}</h1>
         <p className="mt-3 max-w-2xl text-sm font-light leading-relaxed text-text-secondary">
-          Preview the visual language used across FocusOS. Theme and accent are saved to your account.
+          {t("themePage.description")}
         </p>
       </header>
 
       <Card className="rounded-[2rem] p-6 sm:p-7">
         <div className="mb-5 flex items-center gap-3">
           <Moon className="h-5 w-5 text-primary" aria-hidden="true" />
-          <h2 className="text-xl font-light text-text-primary">Theme previews</h2>
+          <h2 className="text-xl font-light text-text-primary">{t("themePage.previews")}</h2>
         </div>
         <div className="grid gap-4 md:grid-cols-2">
           {THEME_OPTIONS.map((option) => (
@@ -208,12 +164,14 @@ export default function ThemeSettingsPage() {
               aria-pressed={theme === option.id}
             >
               <div className="mb-4 flex h-24 overflow-hidden rounded-2xl border border-white/10">
-                {option.swatches.map((swatch) => (
+                {getThemeSwatches(option, "dark").map((swatch) => (
                   <span key={swatch} className="flex-1" style={{ backgroundColor: swatch }} />
                 ))}
               </div>
-              <p className="font-medium text-text-primary">{option.label}</p>
-              <p className="mt-1 text-sm font-light text-text-secondary">{option.description}</p>
+              <p className="font-medium text-text-primary">{t(`themePage.themes.${option.id}.label`)}</p>
+              <p className="mt-1 text-sm font-light text-text-secondary">
+                {t(`themePage.themes.${option.id}.description`)}
+              </p>
             </button>
           ))}
         </div>
@@ -222,7 +180,7 @@ export default function ThemeSettingsPage() {
       <Card className="rounded-[2rem] p-6 sm:p-7">
         <div className="mb-5 flex items-center gap-3">
           <Palette className="h-5 w-5 text-primary" aria-hidden="true" />
-          <h2 className="text-xl font-light text-text-primary">Accent tone</h2>
+          <h2 className="text-xl font-light text-text-primary">{t("themePage.accent")}</h2>
         </div>
         <div className="grid grid-cols-3 gap-3">
           {ACCENT_COLORS.map((accent) => (
@@ -239,7 +197,9 @@ export default function ThemeSettingsPage() {
               aria-pressed={accentColor === accent.id}
             >
               <div className={`h-9 w-full rounded-xl ${accent.bg}`} />
-              <p className="mt-2 text-center text-xs font-light text-text-secondary">{accent.name}</p>
+              <p className="mt-2 text-center text-xs font-light text-text-secondary">
+                {t(`themePage.accents.${accent.id}`)}
+              </p>
             </button>
           ))}
         </div>
@@ -249,9 +209,9 @@ export default function ThemeSettingsPage() {
         <div className="mb-5 flex items-center gap-3">
           <ImagePlus className="h-5 w-5 text-primary" aria-hidden="true" />
           <div>
-            <h2 className="text-xl font-light text-text-primary">Workspace background</h2>
+            <h2 className="text-xl font-light text-text-primary">{t("themePage.background")}</h2>
             <p className="mt-1 text-sm font-light text-text-secondary">
-              Upload a local image for the focus room background.
+              {t("themePage.backgroundDescription")}
             </p>
           </div>
         </div>
@@ -271,8 +231,8 @@ export default function ThemeSettingsPage() {
               onChange={(event) => handleBackgroundUpload(event.target.files?.[0])}
             />
             <ImagePlus className="h-9 w-9 text-primary" aria-hidden="true" />
-            <p className="mt-4 text-sm font-medium text-text-primary">Choose background image</p>
-            <p className="mt-1 text-xs font-light text-text-muted">JPG, PNG, or WebP up to 2.5 MB</p>
+            <p className="mt-4 text-sm font-medium text-text-primary">{t("themePage.chooseImage")}</p>
+            <p className="mt-1 text-xs font-light text-text-muted">{t("themePage.imageHelp")}</p>
           </button>
 
           <div className="relative min-h-40 overflow-hidden rounded-3xl border border-white/10 bg-white/[0.035]">
@@ -287,14 +247,14 @@ export default function ThemeSettingsPage() {
             <div className="absolute inset-0 bg-black/30" />
             <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between gap-2">
               <span className="rounded-full bg-black/35 px-3 py-1 text-xs text-text-secondary backdrop-blur-md">
-                {backgroundImage ? "Custom image" : "Default ambient"}
+                {backgroundImage ? t("themePage.customImage") : t("themePage.defaultAmbient")}
               </span>
               {backgroundImage && (
                 <button
                   type="button"
                   onClick={handleClearBackground}
                   className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-black/35 text-text-secondary backdrop-blur-md transition-colors hover:bg-white/[0.1] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-                  aria-label="Remove custom background"
+                  aria-label={t("themePage.removeBackground")}
                 >
                   <Trash2 className="h-4 w-4 stroke-[1.6]" aria-hidden="true" />
                 </button>
@@ -311,19 +271,19 @@ export default function ThemeSettingsPage() {
       </Card>
 
       <Card className="rounded-[2rem] p-6 sm:p-7">
-        <h2 className="text-xl font-light text-text-primary">Display</h2>
+        <h2 className="text-xl font-light text-text-primary">{t("themePage.display")}</h2>
         <p className="mt-2 text-sm font-light text-text-secondary">
-          These display controls do not have backend support yet.
+          {t("themePage.displayDescription")}
         </p>
         <div className="mt-4 space-y-3 text-sm">
-          <StaticToggle label="Reduce motion" />
-          <StaticToggle label="Compact mode" />
+          <StaticToggle label={t("themePage.reduceMotion")} comingSoon={t("themePage.comingSoon")} />
+          <StaticToggle label={t("themePage.compactMode")} comingSoon={t("themePage.comingSoon")} />
         </div>
       </Card>
 
       {saveSuccess && (
         <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
-          <p className="text-sm font-light text-primary">Theme settings saved successfully</p>
+          <p className="text-sm font-light text-primary">{t("themePage.saved")}</p>
         </div>
       )}
 
@@ -334,7 +294,7 @@ export default function ThemeSettingsPage() {
       )}
 
       <Button type="button" onClick={handleSave} disabled={isLoading || isSaving} variant="session" className="rounded-full px-6">
-        {isLoading ? "Loading" : isSaving ? "Saving" : "Save theme"}
+        {isLoading ? t("themePage.loading") : isSaving ? t("themePage.saving") : t("themePage.save")}
       </Button>
     </div>
   );
@@ -348,11 +308,11 @@ function getErrorMessage(error: unknown, fallback: string) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
-function StaticToggle({ label }: { label: string }) {
+function StaticToggle({ label, comingSoon }: { label: string; comingSoon: string }) {
   return (
     <div className="flex items-center justify-between border-b border-white/10 py-3 last:border-0">
       <span className="text-text-secondary">{label}</span>
-      <span className="ml-auto mr-3 text-xs font-light text-text-muted">Coming soon</span>
+      <span className="ml-auto mr-3 text-xs font-light text-text-muted">{comingSoon}</span>
       <span
         role="switch"
         aria-checked={false}

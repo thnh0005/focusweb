@@ -3,9 +3,9 @@
 import * as React from "react";
 import Link from "next/link";
 import { motion, AnimatePresence } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import {
   User,
-  Settings2,
   LogOut,
   Bell,
   Moon,
@@ -44,8 +44,8 @@ export interface UserMenuProps {
 
 interface MenuItem {
   id: string;
-  label: string;
-  description?: string;
+  labelKey: string;
+  descriptionKey?: string;
   icon: React.ReactNode;
   href?: string;
   onClick?: () => void;
@@ -68,6 +68,7 @@ export function UserMenu({
   align = "right",
   className,
 }: UserMenuProps) {
+  const { t } = useTranslation("common");
   const menuRef = React.useRef<HTMLDivElement>(null);
 
   const initials = userName
@@ -103,44 +104,37 @@ export function UserMenu({
   const menuItems: MenuItem[] = [
     {
       id: "profile",
-      label: "Profile",
-      description: "Edit display name and avatar",
+      labelKey: "userMenu.profile",
+      descriptionKey: "userMenu.profileDescription",
       icon: <User className="h-4 w-4 stroke-[1.5]" />,
       href: "/settings/profile",
     },
     {
-      id: "preferences",
-      label: "Preferences",
-      description: "Session defaults and templates",
-      icon: <Settings2 className="h-4 w-4 stroke-[1.5]" />,
-      href: "/settings/preferences",
-    },
-    {
       id: "notifications",
-      label: "Notifications",
-      description: "Reminders and alerts",
+      labelKey: "userMenu.notifications",
+      descriptionKey: "userMenu.notificationsDescription",
       icon: <Bell className="h-4 w-4 stroke-[1.5]" />,
       href: "/settings/notifications",
     },
     {
       id: "theme",
-      label: "Theme",
-      description: "Cyber, Minimal, Forest",
+      labelKey: "userMenu.theme",
+      descriptionKey: "userMenu.themeDescription",
       icon: <Moon className="h-4 w-4 stroke-[1.5]" />,
-      href: "/settings/theme",
+      href: "/dashboard?panel=theme",
       separator: true,
     },
     {
       id: "extension",
-      label: "Browser Extension",
-      description: "Manage FocusOS extension",
+      labelKey: "userMenu.extension",
+      descriptionKey: "userMenu.extensionDescription",
       icon: <Shield className="h-4 w-4 stroke-[1.5]" />,
       href: "/settings/extension",
       external: false,
     },
     {
       id: "logout",
-      label: "Log Out",
+      labelKey: "userMenu.logout",
       icon: <LogOut className="h-4 w-4 stroke-[1.5]" />,
       onClick: () => { onLogout?.(); onClose(); },
       variant: "danger",
@@ -155,7 +149,7 @@ export function UserMenu({
           ref={menuRef}
           key="user-menu"
           role="menu"
-          aria-label="User account menu"
+          aria-label={t("userMenu.ariaLabel")}
           initial={{ opacity: 0, y: -8, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: -6, scale: 0.97 }}
@@ -190,13 +184,13 @@ export function UserMenu({
               {streakCount > 0 && (
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-urgency-amber/[0.08] border border-urgency-amber/[0.12]">
                   <Flame aria-hidden="true" className="h-3 w-3 text-urgency-amber stroke-[1.5]" />
-                  <span className="text-[10px] font-mono text-urgency-amber">{streakCount}d streak</span>
+                  <span className="text-[10px] font-mono text-urgency-amber">{t("userMenu.dayStreak", { count: streakCount })}</span>
                 </div>
               )}
               {totalSessions > 0 && (
                 <div className="flex items-center gap-1.5 px-2 py-1 rounded-lg bg-focus-purple/[0.08] border border-focus-purple/[0.12]">
                   <Zap aria-hidden="true" className="h-3 w-3 text-focus-purple stroke-[1.75]" />
-                  <span className="text-[10px] font-mono text-focus-purple">{totalSessions} sessions</span>
+                  <span className="text-[10px] font-mono text-focus-purple">{t("userMenu.sessions", { count: totalSessions })}</span>
                 </div>
               )}
             </div>
@@ -232,10 +226,10 @@ export function UserMenu({
 
                   {/* Text */}
                   <span className="flex-1 min-w-0">
-                    <span className="block text-sm font-light leading-none mb-0.5">{item.label}</span>
-                    {item.description && (
+                    <span className="block text-sm font-light leading-none mb-0.5">{t(item.labelKey)}</span>
+                    {item.descriptionKey && (
                       <span className="block text-[10px] text-text-muted font-light truncate">
-                        {item.description}
+                        {t(item.descriptionKey)}
                       </span>
                     )}
                   </span>

@@ -8,6 +8,19 @@
 */
 
 :root {
+  font-family:
+    "Be Vietnam Pro",
+    system-ui,
+    -apple-system,
+    BlinkMacSystemFont,
+    "Segoe UI",
+    sans-serif;
+  --font-sans: "Be Vietnam Pro", system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-body: var(--font-sans);
+  --font-display: var(--font-sans);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+
   color-scheme: dark;
 
   /* Ambient base */
@@ -136,7 +149,7 @@ body {
     radial-gradient(circle at 90% 4%, rgb(143 88 102 / 0.13), transparent 30rem),
     linear-gradient(180deg, #090a08 0%, var(--bg-void) 48%, #050605 100%);
   color: hsl(var(--text-primary));
-  font-family: var(--font-body, system-ui, sans-serif);
+  font-family: var(--font-sans);
 }
 
 body::before {
@@ -512,8 +525,16 @@ a {
   z-index: 2;
   pointer-events: none;
   background:
-    linear-gradient(180deg, rgb(3 6 18 / 0.25), rgb(3 6 18 / 0.78)),
-    radial-gradient(circle at 50% 40%, rgb(255 255 255 / 0.06), transparent 38%);
+    linear-gradient(180deg, rgb(3 6 18 / 0.12), rgb(3 6 18 / 0.48)),
+    radial-gradient(circle at 50% 40%, rgb(255 255 255 / 0.04), transparent 38%);
+}
+
+body,
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
 }
 
 .animated-scene-vignette {
@@ -521,7 +542,7 @@ a {
   inset: 0;
   z-index: 3;
   pointer-events: none;
-  background: radial-gradient(circle at center, transparent 35%, rgb(0 0 0 / 0.62) 100%);
+  background: radial-gradient(circle at center, transparent 42%, rgb(0 0 0 / 0.42) 100%);
 }
 
 .animated-scene-content {

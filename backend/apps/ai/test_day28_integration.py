@@ -276,9 +276,10 @@ class Dev2Day28IntegrationTests(APITestCase):
             [item["level"] for item in warnings.data["warnings"]],
             [1, 2, 3],
         )
-        self.assertEqual(warnings.data["active_cycle"]["status"], "auto_pause_required")
-        self.assertTrue(warnings.data["active_cycle"]["auto_pause_required"])
-        self.assertEqual(cycle.action, WarningCycle.Action.AUTO_PAUSE)
+        self.assertIsNone(warnings.data["active_cycle"])
+        self.assertEqual(cycle.status, WarningCycle.Status.COMPLETED)
+        self.assertFalse(cycle.auto_pause_required)
+        self.assertEqual(cycle.action, WarningCycle.Action.NONE)
         self.assertEqual(session.status, FocusSession.Status.ACTIVE)
         self.assertEqual(WarningEvent.objects.filter(session_id=session.id).count(), 3)
 
@@ -343,13 +344,19 @@ class Dev2Day28IntegrationTests(APITestCase):
             ),
             content_type="text/plain",
         )
-        upload = self.client.post(
-            "/api/documents/upload/",
-            {"file": uploaded},
-            format="multipart",
-        )
+        with patch("apps.ai.tasks.extract_document_text.delay") as extraction_delay, self.captureOnCommitCallbacks(execute=True):
+            upload = self.client.post(
+                "/api/documents/upload/",
+                {"file": uploaded},
+                format="multipart",
+            )
         self.assertEqual(upload.status_code, status.HTTP_201_CREATED)
         document = StudyDocument.objects.get(pk=upload.data["id"])
+        self.assertEqual(document.status, StudyDocument.Status.UPLOADED)
+        extraction_delay.assert_called_once_with(str(document.id))
+        extract_result = extract_document_text.run(str(document.id))
+        document.refresh_from_db()
+        self.assertEqual(extract_result["status"], "completed")
         self.assertEqual(document.status, StudyDocument.Status.READY)
         self.assertIn("FocusOS study sessions", document.extracted_text)
         self.assertEqual(document.metadata["extraction"]["status"], "completed")
@@ -390,7 +397,7 @@ class Dev2Day28IntegrationTests(APITestCase):
         self.assertTrue(cached_summary.data["cached"])
         delay.assert_not_called()
 
-        config = {"scope": "full_document", "quantity": 2, "difficulty": "medium"}
+        config = {"scope": "full_document", "quantity": 5, "difficulty": "medium"}
         with patch("apps.ai.views.generate_document_flashcards.delay") as delay:
             with self.captureOnCommitCallbacks(execute=True) as card_callbacks:
                 cards_request = self.client.post(
@@ -405,7 +412,7 @@ class Dev2Day28IntegrationTests(APITestCase):
 
         with patch.object(AIClient, "complete_json", return_value=flashcard_response()):
             cards_result = generate_document_flashcards.run(str(document.id), config)
-        self.assertEqual(cards_result["status"], FlashcardDeck.Status.COMPLETED)
+        self.assertEqual(cards_result["status"], FlashcardDeck.Status.PARTIAL)
         deck = FlashcardDeck.objects.get(document=document)
         self.assertEqual(deck.generated_quantity, 2)
         self.assertEqual(Flashcard.objects.filter(deck=deck).count(), 2)
@@ -485,14 +492,17 @@ class Dev2Day28IntegrationTests(APITestCase):
             ),
             content_type="text/plain",
         )
-        upload = self.client.post(
-            "/api/documents/upload/",
-            {"file": uploaded},
-            format="multipart",
-        )
+        with patch("apps.ai.tasks.extract_document_text.delay"), self.captureOnCommitCallbacks(execute=True):
+            upload = self.client.post(
+                "/api/documents/upload/",
+                {"file": uploaded},
+                format="multipart",
+            )
         self.assertEqual(upload.status_code, status.HTTP_201_CREATED)
         document = StudyDocument.objects.get(pk=upload.data["id"])
-        config = {"scope": "full_document", "quantity": 3, "difficulty": "medium"}
+        extract_document_text.run(str(document.id))
+        document.refresh_from_db()
+        config = {"scope": "full_document", "quantity": 5, "difficulty": "medium"}
 
         with patch("apps.ai.views.generate_document_flashcards.delay"):
             with self.captureOnCommitCallbacks(execute=True):

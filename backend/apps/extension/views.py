@@ -1,12 +1,19 @@
 from django.utils import timezone
 from drf_spectacular.utils import extend_schema
 from rest_framework import status
-from rest_framework.exceptions import NotFound, PermissionDenied
+from rest_framework.authentication import SessionAuthentication
+from rest_framework.exceptions import NotAuthenticated, NotFound
 from rest_framework.generics import GenericAPIView
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
-from .models import BlacklistEntry, ensure_default_blacklist_entries
+from apps.sessions.extension_auth import ExtensionBridgeAuthentication, get_extension_session
+
+from .models import (
+    BlacklistEntry,
+    BlacklistRuleDeletion,
+    ensure_default_blacklist_entries,
+)
 from .serializers import (
     ActiveSessionResponseSerializer,
     BlacklistEntrySerializer,
@@ -18,7 +25,8 @@ from .services import ActiveSessionService, HeartbeatService
 
 
 class ExtensionHeartbeatView(GenericAPIView):
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [ExtensionBridgeAuthentication, SessionAuthentication]
+    permission_classes = [AllowAny]
     serializer_class = ExtensionHeartbeatRequestSerializer
 
     @extend_schema(
@@ -29,8 +37,15 @@ class ExtensionHeartbeatView(GenericAPIView):
     def post(self, request):
         serializer = self.get_serializer(data=request.data)
         serializer.is_valid(raise_exception=True)
+        if request.user and request.user.is_authenticated:
+            user = request.user
+        else:
+            session = get_extension_session(request)
+            if session is None:
+                raise NotAuthenticated("Authentication credentials were not provided.")
+            user = session.user
         heartbeat = HeartbeatService.record(
-            user=request.user,
+            user=user,
             **serializer.validated_data,
         )
         data = {
@@ -66,7 +81,7 @@ class BlacklistListView(GenericAPIView):
         responses=BlacklistEntrySerializer(many=True),
     )
     def get(self, request):
-        ensure_default_blacklist_entries()
+        ensure_default_blacklist_entries(request.user)
         entries = BlacklistEntry.objects.available_to(request.user)
         return Response(BlacklistEntrySerializer(entries, many=True).data)
 
@@ -100,8 +115,6 @@ class BlacklistDetailView(GenericAPIView):
 
     def patch(self, request, entry_id):
         entry = self.get_object(request, entry_id)
-        if entry.is_default:
-            raise PermissionDenied("Default blacklist entries cannot be changed.")
         serializer = BlacklistEntrySerializer(
             entry,
             data=request.data,
@@ -114,8 +127,6 @@ class BlacklistDetailView(GenericAPIView):
 
     def put(self, request, entry_id):
         entry = self.get_object(request, entry_id)
-        if entry.is_default:
-            raise PermissionDenied("Default blacklist entries cannot be changed.")
         serializer = BlacklistEntrySerializer(
             entry,
             data=request.data,
@@ -128,7 +139,10 @@ class BlacklistDetailView(GenericAPIView):
     def delete(self, request, entry_id):
         entry = self.get_object(request, entry_id)
         if entry.is_default:
-            raise PermissionDenied("Default blacklist entries cannot be deleted.")
+            BlacklistRuleDeletion.objects.get_or_create(
+                user=request.user,
+                domain=entry.domain,
+            )
         entry.delete()
         return Response(status=status.HTTP_204_NO_CONTENT)
 
@@ -138,12 +152,13 @@ class BlacklistSyncView(GenericAPIView):
 
     @extend_schema(operation_id="blacklist_sync", responses=BlacklistSyncSerializer)
     def get(self, request):
-        ensure_default_blacklist_entries()
+        ensure_default_blacklist_entries(request.user)
         entries = [
             {
                 "domain": entry.domain,
                 "severity": entry.severity,
-                "source": "default" if entry.is_default else "custom",
+                "enabled": entry.enabled,
+                "source": "DEFAULT" if entry.is_default else "USER",
                 "updatedAt": entry.updated_at,
             }
             for entry in BlacklistEntry.objects.available_to(request.user)

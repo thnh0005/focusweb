@@ -1,7 +1,9 @@
 "use client";
 
 import * as React from "react";
-import { Clock, X } from "lucide-react";
+import { Clock, GripHorizontal, X } from "lucide-react";
+import { useDraggablePopup } from "@/hooks";
+import { cn } from "@/lib/utils/cn";
 import type { Session } from "@/types/session.types";
 
 export interface HistoryBottomSheetProps {
@@ -17,18 +19,33 @@ export function HistoryBottomSheet({
   onClose,
   onStart,
 }: HistoryBottomSheetProps) {
+  const { popupRef, dragHandleProps, dragStyle, isDragging } =
+    useDraggablePopup<HTMLElement>();
+
   if (!isOpen) return null;
 
   return (
     <div className="fixed inset-x-0 bottom-0 z-50 flex justify-center px-3 pb-3">
       <section
+        ref={popupRef}
         role="dialog"
         aria-modal="true"
         aria-label="Recent focus history"
-        className="w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[rgb(10_13_10/0.76)] p-5 shadow-[0_-20px_90px_rgba(0,0,0,0.46)] backdrop-blur-2xl"
+        className={cn(
+          "w-full max-w-2xl rounded-[2rem] border border-white/10 bg-[rgb(10_13_10/0.76)] p-5 shadow-[0_-20px_90px_rgba(0,0,0,0.46)] backdrop-blur-2xl",
+          isDragging && "cursor-grabbing"
+        )}
+        style={dragStyle}
       >
         <div className="flex items-center justify-between gap-3">
-          <h2 className="text-lg font-light text-text-primary">Recent rhythm</h2>
+          <div
+            {...dragHandleProps}
+            className="flex min-w-0 flex-1 touch-none cursor-grab items-center gap-2 active:cursor-grabbing"
+            title="Drag popup"
+          >
+            <GripHorizontal className="h-4 w-4 shrink-0 text-text-muted" aria-hidden="true" />
+            <h2 className="text-lg font-light text-text-primary">Recent rhythm</h2>
+          </div>
           <button
             type="button"
             onClick={onClose}

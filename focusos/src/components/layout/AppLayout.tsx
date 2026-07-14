@@ -7,9 +7,9 @@ import {
   CommandPalette,
   UserMenu,
   NotificationCenter,
-  type Notification,
 } from "@/components/navigation";
 import { useAuthStore } from "@/stores/auth.store";
+import { useNotificationStore } from "@/stores/notification.store";
 
 export interface AppLayoutProps {
   children: React.ReactNode;
@@ -43,7 +43,10 @@ export function AppLayout({ children }: AppLayoutProps) {
   const [commandPaletteOpen, setCommandPaletteOpen] = React.useState(false);
   const [userMenuOpen, setUserMenuOpen] = React.useState(false);
   const [notificationsOpen, setNotificationsOpen] = React.useState(false);
-  const [notifications, setNotifications] = React.useState<Notification[]>([]);
+  const notifications = useNotificationStore((state) => state.notifications);
+  const markAllRead = useNotificationStore((state) => state.markAllNotificationsRead);
+  const markRead = useNotificationStore((state) => state.markNotificationRead);
+  const dismissNotification = useNotificationStore((state) => state.dismissNotification);
 
   const displayName = user?.displayName || user?.email || "User";
   const unreadCount = notifications.filter((notification) => !notification.isRead).length;
@@ -64,22 +67,6 @@ export function AppLayout({ children }: AppLayoutProps) {
     setUserMenuOpen(false);
     setCommandPaletteOpen(false);
     setNotificationsOpen((value) => !value);
-  }, []);
-
-  const markAllRead = React.useCallback(() => {
-    setNotifications((prev) => prev.map((notification) => ({ ...notification, isRead: true })));
-  }, []);
-
-  const markRead = React.useCallback((id: string) => {
-    setNotifications((prev) =>
-      prev.map((notification) =>
-        notification.id === id ? { ...notification, isRead: true } : notification
-      )
-    );
-  }, []);
-
-  const dismissNotification = React.useCallback((id: string) => {
-    setNotifications((prev) => prev.filter((notification) => notification.id !== id));
   }, []);
 
   useCommandPaletteShortcut(openCommandPalette);
@@ -107,9 +94,6 @@ export function AppLayout({ children }: AppLayoutProps) {
       <MobileSidebar
         streakCount={7}
         userName={displayName}
-        onStartSession={() => {
-          window.location.href = "/session";
-        }}
         onAvatarClick={openUserMenu}
       />
 

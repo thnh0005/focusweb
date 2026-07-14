@@ -2,8 +2,8 @@ import type { Metadata } from "next";
 import { RegisterForm } from "@/components/features/auth/RegisterForm";
 
 export const metadata: Metadata = {
-  title: "Create your focus space | FocusOS",
-  description: "Create your FocusOS account and set up a calmer way to start deep work.",
+  title: "Tạo không gian tập trung | FocusOS",
+  description: "Tạo tài khoản FocusOS và thiết lập một cách nhẹ nhàng hơn để bắt đầu deep work.",
 };
 
 export default function RegisterPage() {

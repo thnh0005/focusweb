@@ -1,10 +1,9 @@
 import { MIN_ACTIVE_SECONDS } from "../shared/constants";
 import { broadcastToFocusOS, EVENT_TYPES } from "../shared/messages";
-import { findBlacklistWarning } from "./blacklist";
+import { handleBlacklistEnforcement } from "./blacklistEnforcement";
 import { getDomainFromUrl, isTrackableUrl, sanitizeTitle } from "./domain";
 import { createQueuedEvent, enqueueEvent } from "./eventQueue";
 import type {
-  BlacklistWarning,
   FocusSessionState,
   QueuedEvent,
   TrackedTab,
@@ -84,58 +83,6 @@ async function enqueueActiveDuration(
   return nextSession;
 }
 
-async function maybeWarnForBlacklist(
-  session: FocusSessionState,
-  trackedTab: TrackedTab
-): Promise<{ session: FocusSessionState; warning: BlacklistWarning | null }> {
-  const warning = findBlacklistWarning(
-    session.sessionId,
-    trackedTab.domain,
-    session.blacklist
-  );
-
-  if (!warning) {
-    return { session, warning: null };
-  }
-
-  const previousWarningAt = session.lastWarning?.occurredAt
-    ? new Date(session.lastWarning.occurredAt).getTime()
-    : 0;
-  const previousDomain = session.lastWarning?.domain;
-  const isRepeatInsideCooldown =
-    previousDomain === warning.domain && Date.now() - previousWarningAt < 60_000;
-
-  if (!isRepeatInsideCooldown) {
-    await enqueueEvent(
-      createQueuedEvent(session.sessionId, {
-        event_type: "warning",
-        url: trackedTab.url,
-        domain: trackedTab.domain,
-        page_title: trackedTab.title,
-        tab_switch_count: session.tabSwitchCount,
-      })
-    );
-
-    await broadcastToFocusOS({
-      type: EVENT_TYPES.warning,
-      payload: {
-        sessionId: session.sessionId,
-        level: warning.level,
-        domain: warning.domain,
-        reason: "blacklist",
-      },
-    });
-  }
-
-  return {
-    session: {
-      ...session,
-      lastWarning: warning,
-    },
-    warning,
-  };
-}
-
 export async function captureActiveTab(
   session: FocusSessionState,
   eventType: "url_change" | "tab_switch" | "active" = "active"
@@ -185,11 +132,7 @@ export async function captureActiveTab(
     currentTab: trackedTab,
   };
 
-  const { session: warnedSession } = await maybeWarnForBlacklist(
-    nextSession,
-    trackedTab
-  );
-  return warnedSession;
+  return handleBlacklistEnforcement(nextSession, trackedTab);
 }
 
 export async function recordCurrentTabDuration(

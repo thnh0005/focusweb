@@ -4,6 +4,7 @@ import * as React from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { motion } from "framer-motion";
+import { useTranslation } from "react-i18next";
 import { UserPlus } from "lucide-react";
 import { authApi } from "@/services/auth.api";
 import { useAuthStore } from "@/stores/auth.store";
@@ -21,6 +22,7 @@ import {
 
 export function RegisterForm() {
   const router = useRouter();
+  const { t } = useTranslation("auth");
   const [email, setEmail] = React.useState("");
   const [password, setPassword] = React.useState("");
   const [passwordConfirm, setPasswordConfirm] = React.useState("");
@@ -39,26 +41,26 @@ export function RegisterForm() {
     setSubmitError("");
 
     if (!email) {
-      setEmailError("Email is required");
+      setEmailError(t("validation.emailRequired"));
       isValid = false;
     } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError("Please enter a valid email address");
+      setEmailError(t("validation.emailInvalid"));
       isValid = false;
     }
 
     if (!password) {
-      setPasswordError("Password is required");
+      setPasswordError(t("validation.passwordRequired"));
       isValid = false;
     } else if (password.length < 8) {
-      setPasswordError("Password must be at least 8 characters");
+      setPasswordError(t("validation.passwordMin8"));
       isValid = false;
     }
 
     if (!passwordConfirm) {
-      setConfirmError("Please confirm your password");
+      setConfirmError(t("validation.confirmPasswordRequired"));
       isValid = false;
     } else if (password !== passwordConfirm) {
-      setConfirmError("Passwords do not match");
+      setConfirmError(t("validation.passwordMismatch"));
       isValid = false;
     }
 
@@ -81,9 +83,8 @@ export function RegisterForm() {
       });
 
       router.push(response.user.onboardingComplete ? "/dashboard" : "/onboarding");
-    } catch (err: unknown) {
-      const errorMsg = err instanceof Error ? err.message : "Registration failed. Please try again.";
-      setSubmitError(errorMsg);
+    } catch {
+      setSubmitError(t("errors.registrationFailed"));
       setIsLoading(false);
     }
   };
@@ -101,10 +102,10 @@ export function RegisterForm() {
           </div>
           <div className="space-y-2">
             <CardTitle className="text-2xl font-light text-text-primary">
-              Create your focus space
+              {t("register.title")}
             </CardTitle>
             <CardDescription className="mx-auto max-w-[31ch] text-sm leading-6 text-text-secondary">
-              Set up a calm place for sessions, reflection, and gentle attention tracking.
+              {t("register.description")}
             </CardDescription>
           </div>
         </CardHeader>
@@ -122,8 +123,8 @@ export function RegisterForm() {
 
             <Input
               type="email"
-              label="Email address"
-              placeholder="minh@example.com"
+              label={t("register.emailLabel")}
+              placeholder={t("register.emailPlaceholder")}
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               error={emailError}
@@ -135,8 +136,8 @@ export function RegisterForm() {
 
             <Input
               type="password"
-              label="Password"
-              placeholder="At least 8 characters"
+              label={t("register.passwordLabel")}
+              placeholder={t("register.passwordPlaceholder")}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               error={passwordError}
@@ -148,8 +149,8 @@ export function RegisterForm() {
 
             <Input
               type="password"
-              label="Confirm password"
-              placeholder="Re-enter your password"
+              label={t("register.confirmPasswordLabel")}
+              placeholder={t("register.confirmPasswordPlaceholder")}
               value={passwordConfirm}
               onChange={(e) => setPasswordConfirm(e.target.value)}
               error={confirmError}
@@ -169,10 +170,10 @@ export function RegisterForm() {
               {isLoading ? (
                 <>
                   <Spinner className="h-4 w-4 text-primary-foreground" />
-                  <span>Creating your space...</span>
+                  <span>{t("register.submitting")}</span>
                 </>
               ) : (
-                <span>Create focus space</span>
+                <span>{t("register.submit")}</span>
               )}
             </Button>
           </form>
@@ -180,12 +181,12 @@ export function RegisterForm() {
 
         <CardFooter className="justify-center border-t border-white/[0.06] px-6 pb-6 pt-5 sm:px-8">
           <p className="text-sm text-text-muted">
-            Already have a space?{" "}
+            {t("register.hasAccount")}{" "}
             <Link
               href="/login"
               className="font-medium text-focus-green transition-colors hover:text-focus-green/80 focus-ring-soft"
             >
-              Sign in
+              {t("register.login")}
             </Link>
           </p>
         </CardFooter>

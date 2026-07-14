@@ -33,4 +33,11 @@ export const blacklistApi = {
   changeSeverity(id: string, severity: BlacklistSeverity): Promise<BlacklistEntry> {
     return apiClient.patch<BlacklistEntry>(`/blacklist/${id}/`, { severity });
   },
+
+  updateBlacklistEntry(
+    id: string,
+    payload: Partial<Pick<BlacklistEntry, "domain" | "severity" | "enabled">>
+  ): Promise<BlacklistEntry> {
+    return apiClient.patch<BlacklistEntry>(`/blacklist/${id}/`, payload);
+  },
 };

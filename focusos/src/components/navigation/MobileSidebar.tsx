@@ -8,7 +8,6 @@ import {
   BookOpen,
   LayoutDashboard,
   Settings2,
-  Zap,
 } from "lucide-react";
 import { cn } from "@/lib/utils/cn";
 
@@ -17,29 +16,18 @@ export interface MobileSidebarProps {
   userName?: string;
   avatarUrl?: string;
   onAvatarClick?: () => void;
-  onStartSession?: () => void;
   className?: string;
 }
 
 const NAV_ITEMS = [
-  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, action: false },
-  { label: "Analytics", href: "/analytics", icon: BarChart3, action: false },
-  { label: "Session", href: "/session", icon: Zap, action: true },
-  { label: "AI Docs", href: "/study-tools", icon: BookOpen, action: false },
-  { label: "Settings", href: "/settings", icon: Settings2, action: false },
+  { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+  { label: "Analytics", href: "/analytics", icon: BarChart3 },
+  { label: "AI Docs", href: "/study-tools", icon: BookOpen },
+  { label: "Settings", href: "/settings", icon: Settings2 },
 ] as const;
 
-export function MobileSidebar({ onStartSession, className }: MobileSidebarProps) {
+export function MobileSidebar({ className }: MobileSidebarProps) {
   const pathname = usePathname();
-
-  const handleStartSession = React.useCallback(() => {
-    if (onStartSession) {
-      onStartSession();
-      return;
-    }
-
-    window.location.href = "/session";
-  }, [onStartSession]);
 
   return (
     <nav
@@ -51,7 +39,7 @@ export function MobileSidebar({ onStartSession, className }: MobileSidebarProps)
         className
       )}
     >
-      <div className="grid h-14 grid-cols-5">
+      <div className="grid h-14 grid-cols-4">
         {NAV_ITEMS.map((item) => {
           const isActive = pathname.startsWith(item.href);
           const Icon = item.icon;
@@ -61,22 +49,6 @@ export function MobileSidebar({ onStartSession, className }: MobileSidebarProps)
             "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-bg-void",
             isActive ? "text-focus-purple" : "text-text-muted"
           );
-
-          if (item.action) {
-            return (
-              <button
-                key={item.label}
-                type="button"
-                onClick={handleStartSession}
-                className={cn(baseClassName, "text-focus-purple")}
-                aria-label="Start session"
-                aria-current={isActive ? "page" : undefined}
-              >
-                <Icon className="h-4 w-4 stroke-[1.75]" aria-hidden="true" />
-                <span>Focus</span>
-              </button>
-            );
-          }
 
           return (
             <Link

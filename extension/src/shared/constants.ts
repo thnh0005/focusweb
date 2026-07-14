@@ -3,6 +3,7 @@ export const DEFAULT_APP_URL = "http://localhost:3000";
 
 export const STORAGE_KEYS = {
   activeSession: "focusos.activeSession",
+  language: "focusos.language",
   queue: "focusos.eventQueue",
   snapshot: "focusos.snapshot",
 } as const;
@@ -13,6 +14,9 @@ export const FLUSH_INTERVAL_MINUTES = 0.25;
 export const MAX_QUEUE_SIZE = 500;
 export const MAX_BATCH_SIZE = 50;
 export const MIN_ACTIVE_SECONDS = 1;
+export const WARNING_INTERVAL_SECONDS = 5;
+export const WARNING_MAX_LEVEL = 3;
+export const BLACKLIST_STOP_GRACE_SECONDS = 5;
 
 export const APP_ORIGIN_PATTERNS = [
   "http://localhost:3000/*",

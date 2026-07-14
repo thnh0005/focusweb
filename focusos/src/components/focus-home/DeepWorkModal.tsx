@@ -3,6 +3,7 @@
 import * as React from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Brain } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/Button";
 import {
   Dialog,
@@ -14,12 +15,6 @@ import {
 } from "@/components/ui/Dialog";
 import { Textarea } from "@/components/ui/Textarea";
 import { sessionsApi } from "@/services/sessions.api";
-
-const fallbackTemplates = [
-  "Finish the next concrete task",
-  "Study one concept without switching tabs",
-  "Draft the first complete version",
-];
 
 export interface DeepWorkModalProps {
   open: boolean;
@@ -40,6 +35,7 @@ export function DeepWorkModal({
   onOpenChange,
   onConfirm,
 }: DeepWorkModalProps) {
+  const { t } = useTranslation("dashboard");
   const [goal, setGoal] = React.useState("");
   const trimmedGoal = goal.trim();
   const isValid = trimmedGoal.length > 0;
@@ -55,6 +51,9 @@ export function DeepWorkModal({
     enabled: open,
   });
 
+  const fallbackTemplates = t("focusHome.deepWork.fallbackTemplates", {
+    returnObjects: true,
+  }) as string[];
   const templateLabels = templates?.length
     ? templates.map((template) => template.text)
     : fallbackTemplates;
@@ -83,20 +82,20 @@ export function DeepWorkModal({
           <div className="mx-auto mb-2 flex h-12 w-12 items-center justify-center rounded-full border border-white/10 bg-primary/15 text-primary sm:mx-0">
             <Brain className="h-5 w-5 stroke-[1.6]" aria-hidden="true" />
           </div>
-          <DialogTitle>Deep Work setup</DialogTitle>
+          <DialogTitle>{t("focusHome.deepWork.title")}</DialogTitle>
           <DialogDescription>
-            Set a clear target for this {durationMinutes} minute deep work block.
+            {t("focusHome.deepWork.description", { count: durationMinutes })}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <Textarea
-            label="What are you here to finish?"
+            label={t("focusHome.deepWork.goalLabel")}
             value={goal}
             onChange={(event) => setGoal(event.target.value)}
-            placeholder="Complete the auth flow and write the edge-case tests"
+            placeholder={t("focusHome.deepWork.goalPlaceholder")}
             disabled={isSubmitting}
-            error={!isValid && goal.length > 0 ? "Deep Work needs a clear goal." : undefined}
+            error={!isValid && goal.length > 0 ? t("focusHome.deepWork.goalRequired") : undefined}
             className="min-h-28 rounded-2xl bg-white/[0.04] text-base font-light leading-relaxed"
             rows={4}
             autoFocus
@@ -110,7 +109,7 @@ export function DeepWorkModal({
                 disabled={isSubmitting}
                 className="rounded-full border border-white/10 bg-white/[0.06] px-3 py-2 text-xs text-text-secondary transition-all duration-fast hover:bg-white/[0.1] hover:text-text-primary disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                Continue: {lastGoal}
+                {t("focusHome.deepWork.continue", { goal: lastGoal })}
               </button>
             )}
             {templateLabels.slice(0, 5).map((template) => (
@@ -129,10 +128,10 @@ export function DeepWorkModal({
           {!templates?.length && (
             <p className="text-xs font-light text-text-muted">
               {templatesFailed
-                ? "Using built-in goal examples because server templates could not load."
+                ? t("focusHome.deepWork.templatesLoadFailed")
                 : templatesFetched
-                  ? "No server templates yet. Showing built-in goal examples."
-                  : "Loading server goal templates..."}
+                  ? t("focusHome.deepWork.templatesEmpty")
+                  : t("focusHome.deepWork.templatesLoading")}
             </p>
           )}
 
@@ -150,7 +149,7 @@ export function DeepWorkModal({
               disabled={isSubmitting}
               className="h-11 rounded-full px-5"
             >
-              Cancel
+              {t("focusHome.deepWork.cancel")}
             </Button>
             <Button
               type="submit"
@@ -159,7 +158,7 @@ export function DeepWorkModal({
               aria-busy={isSubmitting}
               className="h-11 rounded-full px-6"
             >
-              {isSubmitting ? "Starting..." : "Confirm Deep Work"}
+              {isSubmitting ? t("focusHome.deepWork.starting") : t("focusHome.deepWork.confirm")}
             </Button>
           </DialogFooter>
         </form>

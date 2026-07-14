@@ -83,10 +83,10 @@ const config: Config = {
       },
 
       fontFamily: {
-        sans: ["var(--font-body)", "system-ui", "sans-serif"],
-        display: ["var(--font-display)", "system-ui", "sans-serif"],
+        sans: ["var(--font-sans)", "system-ui", "sans-serif"],
+        display: ["var(--font-sans)", "system-ui", "sans-serif"],
         mono: ["ui-monospace", "SFMono-Regular", "Menlo", "monospace"],
-        timer: ["var(--font-display)", "system-ui", "sans-serif"],
+        timer: ["var(--font-sans)", "system-ui", "sans-serif"],
       },
 
       fontSize: {

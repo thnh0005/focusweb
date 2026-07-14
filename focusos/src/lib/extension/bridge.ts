@@ -12,6 +12,7 @@ import type {
 } from "@/types/extension.types";
 import type { SessionMode } from "@/types/session.types";
 import { API_BASE_URL } from "@/services/client";
+import { normalizeLanguage, type SupportedLanguage } from "@/i18n/language";
 
 // Extension ID would be set during build from environment
 const EXTENSION_ID = process.env.NEXT_PUBLIC_EXTENSION_ID ?? "";
@@ -81,7 +82,8 @@ export async function notifySessionStart(
   goal: string | undefined,
   mode: SessionMode,
   blacklist: BlacklistPayload[],
-  plannedDurationMinutes?: number
+  plannedDurationMinutes?: number,
+  extensionToken?: string
 ): Promise<void> {
   const payload: ExtensionSessionStartPayload = {
     sessionId,
@@ -89,10 +91,19 @@ export async function notifySessionStart(
     mode,
     blacklist,
     backendApiUrl: API_BASE_URL,
+    extensionToken,
     appUrl: typeof window !== "undefined" ? window.location.origin : undefined,
     plannedDurationMinutes,
+    language:
+      typeof document !== "undefined"
+        ? normalizeLanguage(document.documentElement.lang)
+        : undefined,
   };
   await sendExtensionMessage("SESSION_START", payload);
+}
+
+export async function syncLanguageToExtension(language: SupportedLanguage): Promise<void> {
+  await sendExtensionMessage("LANGUAGE_SYNC", { language });
 }
 
 /**

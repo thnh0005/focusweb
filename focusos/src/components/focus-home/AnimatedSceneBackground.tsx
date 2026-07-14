@@ -35,7 +35,7 @@ export function AnimatedSceneBackground({
         className="animated-scene-image"
         style={{
           backgroundColor: scene.palette.base,
-          backgroundImage: `linear-gradient(180deg, ${scene.palette.overlay}, rgba(3,6,18,0.48)), url(${resolvedImage})`,
+          backgroundImage: `linear-gradient(180deg, rgba(3,6,18,0.18), rgba(3,6,18,0.28)), url(${resolvedImage})`,
         }}
         aria-hidden="true"
       />

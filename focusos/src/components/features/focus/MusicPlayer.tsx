@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Pause, Play, Volume2, VolumeX } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { getFocusScene } from "@/constants/focus-scenes";
 import { useMusicStore } from "@/stores/music.store";
 import { cn } from "@/lib/utils/cn";
@@ -12,6 +13,7 @@ export interface MusicPlayerProps {
 }
 
 export function MusicPlayer({ className }: MusicPlayerProps) {
+  const { t } = useTranslation("dashboard");
   const currentTrack = useMusicStore((state) => state.currentTrack);
   const currentSceneId = useMusicStore((state) => state.currentSceneId);
   const playing = useMusicStore((state) => state.playing);
@@ -24,6 +26,9 @@ export function MusicPlayer({ className }: MusicPlayerProps) {
 
   if (!currentTrack) return null;
 
+  const trackLabel = t(`focusHome.sounds.tracks.${currentTrack.id}.label`);
+  const trackMood = t(`focusHome.sounds.tracks.${currentTrack.id}.mood`);
+
   return (
     <Card
       className={cn(
@@ -34,13 +39,13 @@ export function MusicPlayer({ className }: MusicPlayerProps) {
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-mono uppercase tracking-[0.18em] text-text-muted">
-            Now playing
+            {t("focusHome.sounds.nowPlaying")}
           </p>
           <p className="mt-1 truncate text-sm font-medium text-text-primary">
-            {currentTrack.label}
+            {trackLabel}
           </p>
           <p className="mt-0.5 truncate text-[11px] text-text-muted">
-            {scene.name} · {currentTrack.mood}
+            {scene.name} · {trackMood}
           </p>
         </div>
 
@@ -51,7 +56,7 @@ export function MusicPlayer({ className }: MusicPlayerProps) {
             "flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-white/10 bg-white/[0.07] text-text-primary transition-all duration-fast hover:bg-white/[0.12] active:scale-[0.98] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
             playing && "shadow-focus-purple"
           )}
-          aria-label={playing ? "Pause music" : "Play music"}
+          aria-label={playing ? t("focusHome.sounds.pause") : t("focusHome.sounds.play")}
         >
           {playing ? (
             <Pause className="h-4 w-4 stroke-[1.7]" aria-hidden="true" />
@@ -66,7 +71,7 @@ export function MusicPlayer({ className }: MusicPlayerProps) {
           type="button"
           onClick={() => setMuted(!isMuted)}
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-text-secondary transition-all duration-fast hover:bg-white/[0.08] hover:text-text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={isMuted ? "Unmute all audio" : "Mute all audio"}
+          aria-label={isMuted ? t("focusHome.sounds.unmute") : t("focusHome.sounds.mute")}
         >
           {isMuted ? (
             <VolumeX className="h-3.5 w-3.5 stroke-[1.7]" aria-hidden="true" />
@@ -81,7 +86,7 @@ export function MusicPlayer({ className }: MusicPlayerProps) {
           value={volume}
           onChange={(event) => setVolume(Number(event.target.value))}
           className="h-1 flex-1 cursor-pointer appearance-none rounded-full bg-white/[0.12] accent-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          aria-label={`Music volume ${volume}%`}
+          aria-label={t("focusHome.sounds.musicVolume", { volume })}
         />
         <span className="w-9 text-right text-[11px] font-mono text-text-muted">
           {volume}%

@@ -2,6 +2,7 @@
 
 import * as React from "react";
 import { Bell, Mail, Timer } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { userApi } from "@/services/user.api";
 import { notificationsApi } from "@/services/notifications.api";
 import { Button } from "@/components/ui/Button";
@@ -15,6 +16,8 @@ type NotificationSettingsState = {
 };
 
 export default function NotificationsSettingsPage() {
+  const { t } = useTranslation("settings");
+  const tRef = React.useRef(t);
   const [notifications, setNotifications] = React.useState<NotificationSettingsState>({
     notificationsEnabled: true,
     sessionReminders: true,
@@ -27,6 +30,10 @@ export default function NotificationsSettingsPage() {
   const [saveSuccess, setSaveSuccess] = React.useState(false);
   const [testMessage, setTestMessage] = React.useState("");
   const [error, setError] = React.useState("");
+
+  React.useEffect(() => {
+    tRef.current = t;
+  }, [t]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -45,7 +52,7 @@ export default function NotificationsSettingsPage() {
         });
       } catch (loadError) {
         if (!isMounted) return;
-        setError(getErrorMessage(loadError, "Failed to load notification settings"));
+        setError(getErrorMessage(loadError, tRef.current("notificationsPage.errors.load")));
       } finally {
         if (isMounted) {
           setIsLoading(false);
@@ -79,7 +86,7 @@ export default function NotificationsSettingsPage() {
       setSaveSuccess(true);
       setTimeout(() => setSaveSuccess(false), 3000);
     } catch (saveError) {
-      setError(getErrorMessage(saveError, "Failed to save notification settings"));
+      setError(getErrorMessage(saveError, t("notificationsPage.errors.save")));
     } finally {
       setIsSaving(false);
     }
@@ -92,9 +99,9 @@ export default function NotificationsSettingsPage() {
 
     try {
       const response = await notificationsApi.createTestNotification("generic");
-      setTestMessage(`Test notification created: ${response.notification.title}`);
+      setTestMessage(t("notificationsPage.testCreated", { title: response.notification.title }));
     } catch (testError) {
-      setError(getErrorMessage(testError, "Failed to create test notification"));
+      setError(getErrorMessage(testError, t("notificationsPage.errors.test")));
     } finally {
       setIsTesting(false);
     }
@@ -103,34 +110,34 @@ export default function NotificationsSettingsPage() {
   return (
     <div className="max-w-3xl space-y-6">
       <header>
-        <p className="text-sm text-text-muted">Notifications</p>
-        <h1 className="mt-2 text-4xl font-light text-text-primary">Calm reminders</h1>
+        <p className="text-sm text-text-muted">{t("notificationsPage.eyebrow")}</p>
+        <h1 className="mt-2 text-4xl font-light text-text-primary">{t("notificationsPage.title")}</h1>
         <p className="mt-3 text-sm font-light leading-relaxed text-text-secondary">
-          Choose which cues should interrupt you and which can wait.
+          {t("notificationsPage.description")}
         </p>
       </header>
 
-      <NotificationPanel icon={Timer} title="Session">
-        <SettingRow label="Notifications" description="Allow FocusOS notification cues." checked={notifications.notificationsEnabled} onToggle={() => toggleNotification("notificationsEnabled")} disabled={isLoading || isSaving} />
-        <SettingRow label="Session reminders" description="Reminders to start your daily focus session." checked={notifications.sessionReminders} onToggle={() => toggleNotification("sessionReminders")} disabled={isLoading || isSaving} />
-        <SettingRow label="Distraction warnings" description="Managed by extension focus boundaries." checked={false} onToggle={() => undefined} disabled />
+      <NotificationPanel icon={Timer} title={t("notificationsPage.session")}>
+        <SettingRow label={t("notificationsPage.notifications")} description={t("notificationsPage.notificationsDescription")} checked={notifications.notificationsEnabled} onToggle={() => toggleNotification("notificationsEnabled")} disabled={isLoading || isSaving} />
+        <SettingRow label={t("notificationsPage.sessionReminders")} description={t("notificationsPage.sessionRemindersDescription")} checked={notifications.sessionReminders} onToggle={() => toggleNotification("sessionReminders")} disabled={isLoading || isSaving} />
+        <SettingRow label={t("notificationsPage.distractionWarnings")} description={t("notificationsPage.distractionWarningsDescription")} checked={false} onToggle={() => undefined} disabled />
       </NotificationPanel>
 
-      <NotificationPanel icon={Bell} title="Reflection">
-        <SettingRow label="Weekly report" description="Analysis of your weekly focus patterns." checked={notifications.weeklyReport} onToggle={() => toggleNotification("weeklyReport")} disabled={isLoading || isSaving} />
-        <SettingRow label="Deep work suggestions" description="Ideas for when to schedule deeper work." checked={notifications.deepWorkSuggestions} onToggle={() => toggleNotification("deepWorkSuggestions")} disabled={isLoading || isSaving} />
-        <SettingRow label="Daily digest" description="No backend endpoint yet." checked={false} onToggle={() => undefined} disabled />
-        <SettingRow label="Achievements" description="No backend endpoint yet." checked={false} onToggle={() => undefined} disabled />
+      <NotificationPanel icon={Bell} title={t("notificationsPage.reflection")}>
+        <SettingRow label={t("notificationsPage.weeklyReport")} description={t("notificationsPage.weeklyReportDescription")} checked={notifications.weeklyReport} onToggle={() => toggleNotification("weeklyReport")} disabled={isLoading || isSaving} />
+        <SettingRow label={t("notificationsPage.deepWorkSuggestions")} description={t("notificationsPage.deepWorkSuggestionsDescription")} checked={notifications.deepWorkSuggestions} onToggle={() => toggleNotification("deepWorkSuggestions")} disabled={isLoading || isSaving} />
+        <SettingRow label={t("notificationsPage.dailyDigest")} description={t("notificationsPage.noEndpoint")} checked={false} onToggle={() => undefined} disabled />
+        <SettingRow label={t("notificationsPage.achievements")} description={t("notificationsPage.noEndpoint")} checked={false} onToggle={() => undefined} disabled />
       </NotificationPanel>
 
-      <NotificationPanel icon={Mail} title="Communication">
-        <SettingRow label="Product updates" description="No backend endpoint yet." checked={false} onToggle={() => undefined} disabled />
+      <NotificationPanel icon={Mail} title={t("notificationsPage.communication")}>
+        <SettingRow label={t("notificationsPage.productUpdates")} description={t("notificationsPage.noEndpoint")} checked={false} onToggle={() => undefined} disabled />
       </NotificationPanel>
 
       <Card className="rounded-[2rem] p-6 sm:p-7">
-        <h2 className="text-xl font-light text-text-primary">Notification center</h2>
+        <h2 className="text-xl font-light text-text-primary">{t("notificationsPage.center")}</h2>
         <p className="mt-2 text-sm font-light leading-relaxed text-text-secondary">
-          Backend currently supports notification settings and test notification creation, but does not expose a notification list or mark-as-read endpoint yet.
+          {t("notificationsPage.centerDescription")}
         </p>
         <Button
           type="button"
@@ -139,7 +146,7 @@ export default function NotificationsSettingsPage() {
           variant="outline"
           className="mt-5 rounded-full px-6"
         >
-          {isTesting ? "Creating test" : "Create test notification"}
+          {isTesting ? t("notificationsPage.creatingTest") : t("notificationsPage.createTest")}
         </Button>
         {testMessage && (
           <p className="mt-3 text-sm font-light text-primary">{testMessage}</p>
@@ -154,12 +161,12 @@ export default function NotificationsSettingsPage() {
 
       {saveSuccess && (
         <div className="rounded-2xl border border-primary/25 bg-primary/10 p-3">
-          <p className="text-sm font-light text-primary">Notification settings saved successfully</p>
+          <p className="text-sm font-light text-primary">{t("notificationsPage.saved")}</p>
         </div>
       )}
 
       <Button type="button" onClick={handleSave} disabled={isLoading || isSaving} variant="session" className="rounded-full px-6">
-        {isLoading ? "Loading" : isSaving ? "Saving" : "Save notifications"}
+        {isLoading ? t("notificationsPage.loading") : isSaving ? t("notificationsPage.saving") : t("notificationsPage.save")}
       </Button>
     </div>
   );

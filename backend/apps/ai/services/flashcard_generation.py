@@ -2,24 +2,28 @@ import hashlib
 import json
 import re
 from dataclasses import dataclass
+from datetime import timedelta
 
 from django.conf import settings
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.utils import timezone
 from rest_framework import status as http_status
 
 from apps.ai.models import Flashcard, FlashcardDeck, StudyDocument
 from apps.ai.services.ai_client import AIClient
 from apps.ai.services.document_summary import DocumentChunker
+from apps.ai.services.document_summary import FLASHCARD_RESERVED_OUTPUT_TOKENS, RequestTokenBudget
 from apps.ai.services.exceptions import (
     AIInvalidResponse,
     AINotConfigured,
     AIProviderError,
     AIProviderUnavailable,
+    AIQuotaDeferred,
     AIRateLimited,
     AIServiceError,
     AITimeout,
 )
+from apps.ai.services.observability import log_ai_event
 from apps.ai.services.prompt_builder import FlashcardPromptBuilder
 
 
@@ -55,6 +59,7 @@ class SourceSelection:
     scope: dict
     source_checksum: str
     source_character_count: int
+    document_id: str = ""
     source_truncated: bool = False
 
 
@@ -64,6 +69,7 @@ class GenerationRequestResult:
     cached: bool
     should_enqueue: bool
     created: bool
+    reused: bool = False
 
 
 class DocumentSourceSelector:
@@ -177,6 +183,7 @@ class DocumentSourceSelector:
             scope=scope,
             source_checksum=source_hash,
             source_character_count=len(selected_text),
+            document_id=str(document.id),
             source_truncated=False,
         )
 
@@ -261,7 +268,7 @@ class FlashcardOutputValidator:
 
 class FlashcardGenerationService:
     def __init__(self, client=None, selector=None, chunker=None, prompt_builder=None, validator=None):
-        self.client = client or AIClient(model=settings.FLASHCARD_GENERATION_MODEL)
+        self.client = client or AIClient(model=settings.FLASHCARD_GENERATION_MODEL, max_retries=0)
         self.selector = selector or DocumentSourceSelector()
         self.chunker = chunker or DocumentChunker(
             chunk_characters=settings.FLASHCARD_GENERATION_CHUNK_CHARACTERS,
@@ -269,6 +276,8 @@ class FlashcardGenerationService:
         )
         self.prompt_builder = prompt_builder or FlashcardPromptBuilder()
         self.validator = validator or FlashcardOutputValidator()
+        self.token_budget = RequestTokenBudget()
+        self.chunk_request_delay_seconds = getattr(settings, "DOCUMENT_CHUNK_REQUEST_DELAY_SECONDS", 60)
 
     def normalize_config(self, data):
         return {
@@ -300,37 +309,53 @@ class FlashcardGenerationService:
                 .first()
             )
             if deck:
+                if deck.status in {FlashcardDeck.Status.PENDING, FlashcardDeck.Status.PROCESSING}:
+                    log_ai_event(
+                        "flashcard_generation_event",
+                        action="deck_reused_pending",
+                        deck_id=str(deck.id),
+                        document_id=str(document.id),
+                        generation_fingerprint=fingerprint,
+                        status=deck.status,
+                    )
+                    return GenerationRequestResult(
+                        deck,
+                        cached=False,
+                        should_enqueue=False,
+                        created=False,
+                        reused=True,
+                    )
                 if (
                     not force
                     and deck.status in {FlashcardDeck.Status.COMPLETED, FlashcardDeck.Status.PARTIAL}
                 ):
                     return GenerationRequestResult(deck, cached=True, should_enqueue=False, created=False)
-                if (
-                    not force
-                    and deck.status in {FlashcardDeck.Status.PENDING, FlashcardDeck.Status.PROCESSING}
-                ):
-                    return GenerationRequestResult(deck, cached=False, should_enqueue=False, created=False)
                 deck.cards.all().delete()
                 self.prepare_deck(deck, document, source, config, fingerprint)
                 return GenerationRequestResult(deck, cached=False, should_enqueue=True, created=False)
 
-            deck = FlashcardDeck.objects.create(
-                user=document.user,
-                document=document,
-                title=self.deck_title(document, config),
-                difficulty=config["difficulty"],
-                requested_quantity=config["quantity"],
-                quantity=0,
-                generated_quantity=0,
-                status=FlashcardDeck.Status.PENDING,
-                scope=source.scope,
-                page_range=self.page_range_for_scope(source.scope),
-                source_checksum=source.source_checksum,
-                generation_fingerprint=fingerprint,
-                prompt_version=PROMPT_VERSION,
-                source_character_count=source.source_character_count,
-                source_truncated=source.source_truncated,
-            )
+            try:
+                with transaction.atomic():
+                    deck = FlashcardDeck.objects.create(
+                        user=document.user,
+                        document=document,
+                        title=self.deck_title(document, config),
+                        difficulty=config["difficulty"],
+                        requested_quantity=config["quantity"],
+                        quantity=0,
+                        generated_quantity=0,
+                        status=FlashcardDeck.Status.PENDING,
+                        scope=source.scope,
+                        page_range=self.page_range_for_scope(source.scope),
+                        source_checksum=source.source_checksum,
+                        generation_fingerprint=fingerprint,
+                        prompt_version=PROMPT_VERSION,
+                        source_character_count=source.source_character_count,
+                        source_truncated=source.source_truncated,
+                    )
+            except IntegrityError:
+                deck = FlashcardDeck.objects.select_for_update().get(generation_fingerprint=fingerprint)
+                return GenerationRequestResult(deck, cached=False, should_enqueue=False, created=False, reused=True)
             return GenerationRequestResult(deck, cached=False, should_enqueue=True, created=True)
 
     def generate(self, document_id, config, force=False):
@@ -339,7 +364,10 @@ class FlashcardGenerationService:
         request = self.request_generation(document, config, force=force)
         if request.cached and not force:
             return self.task_result(request.deck, cached=True)
-        deck = request.deck
+        deck = self.claim_deck_for_generation(request.deck.id, force=force)
+        if deck is None:
+            latest = FlashcardDeck.objects.prefetch_related("cards").get(id=request.deck.id)
+            return self.task_result(latest, cached=False)
         source = self.selector.select(document, config)
         chunks = self.chunker.chunk(source.text).chunks
         if not chunks:
@@ -352,7 +380,10 @@ class FlashcardGenerationService:
 
         self.mark_processing(deck, source, len(chunks))
         try:
-            cards = self.generate_cards(source, chunks, config)
+            cards = self.generate_cards(deck, source, chunks, config)
+        except AIQuotaDeferred as exc:
+            self.defer_deck(deck, exc)
+            raise
         except AIServiceError as exc:
             self.fail_deck(deck, self.map_ai_error(exc), exc.safe_message)
             raise
@@ -386,6 +417,8 @@ class FlashcardGenerationService:
             deck.generated_quantity = deck.quantity
             deck.error_code = "" if status_value == FlashcardDeck.Status.COMPLETED else ERROR_INSUFFICIENT_AI_OUTPUT
             deck.error_message = "" if status_value == FlashcardDeck.Status.COMPLETED else "AI returned fewer valid flashcards than requested."
+            deck.generated_at = timezone.now()
+            deck.scope = self.scope_without_processing_context(deck.scope)
             deck.save(
                 update_fields=[
                     "status",
@@ -393,41 +426,112 @@ class FlashcardGenerationService:
                     "generated_quantity",
                     "error_code",
                     "error_message",
+                    "generated_at",
+                    "scope",
                     "updated_at",
                 ]
             )
+            log_ai_event(
+                "flashcard_generation_event",
+                action="cards_persisted",
+                deck_id=str(deck.id),
+                document_id=str(document.id),
+                generation_fingerprint=deck.generation_fingerprint,
+                status=status_value,
+                requested_quantity=config["quantity"],
+                generated_quantity=deck.quantity,
+            )
         return self.task_result(deck, cached=False)
 
-    def generate_cards(self, source, chunks, config):
+    def generate_cards(self, deck, source, chunks, config):
         allocations = self.allocate_quantity(config["quantity"], chunks)
-        cards = []
-        for chunk, amount in zip(chunks, allocations):
+        checkpoint = self.restore_checkpoint(deck, source, config)
+        cards = self.dedupe(list(checkpoint.get("candidate_cards") or []), config["quantity"])
+        chunk_results = dict(checkpoint.get("chunk_results") or {})
+        completed_chunk_ids = {str(value) for value in checkpoint.get("completed_chunk_ids") or []}
+        fill_completed = bool(checkpoint.get("fill_completed"))
+        active_chunks = [(chunk, amount) for chunk, amount in zip(chunks, allocations) if amount > 0]
+        for position, (chunk, amount) in enumerate(active_chunks):
             if amount <= 0:
                 continue
+            chunk_key = str(position + 1)
+            if chunk_key in completed_chunk_ids:
+                log_ai_event(
+                    "flashcard_generation_event",
+                    action="chunk_resume_skip",
+                    deck_id=str(deck.id),
+                    document_id=source.document_id,
+                    generation_fingerprint=deck.generation_fingerprint,
+                    chunk_index=position + 1,
+                    chunk_id=chunk_key,
+                    completed_chunk_ids=sorted(completed_chunk_ids),
+                )
+                continue
+            payload_hash = hashlib.sha256(chunk.text.encode("utf-8")).hexdigest()
+            log_ai_event(
+                "flashcard_generation_event",
+                action="chunk_request_start",
+                deck_id=str(deck.id),
+                document_id=source.document_id,
+                generation_fingerprint=deck.generation_fingerprint,
+                chunk_index=position + 1,
+                chunk_id=chunk_key,
+                payload_hash=payload_hash,
+                requested_quantity=amount,
+            )
             cards.extend(
                 self.call_and_validate(
                     chunk.text,
                     amount,
                     config["difficulty"],
-                    source.scope,
+                    {**source.scope, "chunk": chunk.metadata(), "previous_chunk_tail": chunk.previous_tail},
                     existing_questions=[card["question"] for card in cards],
+                    document_id=source.document_id,
+                    chunk_id=chunk_key,
                 )
             )
             cards = self.dedupe(cards, config["quantity"])
+            chunk_results[chunk_key] = cards
+            completed_chunk_ids.add(chunk_key)
+            self.save_checkpoint(
+                deck,
+                source,
+                config,
+                cards,
+                chunk_results,
+                completed_chunk_ids,
+                last_completed_chunk_index=position + 1,
+                fill_completed=fill_completed,
+            )
         if len(cards) < config["quantity"]:
             missing = config["quantity"] - len(cards)
-            cards.extend(
-                self.call_and_validate(
-                    source.text,
-                    missing,
-                    config["difficulty"],
-                    {**source.scope, "fill_pass": True},
-                    existing_questions=[card["question"] for card in cards],
+            if not fill_completed:
+                cards.extend(
+                    self.call_and_validate(
+                        source.text,
+                        missing,
+                        config["difficulty"],
+                        {**source.scope, "fill_pass": True},
+                        existing_questions=[card["question"] for card in cards],
+                        document_id=source.document_id,
+                        chunk_id="fill",
+                    )
                 )
-            )
+                cards = self.dedupe(cards, config["quantity"])
+                fill_completed = True
+                self.save_checkpoint(
+                    deck,
+                    source,
+                    config,
+                    cards,
+                    chunk_results,
+                    completed_chunk_ids,
+                    last_completed_chunk_index=max([0, *[int(value) for value in completed_chunk_ids if value.isdigit()]]),
+                    fill_completed=fill_completed,
+                )
         return self.dedupe(cards, config["quantity"])
 
-    def call_and_validate(self, source_text, quantity, difficulty, scope_metadata, existing_questions):
+    def call_and_validate(self, source_text, quantity, difficulty, scope_metadata, existing_questions, document_id="", chunk_id=""):
         system_prompt, user_prompt = self.prompt_builder.build_messages(
             source_text,
             difficulty=difficulty,
@@ -435,10 +539,19 @@ class FlashcardGenerationService:
             scope_metadata=scope_metadata,
             existing_questions=existing_questions,
         )
+        user_prompt = self.token_budget.enforce(
+            system_prompt,
+            user_prompt,
+            FLASHCARD_RESERVED_OUTPUT_TOKENS,
+        )
         response = self.client.complete_json(
             system_prompt,
             user_prompt,
             operation="flashcard_generation",
+            prompt_version=PROMPT_VERSION,
+            max_completion_tokens=FLASHCARD_RESERVED_OUTPUT_TOKENS,
+            document_id=document_id or None,
+            chunk_id=chunk_id,
         )
         return self.validator.parse_and_validate(
             response["content"],
@@ -474,6 +587,99 @@ class FlashcardGenerationService:
             cleaned.append(card)
             if len(cleaned) >= quantity:
                 break
+        return cleaned
+
+    def restore_checkpoint(self, deck, source, config):
+        context = (deck.scope or {}).get("processing_context") or {}
+        if not context:
+            return {}
+        expected = {
+            "source_checksum": source.source_checksum,
+            "generation_fingerprint": deck.generation_fingerprint,
+            "prompt_version": PROMPT_VERSION,
+            "requested_quantity": config["quantity"],
+            "difficulty": config["difficulty"],
+            "source_scope": source.scope,
+        }
+        for key, value in expected.items():
+            if context.get(key) != value:
+                log_ai_event(
+                    "flashcard_generation_event",
+                    action="checkpoint_ignored",
+                    deck_id=str(deck.id),
+                    document_id=source.document_id,
+                    generation_fingerprint=deck.generation_fingerprint,
+                    status=deck.status,
+                )
+                return {}
+        log_ai_event(
+            "flashcard_generation_event",
+            action="checkpoint_restored",
+            deck_id=str(deck.id),
+            document_id=source.document_id,
+            generation_fingerprint=deck.generation_fingerprint,
+            checkpoint_last_completed_chunk=context.get("last_completed_chunk_index", 0),
+            completed_chunk_ids=context.get("completed_chunk_ids") or [],
+            generated_quantity=len(context.get("candidate_cards") or []),
+        )
+        return context
+
+    def save_checkpoint(
+        self,
+        deck,
+        source,
+        config,
+        candidate_cards,
+        chunk_results,
+        completed_chunk_ids,
+        last_completed_chunk_index=0,
+        fill_completed=False,
+        retry_after_seconds=None,
+    ):
+        retry_at = None
+        if retry_after_seconds:
+            retry_at = timezone.now() + timedelta(seconds=max(1, int(retry_after_seconds)))
+        existing_context = (deck.scope or {}).get("processing_context") or {}
+        context = {
+            "checkpoint_version": 1,
+            "source_checksum": source.source_checksum,
+            "generation_fingerprint": deck.generation_fingerprint,
+            "prompt_version": PROMPT_VERSION,
+            "requested_quantity": config["quantity"],
+            "difficulty": config["difficulty"],
+            "source_scope": source.scope,
+            "last_completed_chunk_index": int(last_completed_chunk_index or 0),
+            "completed_chunk_ids": sorted(str(value) for value in completed_chunk_ids),
+            "chunk_results": chunk_results,
+            "candidate_cards": candidate_cards,
+            "fill_completed": bool(fill_completed),
+            "updated_at": timezone.now().isoformat(),
+        }
+        if existing_context.get("processing_started_at"):
+            context["processing_started_at"] = existing_context["processing_started_at"]
+        if retry_after_seconds:
+            context["retry_after_seconds"] = max(1, int(retry_after_seconds))
+            context["retry_at"] = retry_at.isoformat()
+
+        scope = dict(deck.scope or {})
+        scope["processing_context"] = context
+        FlashcardDeck.objects.filter(pk=deck.pk).update(scope=scope, updated_at=timezone.now())
+        deck.scope = scope
+        log_ai_event(
+            "flashcard_generation_event",
+            action="checkpoint_saved",
+            deck_id=str(deck.id),
+            document_id=source.document_id,
+            generation_fingerprint=deck.generation_fingerprint,
+            checkpoint_last_completed_chunk=context["last_completed_chunk_index"],
+            completed_chunk_ids=context["completed_chunk_ids"],
+            requested_quantity=config["quantity"],
+            generated_quantity=len(candidate_cards),
+        )
+
+    def scope_without_processing_context(self, scope):
+        cleaned = dict(scope or {})
+        cleaned.pop("processing_context", None)
         return cleaned
 
     def validate_document_ready(self, document):
@@ -555,22 +761,45 @@ class FlashcardGenerationService:
         deck.error_message = ""
         deck.save()
 
+    def claim_deck_for_generation(self, deck_id, force=False):
+        with transaction.atomic():
+            deck = FlashcardDeck.objects.select_for_update().get(id=deck_id)
+            if deck.status in {FlashcardDeck.Status.COMPLETED, FlashcardDeck.Status.PARTIAL} and not force:
+                return None
+            if deck.status == FlashcardDeck.Status.PROCESSING:
+                log_ai_event(
+                    "flashcard_generation_event",
+                    action="task_duplicate_skipped",
+                    deck_id=str(deck.id),
+                    document_id=str(deck.document_id),
+                    generation_fingerprint=deck.generation_fingerprint,
+                    status=deck.status,
+                )
+                return None
+            should_increment_attempt = deck.error_code != "AI_QUOTA_DEFERRED"
+            deck.status = FlashcardDeck.Status.PROCESSING
+            if should_increment_attempt:
+                deck.generation_attempts += 1
+            deck.error_code = ""
+            deck.error_message = ""
+            deck.save(update_fields=["status", "generation_attempts", "error_code", "error_message", "updated_at"])
+            return deck
+
     def mark_processing(self, deck, source, chunk_count):
-        deck.status = FlashcardDeck.Status.PROCESSING
-        deck.generation_attempts += 1
-        deck.provider = getattr(self.client, "PROVIDER", "openrouter")
-        deck.model_name = settings.FLASHCARD_GENERATION_MODEL or settings.OPENROUTER_MODEL
+        deck.provider = getattr(self.client, "provider", "") or getattr(self.client, "PROVIDER", "openrouter")
+        deck.model_name = getattr(self.client, "model", "") or settings.FLASHCARD_GENERATION_MODEL or settings.OPENROUTER_MODEL
         deck.source_character_count = source.source_character_count
         deck.source_truncated = source.source_truncated
         deck.error_code = ""
         deck.error_message = ""
         scope = dict(deck.scope or {})
         scope["chunk_count"] = chunk_count
+        processing_context = dict(scope.get("processing_context") or {})
+        processing_context.setdefault("processing_started_at", timezone.now().isoformat())
+        scope["processing_context"] = processing_context
         deck.scope = scope
         deck.save(
             update_fields=[
-                "status",
-                "generation_attempts",
                 "provider",
                 "model_name",
                 "source_character_count",
@@ -580,6 +809,29 @@ class FlashcardGenerationService:
                 "scope",
                 "updated_at",
             ]
+        )
+
+    def defer_deck(self, deck, exc=None):
+        scope = dict(deck.scope or {})
+        context = dict(scope.get("processing_context") or {})
+        if exc is not None:
+            retry_after_seconds = max(1, int(getattr(exc, "retry_after_seconds", 1) or 1))
+            context["retry_after_seconds"] = retry_after_seconds
+            context["retry_at"] = (timezone.now() + timedelta(seconds=retry_after_seconds)).isoformat()
+            context["updated_at"] = timezone.now().isoformat()
+            scope["processing_context"] = context
+        deck.status = FlashcardDeck.Status.PENDING
+        deck.error_code = "AI_QUOTA_DEFERRED"
+        deck.error_message = ""
+        deck.scope = scope
+        deck.save(update_fields=["status", "error_code", "error_message", "scope", "updated_at"])
+        log_ai_event(
+            "flashcard_generation_event",
+            action="deck_deferred",
+            deck_id=str(deck.id),
+            document_id=str(deck.document_id),
+            generation_fingerprint=deck.generation_fingerprint,
+            retry_after_seconds=context.get("retry_after_seconds", 0),
         )
 
     def fail_deck(self, deck, code, message):
